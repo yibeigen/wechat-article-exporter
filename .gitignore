@@ -1,0 +1,82 @@
+# ==============================================
+# Closed-Source Distribution Protection (闭源保护规则)
+# 彻底排除所有业务源码，GitHub 只公开 README 与静态图片
+# ==============================================
+backend/
+frontend/*.html
+frontend/extension/
+skills/
+docs/
+run.py
+start.bat
+PROJECT_REVIEW.md
+
+# ==============================================
+# Python & Virtual Environment
+# ==============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ==============================================
+# Local Data, SQLite & Scraped Outputs
+# ==============================================
+data/
+data/*
+downloads/*
+output/*
+scratch/
+scratch_*.html
+
+# ==============================================
+# Environment Variables, Secrets & Cookies
+# ==============================================
+.env
+.env.local
+*.cookie
+cookies.json
+tokens.json
+
+# ==============================================
+# IDE & Editors
+# ==============================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==============================================
+# Temporary Artifacts & Logs
+# ==============================================
+*.log
+logs/
+.pytest_cache/
+.coverage
+htmlcov/
