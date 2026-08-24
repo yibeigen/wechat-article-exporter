@@ -6,11 +6,29 @@
 <h3 align="center">全网博文批量下载与知识提纯在线工具 · 微信公众号 / 知乎 / 微博 / CSDN / 掘金文章一键打包导出</h3>
 
 <p align="center">
-  <a href="https://github.com/yibeigen/wechat-article-exporter"><img src="https://img.shields.io/badge/Web%20App-Online%20SaaS-009688?logo=googlechrome" alt="Web App"></a>
+  <a href="https://doc.305758.xyz"><img src="https://img.shields.io/badge/Web%20App-Online%20SaaS-009688?logo=googlechrome" alt="Web App"></a>
   <a href="https://yibeigen.pages.dev/"><img src="https://img.shields.io/badge/Author-艺杯羹-orange" alt="Author"></a>
   <a href="https://github.com/yibeigen/wechat-article-exporter/stargazers"><img src="https://img.shields.io/github/stars/yibeigen/wechat-article-exporter?style=flat&color=yellow" alt="GitHub Stars"></a>
   <img src="https://img.shields.io/badge/Platform-Web%20%7C%20Browser-lightgrey" alt="Platform">
 </p>
+
+<p align="center" style="margin: 18px 0;">
+  <a href="https://doc.305758.xyz" target="_blank">
+    <img src="https://img.shields.io/badge/👉_立即在线使用-doc.305758.xyz-009688?style=for-the-badge&logo=googlechrome&logoColor=white" alt="立即在线使用" height="36" />
+  </a>
+  &nbsp;&nbsp;
+  <a href="https://doc.305758.xyz/app" target="_blank">
+    <img src="https://img.shields.io/badge/🚀_进入导出工作台-免安装直接用-b45309?style=for-the-badge" alt="进入工作台" height="36" />
+  </a>
+</p>
+
+<div align="center">
+  <b>🌐 在线工具直达入口：</b><br>
+  👉 <b>产品官网主页</b>：<a href="https://doc.305758.xyz"><b>https://doc.305758.xyz</b></a><br>
+  👉 <b>文章导出工作台</b>：<a href="https://doc.305758.xyz/app"><b>https://doc.305758.xyz/app</b></a> （免安装环境，打开浏览器直接用）
+</div>
+
+<br>
 
 <p align="center">
   <b>滤除网络杂质，沉淀纯粹知识。</b><br>
