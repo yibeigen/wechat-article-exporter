@@ -7,8 +7,8 @@
   **微信公众号 · 知乎 · 微博 · CSDN · 掘金 · 博客园 · 51CTO · 多平台全量去噪与多格式导出**
 
   <p>
-    <!-- 访客总量统计徽章 (从 50+ 起步) -->
-    <a href="https://github.com/yibeigen/wechat-article-exporter"><img src="https://img.shields.io/badge/%E8%AE%BF%E5%AE%A2%E6%80%BB%E9%87%8F-50%2B-2563eb?style=flat-square&logo=github&logoColor=white" alt="Visitors Count"></a>
+    <!-- 动态实时访客总量统计徽章 (基数 50 起步，实时累加) -->
+    <a href="https://github.com/yibeigen/wechat-article-exporter"><img src="https://api.visitorbadge.io/api/visitors?path=yibeigen%2Fwechat-article-exporter&label=%E8%AE%BF%E5%AE%A2%E6%80%BB%E9%87%8F&labelColor=%2324292e&countColor=%232563eb&style=flat-square" alt="Visitors Count"></a>
     <!-- GitHub Stars -->
     <a href="https://github.com/yibeigen/wechat-article-exporter/stargazers"><img src="https://img.shields.io/github/stars/yibeigen/wechat-article-exporter?style=flat-square&color=eab308&label=GitHub%20Stars" alt="GitHub Stars"></a>
     <!-- 开源协议 (CC BY-NC-SA 4.0) -->
