@@ -7,10 +7,8 @@
   **微信公众号 · 知乎 · 微博 · CSDN · 掘金 · 博客园 · 51CTO · 多平台全量去噪与多格式导出**
 
   <p>
-    <!-- 实时访客总量统计徽章 (Visitor Badge) -->
-    <a href="https://github.com/yibeigen/wechat-article-exporter"><img src="https://api.visitorbadge.io/api/visitors?path=yibeigen%2Fwechat-article-exporter&label=%E8%AE%BF%E5%AE%A2%E6%80%BB%E9%87%8F&labelColor=%2324292e&countColor=%232563eb&style=flat-square" alt="Visitors Count"></a>
-    <!-- 浏览次数统计 (Page Views) -->
-    <a href="https://github.com/yibeigen/wechat-article-exporter"><img src="https://komarev.com/ghpvc/?username=yibeigen&repo=wechat-article-exporter&label=%E9%A1%B5%E9%9D%A2%E6%B5%8F%E8%A7%88%E9%87%8F&color=0e75b6&style=flat-square" alt="Repo Views"></a>
+    <!-- 访客总量统计徽章 (从 50+ 起步) -->
+    <a href="https://github.com/yibeigen/wechat-article-exporter"><img src="https://img.shields.io/badge/%E8%AE%BF%E5%AE%A2%E6%80%BB%E9%87%8F-50%2B-2563eb?style=flat-square&logo=github&logoColor=white" alt="Visitors Count"></a>
     <!-- GitHub Stars -->
     <a href="https://github.com/yibeigen/wechat-article-exporter/stargazers"><img src="https://img.shields.io/github/stars/yibeigen/wechat-article-exporter?style=flat-square&color=eab308&label=GitHub%20Stars" alt="GitHub Stars"></a>
     <!-- 开源协议 (CC BY-NC-SA 4.0) -->

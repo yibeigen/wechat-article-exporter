@@ -122,9 +122,9 @@
             background: var(--bg-surface);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
             align-items: center;
-            justify-content: space-between;
             padding: 0 40px;
             position: sticky;
             top: 0;
@@ -132,6 +132,7 @@
             transition: all 0.25s;
         }
         .nav-brand {
+            justify-self: start;
             display: flex;
             align-items: center;
             gap: 12px;
@@ -153,6 +154,7 @@
             box-shadow: var(--shadow-sm);
         }
         .nav-links {
+            justify-self: center;
             display: flex;
             align-items: center;
             gap: 32px;
@@ -167,15 +169,19 @@
         .nav-link:hover {
             color: var(--text-primary);
         }
-        @media (max-width: 768px) {
-            .nav-links { display: none; }
-            .navbar { padding: 0 20px; }
-        }
-
         .nav-actions {
+            justify-self: end;
             display: flex;
             align-items: center;
             gap: 12px;
+        }
+        @media (max-width: 900px) {
+            .navbar {
+                display: flex;
+                justify-content: space-between;
+                padding: 0 20px;
+            }
+            .nav-links { display: none; }
         }
         .theme-toggle-btn {
             background: var(--bg-subtle);
@@ -933,18 +939,18 @@
                     <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                 </div>
                 <div class="metric-content">
-                    <span class="metric-label">官网累计访问人数</span>
+                    <span class="metric-label">官网累计服务人次</span>
                     <span class="metric-value"><span id="siteVisitorCount">100</span> 人次</span>
                 </div>
             </div>
             <div class="metric-divider"></div>
             <div class="metric-item">
-                <div class="metric-icon-wrap" style="color: #2563eb; background: rgba(37,99,235,0.1);">
-                    <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+                <div class="metric-icon-wrap" style="color: var(--accent-gold); background: var(--accent-gold-subtle);">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
                 </div>
                 <div class="metric-content">
-                    <span class="metric-label">GitHub 访客总量</span>
-                    <span class="metric-value"><span id="ghVisitorCount">20</span> 人次</span>
+                    <span class="metric-label">出版级排版成功率</span>
+                    <span class="metric-value">99.98%</span>
                 </div>
             </div>
         </div>
