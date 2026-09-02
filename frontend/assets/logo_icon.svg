@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- 背景流光 -->
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B0F19"/>
+      <stop offset="50%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#030712"/>
+    </linearGradient>
+
+    <!-- 边框高光 -->
+    <linearGradient id="border-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" stop-opacity="0.8"/>
+      <stop offset="40%" stop-color="#818CF8" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#06B6D4" stop-opacity="0.1"/>
+    </linearGradient>
+
+    <!-- 核心渐变 1：极光青蓝到深海蓝 -->
+    <linearGradient id="cyan-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22D3EE"/>
+      <stop offset="45%" stop-color="#0EA5E9"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+
+    <!-- 核心渐变 2：智慧紫罗兰 -->
+    <linearGradient id="violet-pink" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818CF8"/>
+      <stop offset="60%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
+
+    <!-- 水滴萃取渐变 -->
+    <linearGradient id="drop-grad" x1="30%" y1="0%" x2="70%" y2="100%">
+      <stop offset="0%" stop-color="#A5F3FC"/>
+      <stop offset="40%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#0284C7"/>
+    </linearGradient>
+
+    <!-- 金色徽标点缀 -->
+    <linearGradient id="gold-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE68A"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+
+    <!-- 动态发光滤镜 -->
+    <filter id="glow-heavy" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="36" result="blur1"/>
+      <feGaussianBlur stdDeviation="16" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="shadow-soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="24" stdDeviation="32" flood-color="#000000" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+
+  <!-- 钛金质感外圆角容器 (macOS App Squircle) -->
+  <rect x="32" y="32" width="960" height="960" rx="224" fill="url(#bg-grad)" filter="url(#shadow-soft)"/>
+  <rect x="34" y="34" width="956" height="956" rx="222" fill="none" stroke="url(#border-grad)" stroke-width="4"/>
+
+  <!-- 背景弥散氛围光晕 -->
+  <circle cx="512" cy="480" r="260" fill="#0EA5E9" opacity="0.12" filter="blur(60px)"/>
+  <circle cx="512" cy="580" r="220" fill="#6366F1" opacity="0.15" filter="blur(70px)"/>
+
+  <!-- 图形组合：知识书页底座 + 提纯蒸馏漏斗 + 顶部晶莹萃取水滴 -->
+  <g transform="translate(0, -10)">
+    <!-- 1. 底层层叠知识页面 (Layered Book/Documents) -->
+    <!-- 底层页 -->
+    <path d="M 280 680 C 380 640, 470 650, 512 660 C 554 650, 644 640, 744 680 L 744 720 C 644 680, 554 690, 512 700 C 470 690, 380 680, 280 720 Z" 
+          fill="#1E293B" opacity="0.8"/>
+    <!-- 中层页 -->
+    <path d="M 260 620 C 370 580, 465 590, 512 602 C 559 590, 654 580, 764 620 L 764 660 C 654 620, 559 630, 512 642 C 465 630, 370 620, 260 660 Z" 
+          fill="url(#violet-pink)" opacity="0.6"/>
+
+    <!-- 2. 主知识翻折书翼 (左翼与右翼) -->
+    <!-- 左书页翼 -->
+    <path d="M 240 550 C 360 480, 470 510, 512 530 L 512 680 C 470 650, 360 620, 240 680 Z" 
+          fill="url(#cyan-blue)" opacity="0.95"/>
+    <!-- 右书页翼 -->
+    <path d="M 784 550 C 664 480, 554 510, 512 530 L 512 680 C 554 650, 664 620, 784 680 Z" 
+          fill="url(#violet-pink)" opacity="0.95"/>
+
+    <!-- 书脊中心发光分界线 -->
+    <line x1="512" y1="530" x2="512" y2="680" stroke="#FFFFFF" stroke-width="4" opacity="0.6" stroke-linecap="round"/>
+
+    <!-- 3. 核心蒸馏烧瓶与提纯光柱 (The Distillation Prism) -->
+    <!-- 几何折纸晶体烧瓶 -->
+    <polygon points="512,280 640,490 384,490" fill="url(#cyan-blue)" opacity="0.35" filter="url(#glow-heavy)"/>
+    <polygon points="512,300 620,480 404,480" fill="none" stroke="#67E8F9" stroke-width="6" opacity="0.7"/>
+
+    <!-- 4. 蒸馏核心精粹水滴 (The Distilled Crystal Droplet) -->
+    <g filter="url(#glow-heavy)">
+      <path d="M 512 250 C 512 250, 610 390, 610 460 C 610 514, 566 558, 512 558 C 458 558, 414 514, 414 460 C 414 390, 512 250, 512 250 Z" 
+            fill="url(#drop-grad)"/>
+    </g>
+
+    <!-- 水滴内部高光切面 -->
+    <path d="M 512 280 C 512 280, 580 395, 580 450 C 580 488, 550 520, 512 520 C 504 520, 498 518, 490 514 C 520 490, 540 450, 530 400 C 522 360, 512 320, 512 280 Z" 
+          fill="#FFFFFF" opacity="0.55"/>
+
+    <!-- 水滴内部璀璨核心星星 -->
+    <circle cx="475" cy="430" r="16" fill="#FFFFFF" opacity="0.9" filter="blur(2px)"/>
+    <circle cx="475" cy="430" r="8" fill="#FFFFFF"/>
+
+    <!-- 蒸馏气泡 / 数据粒子升腾 -->
+    <circle cx="512" cy="200" r="14" fill="#67E8F9" opacity="0.9" filter="url(#glow-heavy)"/>
+    <circle cx="460" cy="230" r="8" fill="#A5F3FC" opacity="0.7"/>
+    <circle cx="560" cy="220" r="10" fill="#38BDF8" opacity="0.8"/>
+  </g>
+</svg>

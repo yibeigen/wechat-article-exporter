@@ -1,0 +1,1502 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>微信公众号文章批量导出控制台 | BlogDistiller</title>
+    <meta name="description" content="微信公众号文章批量下载、历史全量归档与多格式导出控制台。支持按公众号名称、推文链接、合集专辑一键抓取全部历史文章，去除广告噪音，合并导出为 Markdown、PDF、Word、离线 HTML 与 Excel 汇总表。">
+    <link rel="icon" type="image/svg+xml" href="/assets/logo_icon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root[data-theme="light"] {
+            --bg-base: #f7f6f2;
+            --bg-surface: #ffffff;
+            --bg-surface-subtle: #f0eee6;
+            --bg-sidebar: #ffffff;
+            --border-main: rgba(214, 210, 198, 0.75);
+            --border-focus: #18181b;
+            --text-primary: #18181b;
+            --text-secondary: #52525b;
+            --text-muted: #8c897f;
+            --accent-green: #16a34a;
+            --accent-green-bg: rgba(22, 163, 74, 0.1);
+            --accent-primary: #18181b;
+            --accent-hover: #27272a;
+            --accent-sky: #0284c7;
+            --accent-sky-bg: rgba(2, 132, 199, 0.1);
+            --accent-rose: #e11d48;
+            --accent-rose-bg: rgba(225, 29, 72, 0.1);
+            --accent-amber: #d97706;
+            --accent-amber-bg: rgba(217, 119, 6, 0.1);
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.05);
+            --shadow-lg: 0 12px 32px rgba(0,0,0,0.08);
+            --table-hover: #faf9f5;
+        }
+
+        :root[data-theme="dark"] {
+            --bg-base: #090a0f;
+            --bg-surface: #12151e;
+            --bg-surface-subtle: #181c28;
+            --bg-sidebar: #0f121a;
+            --border-main: rgba(255, 255, 255, 0.08);
+            --border-focus: #f4f4f5;
+            --text-primary: #f4f4f5;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent-green: #22c55e;
+            --accent-green-bg: rgba(34, 197, 94, 0.15);
+            --accent-primary: #f4f4f5;
+            --accent-hover: #e4e4e7;
+            --accent-sky: #38bdf8;
+            --accent-sky-bg: rgba(56, 189, 248, 0.15);
+            --accent-rose: #f43f5e;
+            --accent-rose-bg: rgba(244, 63, 94, 0.15);
+            --accent-amber: #fbbf24;
+            --accent-amber-bg: rgba(251, 191, 36, 0.15);
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+            --shadow-lg: 0 12px 32px rgba(0,0,0,0.6);
+            --table-hover: #171b26;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg-base);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* 侧边导航栏 */
+        .sidebar {
+            width: 240px;
+            background: var(--bg-sidebar);
+            border-right: 1px solid var(--border-main);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        .sidebar-header {
+            padding: 20px 18px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--border-main);
+        }
+
+        .sidebar-logo {
+            width: 28px;
+            height: 28px;
+            background: var(--accent-green);
+            color: #fff;
+            border-radius: 7px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 0.95rem;
+        }
+
+        .sidebar-title {
+            font-weight: 700;
+            font-size: 0.95rem;
+            letter-spacing: -0.01em;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 14px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            overflow-y: auto;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-decoration: none;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-surface-subtle);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: var(--accent-green-bg);
+            color: var(--accent-green);
+            font-weight: 600;
+        }
+
+        .nav-item svg {
+            width: 18px;
+            height: 18px;
+            stroke-width: 2;
+            flex-shrink: 0;
+        }
+
+        .sidebar-footer {
+            padding: 14px;
+            border-top: 1px solid var(--border-main);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .auth-status-card {
+            padding: 10px 12px;
+            background: var(--bg-surface-subtle);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            border: 1px solid var(--border-main);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .auth-status-card:hover {
+            border-color: var(--accent-green);
+        }
+
+        .auth-status-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .auth-status-title {
+            font-size: 0.76rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 7px;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+
+        .status-badge.valid {
+            background: var(--accent-green-bg);
+            color: var(--accent-green);
+        }
+
+        .status-badge.expiring_soon {
+            background: var(--accent-amber-bg);
+            color: var(--accent-amber);
+        }
+
+        .status-badge.expired {
+            background: var(--accent-rose-bg);
+            color: var(--accent-rose);
+        }
+
+        .status-badge.not_configured {
+            background: var(--bg-surface);
+            color: var(--text-muted);
+            border: 1px solid var(--border-main);
+        }
+
+        .auth-countdown {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        /* 主工作区 */
+        .main-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-base);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .main-header {
+            height: 58px;
+            border-bottom: 1px solid var(--border-main);
+            background: var(--bg-surface);
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .header-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-btn {
+            height: 32px;
+            padding: 0 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            border: 1px solid var(--border-main);
+            background: var(--bg-surface);
+            color: var(--text-secondary);
+            transition: all 0.15s ease;
+        }
+
+        .header-btn:hover {
+            border-color: var(--text-primary);
+            color: var(--text-primary);
+        }
+
+        .header-btn.primary {
+            background: var(--accent-green);
+            color: #fff;
+            border-color: var(--accent-green);
+        }
+
+        .header-btn.primary:hover {
+            opacity: 0.9;
+        }
+
+        /* 主内容滚动区 */
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px 100px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .card {
+            background: var(--bg-surface);
+            border-radius: 12px;
+            border: 1px solid var(--border-main);
+            padding: 18px 20px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* 两步走向导卡片 */
+        .guide-box {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            background: var(--bg-surface-subtle);
+            border: 1px dashed var(--border-main);
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 14px;
+        }
+
+        .guide-step {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .guide-num {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            color: #fff;
+            font-size: 0.72rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .guide-arrow {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        /* 搜索交互行 */
+        .search-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .search-input-wrap {
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            width: 18px;
+            height: 18px;
+            color: var(--text-muted);
+        }
+
+        .search-input {
+            width: 100%;
+            height: 44px;
+            border-radius: 8px;
+            border: 1px solid var(--border-main);
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            padding: 0 14px 0 42px;
+            font-size: 0.9rem;
+            font-family: inherit;
+            outline: none;
+            transition: all 0.15s ease;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent-green);
+            box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
+        }
+
+        .search-btn {
+            height: 44px;
+            padding: 0 20px;
+            border-radius: 8px;
+            background: var(--accent-green);
+            color: #ffffff;
+            border: none;
+            font-size: 0.9rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            flex-shrink: 0;
+        }
+
+        .search-btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .search-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .helper-btn {
+            height: 44px;
+            padding: 0 16px;
+            border-radius: 8px;
+            background: var(--bg-surface-subtle);
+            border: 1px solid var(--border-main);
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            flex-shrink: 0;
+        }
+
+        .helper-btn:hover {
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        /* 选项行 */
+        .options-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 10px;
+            border-top: 1px solid var(--border-main);
+            font-size: 0.82rem;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .options-group {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .checkbox-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            user-select: none;
+            color: var(--text-secondary);
+        }
+
+        .checkbox-label input {
+            accent-color: var(--accent-green);
+            width: 15px;
+            height: 15px;
+        }
+
+        .delay-slider-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+        }
+
+        .delay-slider {
+            width: 90px;
+            accent-color: var(--accent-green);
+            cursor: pointer;
+        }
+
+        /* 公众号信息预览卡片 */
+        .account-preview-card {
+            display: none;
+            align-items: center;
+            gap: 14px;
+            padding: 12px 16px;
+            background: var(--bg-surface-subtle);
+            border-radius: 8px;
+            border: 1px solid var(--border-main);
+            margin-bottom: 12px;
+        }
+
+        .preview-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid var(--border-main);
+            background: #fff;
+        }
+
+        .preview-meta {
+            flex: 1;
+        }
+
+        .preview-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .preview-desc {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+
+        /* 数据表格 */
+        .table-card {
+            background: var(--bg-surface);
+            border-radius: 12px;
+            border: 1px solid var(--border-main);
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .table-toolbar {
+            padding: 12px 18px;
+            border-bottom: 1px solid var(--border-main);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-surface);
+        }
+
+        .toolbar-stats {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .toolbar-filter {
+            height: 30px;
+            padding: 0 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-main);
+            background: var(--bg-base);
+            font-size: 0.78rem;
+            outline: none;
+            width: 180px;
+            color: var(--text-primary);
+        }
+
+        .table-scroll {
+            max-height: calc(100vh - 420px);
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+            text-align: left;
+        }
+
+        th {
+            background: var(--bg-surface-subtle);
+            padding: 10px 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-main);
+            position: sticky;
+            top: 0;
+            z-index: 5;
+        }
+
+        td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border-main);
+            vertical-align: middle;
+        }
+
+        tr:hover {
+            background: var(--table-hover);
+        }
+
+        .td-cover {
+            width: 44px;
+            height: 32px;
+            border-radius: 4px;
+            object-fit: cover;
+            background: var(--bg-surface-subtle);
+            display: block;
+        }
+
+        .article-title-link {
+            color: var(--text-primary);
+            text-decoration: none;
+            font-weight: 500;
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            transition: color 0.15s ease;
+        }
+
+        .article-title-link:hover {
+            color: var(--accent-green);
+        }
+
+        .tag-original {
+            font-size: 0.68rem;
+            padding: 1px 4px;
+            background: var(--accent-green-bg);
+            color: var(--accent-green);
+            border-radius: 4px;
+            font-weight: 600;
+            margin-right: 4px;
+        }
+
+        .badge-count {
+            padding: 2px 7px;
+            background: var(--bg-surface-subtle);
+            border: 1px solid var(--border-main);
+            border-radius: 999px;
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+        }
+
+        /* 底部固定操作栏 */
+        .bottom-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 68px;
+            background: var(--bg-surface);
+            border-top: 1px solid var(--border-main);
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 -4px 16px rgba(0,0,0,0.03);
+            z-index: 20;
+        }
+
+        .format-pills {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .format-chip {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border-main);
+            background: var(--bg-base);
+            color: var(--text-secondary);
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+
+        .format-chip.active {
+            background: var(--accent-green-bg);
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        .export-action-btn {
+            height: 44px;
+            padding: 0 24px;
+            border-radius: 8px;
+            background: var(--accent-green);
+            color: #fff;
+            border: none;
+            font-size: 0.92rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.15s ease;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .export-action-btn:hover {
+            opacity: 0.95;
+            transform: translateY(-1px);
+        }
+
+        .export-action-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* 弹窗样式 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-card {
+            background: var(--bg-surface);
+            border-radius: 14px;
+            border: 1px solid var(--border-main);
+            padding: 24px;
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            animation: modalPop 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+            max-width: 90vw;
+        }
+
+        @keyframes modalPop {
+            0% { transform: scale(0.96); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        /* 进度条 */
+        .progress-card {
+            width: 440px;
+            background: var(--bg-surface);
+            border-radius: 12px;
+            border: 1px solid var(--border-main);
+            padding: 20px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .progress-bar-bg {
+            height: 8px;
+            background: var(--bg-surface-subtle);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: var(--accent-green);
+            width: 0%;
+            transition: width 0.2s ease;
+        }
+
+        .empty-state {
+            padding: 48px 0;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 左侧导航 -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo">微</div>
+            <div class="sidebar-title">微信文章导出台</div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="nav-item active" onclick="switchTab('history')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                <span>公众号历史全量</span>
+            </div>
+            <div class="nav-item" onclick="switchTab('album')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                <span>合集 / 专栏专辑 (免凭证)</span>
+            </div>
+            <div class="nav-item" onclick="switchTab('single')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                <span>单篇 / 多篇推文 (免凭证)</span>
+            </div>
+        </nav>
+
+        <!-- 凭证生命周期卡片 -->
+        <div class="sidebar-footer">
+            <div class="auth-status-card" onclick="openAuthModal()" title="点击查看微信阅读凭证生命周期与刷新指南">
+                <div class="auth-status-header">
+                    <div class="auth-status-title">
+                        <span>🔑 微信阅读凭证</span>
+                    </div>
+                    <span class="status-badge valid" id="authBadge">有效</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:0.72rem; color:var(--text-secondary);" id="authUinMask">微信: 监听中</span>
+                    <span class="auth-countdown" id="authCountdown">28:45</span>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 右侧主界面 -->
+    <main class="main-wrapper">
+        <header class="main-header">
+            <div class="header-title" id="pageTitle">
+                <span>📚 公众号全量历史文章导出</span>
+            </div>
+            <div class="header-actions">
+                <button class="header-btn" onclick="openAuthModal()">
+                    <svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    <span>凭证状态 / 0秒续期</span>
+                </button>
+                <button class="header-btn" onclick="toggleTheme()" title="切换浅色/暗黑主题">
+                    <span id="themeBtnText">🌓 主题</span>
+                </button>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- 搜索与控制面板 -->
+            <div class="card">
+                <!-- 两步走向导 (针对公众号全量) -->
+                <div class="guide-box" id="guideBox">
+                    <div class="guide-step">
+                        <span class="guide-num">1</span>
+                        <span>粘贴任意文章链接点【获取专属链接】</span>
+                    </div>
+                    <span class="guide-arrow">➔</span>
+                    <div class="guide-step">
+                        <span class="guide-num">2</span>
+                        <span>发到电脑微信点开（自动截获密钥）</span>
+                    </div>
+                    <span class="guide-arrow">➔</span>
+                    <div class="guide-step">
+                        <span class="guide-num">3</span>
+                        <span>点击【提取历史文章】开始导出</span>
+                    </div>
+                </div>
+
+                <div class="search-row">
+                    <div class="search-input-wrap">
+                        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <input type="text" id="targetInput" class="search-input" placeholder="输入公众号任意一篇文章链接 (如: https://mp.weixin.qq.com/s/xxx) 或 公众号名称" value="" onkeydown="if(event.key==='Enter') handleSearch()">
+                    </div>
+                    <button class="helper-btn" id="genLinkBtn" onclick="handleGenerateProfileUrl()" title="根据文章链接自动生成该公众号在微信里的专属历史主页链接">
+                        <span>📋 获取专属链接</span>
+                    </button>
+                    <button class="search-btn" id="searchBtn" onclick="handleSearch()">
+                        <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                        <span id="searchBtnText">提取历史文章</span>
+                    </button>
+                </div>
+
+                <!-- 目标公众号信息预览卡片 -->
+                <div class="account-preview-card" id="accountPreviewCard">
+                    <img id="previewAvatarImg" class="preview-avatar" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44' fill='%2316a34a'%3E%3Crect width='100%25' height='100%25'/%3E%3C/svg%3E" alt="avatar">
+                    <div class="preview-meta">
+                        <div class="preview-title">
+                            <span id="previewName">公众号名称</span>
+                            <span class="status-badge valid" id="previewBadge">已识别</span>
+                        </div>
+                        <div class="preview-desc" id="previewDesc">已锁定目标公众号，正在分页拉取历史推文...</div>
+                    </div>
+                </div>
+
+                <!-- 该公众号已发现的专栏合集列表 (反向聚合 + 去重) -->
+                <div id="discoveredAlbumsCard" style="display:none; background:var(--bg-surface-subtle); border-radius:8px; border:1px solid var(--border-main); padding:12px 16px; margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="font-size:0.82rem; font-weight:700; color:var(--text-primary);">📚 该公众号已发现的专栏合集 (免凭证 · 零风控直接下载)</span>
+                        <span id="albumCountBadge" class="status-badge valid">0 个专栏</span>
+                    </div>
+                    <div id="discoveredAlbumsList" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+                </div>
+
+                <div class="options-row">
+                    <div class="options-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="optCleanAds" checked>
+                            <span>过滤广告与关注卡片</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="optHdImages" checked>
+                            <span>下载高清原图</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="optComments" checked>
+                            <span>下载精选留言与作者回复</span>
+                        </label>
+                    </div>
+
+                    <div class="delay-slider-wrap" id="delaySliderWrap">
+                        <span style="font-size:0.75rem;">🛡️ 防封翻页延时:</span>
+                        <input type="range" class="delay-slider" id="delaySlider" min="2" max="15" value="4" oninput="updateDelayTip(this.value)">
+                        <span style="font-size:0.75rem; font-weight:700; color:var(--accent-green);" id="delayTip">4秒/页 (稳妥)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 数据表格卡片 -->
+            <div class="table-card">
+                <div class="table-toolbar">
+                    <div class="toolbar-stats">
+                        <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this.checked)" checked>
+                        <span>文章列表</span>
+                        <span class="badge-count" id="articleCountBadge">共 0 篇</span>
+                    </div>
+                    <input type="text" class="toolbar-filter" id="tableFilterInput" placeholder="按标题关键词过滤..." oninput="filterTable()">
+                </div>
+
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;"></th>
+                                <th style="width: 50px;">序号</th>
+                                <th style="width: 60px;">封面</th>
+                                <th>文章标题</th>
+                                <th style="width: 110px;">发布日期</th>
+                                <th style="width: 80px;">属性</th>
+                                <th style="width: 90px;">状态</th>
+                                <th style="width: 70px; text-align: right;">原文</th>
+                            </tr>
+                        </thead>
+                        <tbody id="articlesTableBody">
+                            <tr>
+                                <td colspan="8">
+                                    <div class="empty-state">
+                                        <svg style="width:36px;height:36px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                        <div>输入公众号文章链接或合集链接，点击提取开始抓取</div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部固定导出栏 -->
+        <div class="bottom-bar">
+            <div class="format-pills">
+                <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-right: 4px;">导出格式:</span>
+                <div class="format-chip active" data-format="markdown" onclick="toggleFormat(this)">Markdown (.md)</div>
+                <div class="format-chip active" data-format="docx" onclick="toggleFormat(this)">Word (.docx)</div>
+                <div class="format-chip active" data-format="html" onclick="toggleFormat(this)">离线网页 (.html)</div>
+                <div class="format-chip" data-format="pdf" onclick="toggleFormat(this)">PDF 文档 (.pdf)</div>
+                <div class="format-chip" data-format="excel" onclick="toggleFormat(this)">Excel 汇总 (.xlsx)</div>
+                <div class="format-chip" data-format="txt" onclick="toggleFormat(this)">纯文本 (.txt)</div>
+            </div>
+
+            <button class="export-action-btn" id="exportBtn" onclick="handleExportBatch()" disabled>
+                <svg style="width:18px;height:18px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <span id="exportBtnText">批量导出选中文章 (0)</span>
+            </button>
+        </div>
+    </main>
+
+    <!-- 凭证生命周期与续期模态弹窗 -->
+    <div class="modal-overlay" id="authModal">
+        <div class="modal-card" style="width: 480px;">
+            <button class="modal-close" onclick="closeAuthModal()">
+                <svg style="width:20px;height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            
+            <h3 style="font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">🔑 微信阅读凭证生命周期</h3>
+            <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 16px;">微信客户端通行密钥（Key/PassTicket）状态与 0 秒无感续期指南</p>
+
+            <div style="background: var(--bg-surface-subtle); border-radius: 8px; padding: 14px; margin-bottom: 14px; border: 1px solid var(--border-main);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 0.82rem; font-weight: 600;">当前凭证状态</span>
+                    <span class="status-badge valid" id="modalAuthStatusBadge">有效</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 0.76rem; color: var(--text-secondary);">倒计时（30分钟周期）</span>
+                    <span style="font-size: 0.9rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--accent-green);" id="modalAuthCountdown">28:45</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.74rem; color: var(--text-muted);">
+                    <span>微信号 / UIN: <strong id="modalAuthUin" style="color:var(--text-primary); font-family: 'JetBrains Mono';">-</strong></span>
+                    <span>捕获时间: <span id="modalAuthTime">-</span></span>
+                </div>
+            </div>
+
+            <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.6; margin-bottom: 16px;">
+                <strong>💡 遇到凭证过期或操作频繁怎么办？</strong>
+                <ul style="padding-left: 18px; margin-top: 4px;">
+                    <li><strong>凭证过期 (每30分钟)</strong>：<span style="color:var(--accent-green); font-weight:600;">0 秒恢复！</span> 只要在微信电脑版里点开任意公众号文章（Ctrl+R 刷新），嗅探器 1 秒内自动截获新凭证！</li>
+                    <li><strong>轻度限流 (翻页过快)</strong>：程序会自动安全休眠 3~10 秒后自动重试。</li>
+                    <li><strong>重度封禁 (单日封24小时)</strong>：微信风控绑定微信号。在电脑微信上<strong>切换另一个微信号登录</strong>并点开文章，<strong>立即解除封禁（等待时间变为 0 秒）</strong>！</li>
+                </ul>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button class="header-btn" onclick="closeAuthModal()">知道了</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 导出进度模态弹窗 -->
+    <div class="modal-overlay" id="progressModal">
+        <div class="progress-card">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <h3 style="font-size: 1.05rem; font-weight: 700;">正在批量导出文章...</h3>
+                <span id="progressPercent" style="font-size: 0.9rem; font-weight: 700; color: var(--accent-green);">0%</span>
+            </div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progressBarFill"></div>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" id="progressStatusText">
+                准备抓取正文与高清图片...
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px;">
+                <button class="header-btn" onclick="cancelExport()">取消导出</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = (window.location.protocol === "file:" || !window.location.port) 
+            ? "http://127.0.0.1:8000" 
+            : (window.location.origin.includes(":8000") ? "" : "http://127.0.0.1:8000");
+
+        let currentTab = 'history';
+        let allArticles = [];
+        let selectedArticleIds = new Set();
+        let clientAuthData = null;
+        let isExporting = false;
+        let authPollTimer = null;
+        let currentTaskId = null;
+        let eventSource = null;
+
+        // 初始化
+        window.addEventListener("DOMContentLoaded", async () => {
+            await pollClientAuthStatus();
+            authPollTimer = setInterval(pollClientAuthStatus, 2000);
+        });
+
+        // 轮询微信阅读凭证生命周期与倒计时
+        async function pollClientAuthStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/api/wechat/client-auth-status`);
+                const data = await res.json();
+                clientAuthData = data;
+                updateAuthStatusUI(data);
+            } catch (e) {
+                console.error("Poll auth error:", e);
+            }
+        }
+
+        function updateAuthStatusUI(auth) {
+            const badge = document.getElementById("authBadge");
+            const countdown = document.getElementById("authCountdown");
+            const uinMask = document.getElementById("authUinMask");
+            
+            const modalBadge = document.getElementById("modalAuthStatusBadge");
+            const modalCountdown = document.getElementById("modalAuthCountdown");
+            const modalUin = document.getElementById("modalAuthUin");
+            const modalTime = document.getElementById("modalAuthTime");
+
+            if (!auth || !auth.has_auth) {
+                badge.className = "status-badge not_configured";
+                badge.textContent = "未配置";
+                countdown.textContent = "00:00";
+                uinMask.textContent = "微信: 监听中";
+
+                if (modalBadge) {
+                    modalBadge.className = "status-badge not_configured";
+                    modalBadge.textContent = "未捕获";
+                    modalCountdown.textContent = "00:00";
+                    modalUin.textContent = "未捕获";
+                    modalTime.textContent = "尚未捕获";
+                }
+                return;
+            }
+
+            badge.className = `status-badge ${auth.status_level}`;
+            badge.textContent = auth.status_level === 'valid' ? '有效' : (auth.status_level === 'expiring_soon' ? '即将过期' : '已过期');
+            countdown.textContent = auth.expires_in_formatted;
+            uinMask.textContent = auth.uin_mask ? `UIN: ${auth.uin_mask}` : "凭证已就绪";
+
+            if (modalBadge) {
+                modalBadge.className = `status-badge ${auth.status_level}`;
+                modalBadge.textContent = auth.status_text;
+                modalCountdown.textContent = auth.expires_in_formatted;
+                modalUin.textContent = auth.uin_mask || "有效";
+                modalTime.textContent = auth.captured_at || "-";
+            }
+        }
+
+        function updateDelayTip(val) {
+            const tip = document.getElementById("delayTip");
+            if (val <= 3) {
+                tip.textContent = `${val}秒/页 (较快)`;
+                tip.style.color = "var(--accent-amber)";
+            } else if (val <= 7) {
+                tip.textContent = `${val}秒/页 (稳妥推荐)`;
+                tip.style.color = "var(--accent-green)";
+            } else {
+                tip.textContent = `${val}秒/页 (极稳)`;
+                tip.style.color = "var(--accent-sky)";
+            }
+        }
+
+        function openAuthModal() {
+            document.getElementById("authModal").style.display = "flex";
+        }
+
+        function closeAuthModal() {
+            document.getElementById("authModal").style.display = "none";
+        }
+
+        // 一键提取并生成 profile_ext 专属链接
+        async function handleGenerateProfileUrl() {
+            const query = document.getElementById("targetInput").value.trim();
+            if (!query) {
+                alert("请先在输入框中粘贴该公众号的任意一篇文章链接！");
+                return;
+            }
+
+            const btn = document.getElementById("genLinkBtn");
+            btn.disabled = true;
+            btn.innerHTML = `<span>⏳ 正在生成...</span>`;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/wechat/generate-profile-url`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ target: query })
+                });
+                const data = await res.json();
+                if (data.success && data.profile_url) {
+                    // 复制到剪贴板
+                    await navigator.clipboard.writeText(data.profile_url);
+                    alert(`🎉【专属链接已自动复制到剪切板】\n\n链接: ${data.profile_url}\n\n👉 操作说明：\n1. 切换到电脑微信，发送到「文件传输助手」；\n2. 在微信内置浏览器中直接点开该链接；\n3. 嗅探器将 1 秒自动截获密钥，然后即可点击【提取历史文章】！`);
+                } else {
+                    alert(data.message || "生成专属链接失败，请确认粘贴的是有效的微信文章链接！");
+                }
+            } catch (err) {
+                alert("请求失败: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<span>📋 获取专属链接</span>`;
+            }
+        }
+
+        // 检索/提取文章
+        async function handleSearch() {
+            const query = document.getElementById("targetInput").value.trim();
+            if (!query) {
+                alert("请输入公众号文章链接、合集链接或公众号名称！");
+                return;
+            }
+
+            const searchBtn = document.getElementById("searchBtn");
+            const previewCard = document.getElementById("accountPreviewCard");
+            const previewName = document.getElementById("previewName");
+            const previewDesc = document.getElementById("previewDesc");
+
+            searchBtn.disabled = true;
+            searchBtn.innerHTML = `<span>⏳ 正在提取文章清单...</span>`;
+
+            try {
+                // 调用后台任务创建接口探测或检索
+                const res = await fetch(`${API_BASE}/api/preview`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        target: query,
+                        platform: "wechat",
+                        max_articles: 0
+                    })
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json();
+                    throw new Error(errData.detail || "提取文章清单失败");
+                }
+
+                const data = await res.json();
+                if (data.articles && data.articles.length > 0) {
+                    allArticles = data.articles;
+                    selectedArticleIds = new Set(allArticles.map(a => a.id));
+
+                    if (previewCard) {
+                        previewCard.style.display = "flex";
+                        previewName.textContent = data.author || "微信公众号";
+                        previewDesc.textContent = `成功提取到 ${allArticles.length} 篇文章！勾选后即可批量导出。`;
+                    }
+
+                    renderTable(allArticles);
+                    updateExportButton();
+                    if (data.biz) {
+                        loadDiscoveredAlbums(data.biz);
+                    }
+                } else {
+                    throw new Error("未能找到符合条件的文章。如果凭证已过期，请在微信中点开文章刷新凭证。");
+                }
+            } catch (err) {
+                console.error("Search error:", err);
+                const msg = err.message || "";
+                if (msg.includes("过期") || msg.includes("失效") || msg.includes("key")) {
+                    alert(`⚠️ 微信凭证已满 30 分钟自然过期！\n\n【0 秒快速恢复步骤】：\n1. 在电脑微信中打开任意公众号文章（按 Ctrl+R 刷新一次）；\n2. 嗅探器 1 秒内自动续期，无需等待，再次点击即可！`);
+                } else if (msg.includes("频繁") || msg.includes("频控") || msg.includes("freq")) {
+                    alert(`⚠️ 微信提示操作频繁（微信号风控）：\n\n【快速解决方案】：\n1. 在电脑微信切换另一个微信小号登录；\n2. 打开文章重新截获凭证，即可立即解除限制（0 秒恢复）！`);
+                } else {
+                    alert(`拉取失败: ${msg}\n\n建议点击【获取专属链接】，在电脑微信中点开以确保密钥新鲜就绪！`);
+                }
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.innerHTML = `<svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg><span>提取历史文章</span>`;
+            }
+        }
+
+        // 渲染文章数据表格
+        function renderTable(articles) {
+            const tbody = document.getElementById("articlesTableBody");
+            const badge = document.getElementById("articleCountBadge");
+            if (badge) badge.textContent = `共 ${articles.length} 篇`;
+
+            if (!articles || articles.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state">
+                                <div>未匹配到符合条件的文章</div>
+                            </div>
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            tbody.innerHTML = articles.map((art, idx) => {
+                const isSelected = selectedArticleIds.has(art.id);
+                const coverImg = art.cover || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='32' fill='%23e2e8f0'%3E%3Crect width='100%25' height='100%25'/%3E%3C/svg%3E";
+                return `
+                    <tr>
+                        <td>
+                            <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleArticleSelect('${art.id}', this.checked)">
+                        </td>
+                        <td style="color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">${idx + 1}</td>
+                        <td>
+                            <img class="td-cover" src="${coverImg}" loading="lazy" alt="cover">
+                        </td>
+                        <td>
+                            <a class="article-title-link" href="${art.url}" target="_blank" title="${art.title}">
+                                ${art.is_original ? '<span class="tag-original">原创</span>' : ''}${art.title}
+                            </a>
+                        </td>
+                        <td style="color: var(--text-secondary); font-size: 0.78rem;">${art.create_time || '-'}</td>
+                        <td><span style="font-size: 0.72rem; color: var(--text-muted);">图文</span></td>
+                        <td><span style="font-size: 0.75rem; color: var(--accent-green); font-weight: 600;">就绪</span></td>
+                        <td style="text-align: right;">
+                            <a href="${art.url}" target="_blank" style="color: var(--accent-sky); text-decoration: none; font-size: 0.78rem;">查看</a>
+                        </td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        function toggleArticleSelect(id, checked) {
+            if (checked) selectedArticleIds.add(id);
+            else selectedArticleIds.delete(id);
+            updateExportButton();
+        }
+
+        function toggleSelectAll(checked) {
+            if (checked) {
+                selectedArticleIds = new Set(allArticles.map(a => a.id));
+            } else {
+                selectedArticleIds.clear();
+            }
+            renderTable(allArticles);
+            updateExportButton();
+        }
+
+        function updateExportButton() {
+            const btn = document.getElementById("exportBtn");
+            const text = document.getElementById("exportBtnText");
+            const count = selectedArticleIds.size;
+            if (btn && text) {
+                text.textContent = `批量导出选中文章 (${count})`;
+                btn.disabled = count === 0;
+            }
+        }
+
+        function filterTable() {
+            const keyword = document.getElementById("tableFilterInput").value.trim().toLowerCase();
+            if (!keyword) {
+                renderTable(allArticles);
+            } else {
+                const filtered = allArticles.filter(a => a.title.toLowerCase().includes(keyword));
+                renderTable(filtered);
+            }
+        }
+
+        async function loadDiscoveredAlbums(biz) {
+            if (!biz) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/wechat/albums?biz=${encodeURIComponent(biz)}`);
+                const data = await res.json();
+                if (data.albums && data.albums.length > 0) {
+                    const card = document.getElementById("discoveredAlbumsCard");
+                    const list = document.getElementById("discoveredAlbumsList");
+                    const badge = document.getElementById("albumCountBadge");
+                    if (card && list) {
+                        card.style.display = "block";
+                        badge.textContent = `${data.albums.length} 个专栏`;
+                        list.innerHTML = data.albums.map(alb => `
+                            <div style="background:var(--bg-surface); border:1px solid var(--border-main); border-radius:6px; padding:6px 10px; display:inline-flex; align-items:center; gap:8px; font-size:0.78rem;">
+                                <span style="font-weight:600; color:var(--text-primary);">📁 ${alb.title}</span>
+                                <button style="border:none; background:var(--accent-green-bg); color:var(--accent-green); padding:2px 8px; border-radius:4px; font-size:0.72rem; cursor:pointer; font-weight:600;" onclick="downloadAlbumUrl('${alb.url}')">一键提取本专栏</button>
+                            </div>
+                        `).join("");
+                    }
+                }
+            } catch(e) {}
+        }
+
+        function downloadAlbumUrl(albumUrl) {
+            switchTab('album');
+            document.getElementById("targetInput").value = albumUrl;
+            handleSearch();
+        }
+
+        function toggleFormat(el) {
+            el.classList.toggle("active");
+        }
+
+        function getSelectedFormats() {
+            const activeChips = document.querySelectorAll(".format-chip.active");
+            return Array.from(activeChips).map(c => c.getAttribute("data-format"));
+        }
+
+        // 真实批量导出与下载
+        async function handleExportBatch() {
+            const selectedList = allArticles.filter(a => selectedArticleIds.has(a.id));
+            if (selectedList.length === 0) return;
+
+            const formats = getSelectedFormats();
+            if (formats.length === 0) {
+                alert("请至少选择一种导出格式！");
+                return;
+            }
+
+            const modal = document.getElementById("progressModal");
+            const fill = document.getElementById("progressBarFill");
+            const percent = document.getElementById("progressPercent");
+            const statusText = document.getElementById("progressStatusText");
+
+            modal.style.display = "flex";
+            isExporting = true;
+
+            const targetUrls = selectedList.map(a => a.url).join("\n");
+            const exportFormat = formats[0] === "docx" ? "word" : (formats[0] === "excel" ? "markdown" : formats[0]);
+
+            try {
+                // 1. 创建真实下载任务
+                const createRes = await fetch(`${API_BASE}/api/tasks`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        target: targetUrls,
+                        platform: "wechat",
+                        export_format: exportFormat,
+                        enable_noise_filter: document.getElementById("optCleanAds").checked,
+                        remove_image_watermark: document.getElementById("optHdImages").checked
+                    })
+                });
+
+                const taskData = await createRes.json();
+                currentTaskId = taskData.task_id;
+
+                // 2. 监听 SSE 事件流
+                if (eventSource) eventSource.close();
+                eventSource = new EventSource(`${API_BASE}/api/tasks/${currentTaskId}/events`);
+
+                eventSource.onmessage = (event) => {
+                    if (!isExporting) return;
+                    try {
+                        const evt = JSON.parse(event.data);
+                        const pct = Math.round(evt.progress || 0);
+                        fill.style.width = `${pct}%`;
+                        percent.textContent = `${pct}%`;
+                        statusText.textContent = evt.message || `处理中 (${pct}%)...`;
+
+                        if (evt.status === "completed") {
+                            eventSource.close();
+                            statusText.textContent = "🎉 批量导出成功！正在准备下载...";
+                            setTimeout(() => {
+                                modal.style.display = "none";
+                                if (evt.download_url) {
+                                    window.open(`${API_BASE}${evt.download_url}`, "_blank");
+                                }
+                                alert(`🎉 恭喜！已成功导出 ${selectedList.length} 篇微信推文！`);
+                            }, 1000);
+                        } else if (evt.status === "failed") {
+                            eventSource.close();
+                            statusText.textContent = `❌ 导出中断: ${evt.error || "未知错误"}`;
+                            setTimeout(() => {
+                                modal.style.display = "none";
+                                alert(`导出失败: ${evt.error || "网络或凭证异常"}`);
+                            }, 1500);
+                        }
+                    } catch (e) {}
+                };
+
+            } catch (err) {
+                console.error("Export error:", err);
+                modal.style.display = "none";
+                alert("导出请求发起失败: " + err.message);
+            }
+        }
+
+        function cancelExport() {
+            isExporting = false;
+            if (eventSource) eventSource.close();
+            document.getElementById("progressModal").style.display = "none";
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const current = html.getAttribute("data-theme") || "light";
+            const target = current === "light" ? "dark" : "light";
+            html.setAttribute("data-theme", target);
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            const items = document.querySelectorAll(".nav-item");
+            items.forEach(i => i.classList.remove("active"));
+            event.currentTarget.classList.add("active");
+
+            const input = document.getElementById("targetInput");
+            const title = document.getElementById("pageTitle");
+            const guide = document.getElementById("guideBox");
+            const genBtn = document.getElementById("genLinkBtn");
+            const searchBtnText = document.getElementById("searchBtnText");
+            const delayWrap = document.getElementById("delaySliderWrap");
+
+            if (tab === "history") {
+                title.innerHTML = `<span>📚 公众号全量历史文章导出</span>`;
+                input.placeholder = "输入公众号文章链接 (如: https://mp.weixin.qq.com/s/xxx) 或 公众号名称";
+                guide.style.display = "flex";
+                genBtn.style.display = "flex";
+                delayWrap.style.display = "flex";
+                searchBtnText.textContent = "提取历史文章";
+            } else if (tab === "album") {
+                title.innerHTML = `<span>📑 合集 / 专栏专辑批量下载 (免凭证 · 零风控)</span>`;
+                input.placeholder = "粘贴微信公众号合集链接 (包含 appmsgalbum 或 album_id)";
+                guide.style.display = "none";
+                genBtn.style.display = "none";
+                delayWrap.style.display = "none";
+                searchBtnText.textContent = "提取合集文章";
+            } else if (tab === "single") {
+                title.innerHTML = `<span>🔗 单篇 / 多篇推文直接下载 (免凭证 · 极速)</span>`;
+                input.placeholder = "粘贴微信推文链接 (支持多行批量输入)";
+                guide.style.display = "none";
+                genBtn.style.display = "none";
+                delayWrap.style.display = "none";
+                searchBtnText.textContent = "直接抓取文章";
+            }
+        }
+    </script>
+</body>
+</html>

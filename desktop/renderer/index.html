@@ -1,0 +1,2850 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BlogDistiller (博萃) · 微信公众号文章导出助手</title>
+    <link rel="icon" type="image/svg+xml" href="assets/logo_icon.svg">
+    <style>
+        /* =========================================================================
+           Design System: Luxury Warm Editorial (默认砂岩浅色 + 钛金暗黑深度模式)
+           ========================================================================= */
+        :root[data-theme="light"] {
+            --bg-base: #f7f6f2;
+            --bg-surface: rgba(255, 255, 255, 0.88);
+            --bg-surface-solid: #ffffff;
+            --bg-subtle: #eeede7;
+            --bg-hover: #e4e2d8;
+            --border-main: rgba(214, 210, 198, 0.75);
+            --border-hover: #bcb7a5;
+            --border-focus: #18181b;
+            --text-primary: #18181b;
+            --text-secondary: #52525b;
+            --text-muted: #8c897f;
+            --accent-primary: #18181b;
+            --accent-hover: #27272a;
+            --accent-subtle: rgba(24, 24, 27, 0.05);
+            --accent-gold: #b45309;
+            --accent-gold-subtle: #fef3c7;
+            --accent-emerald: #047857;
+            --accent-emerald-subtle: #d1fae5;
+            --accent-rose: #be123c;
+            --accent-rose-subtle: #ffe4e6;
+            --accent-blue: #0284c7;
+            --accent-blue-subtle: #e0f2fe;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.03), 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 12px -2px rgba(28, 25, 23, 0.06), 0 2px 6px -1px rgba(28, 25, 23, 0.04);
+            --shadow-lg: 0 16px 32px -6px rgba(28, 25, 23, 0.08);
+            --grid-line: rgba(214, 210, 198, 0.35);
+        }
+
+        :root[data-theme="dark"] {
+            --bg-base: #0c0e12;
+            --bg-surface: rgba(18, 21, 28, 0.88);
+            --bg-surface-solid: #131720;
+            --bg-subtle: #191e2b;
+            --bg-hover: #22293a;
+            --border-main: rgba(255, 255, 255, 0.1);
+            --border-hover: rgba(255, 255, 255, 0.22);
+            --border-focus: #f4f4f5;
+            --text-primary: #f4f4f5;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent-primary: #f4f4f5;
+            --accent-hover: #e4e4e7;
+            --accent-subtle: rgba(244, 244, 245, 0.08);
+            --accent-gold: #fbbf24;
+            --accent-gold-subtle: rgba(251, 191, 36, 0.12);
+            --accent-emerald: #34d399;
+            --accent-emerald-subtle: rgba(52, 211, 153, 0.12);
+            --accent-rose: #f43f5e;
+            --accent-rose-subtle: rgba(244, 63, 94, 0.12);
+            --accent-blue: #38bdf8;
+            --accent-blue-subtle: rgba(56, 189, 248, 0.12);
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+            --shadow-md: 0 6px 16px -2px rgba(0,0,0,0.6);
+            --shadow-lg: 0 20px 40px -8px rgba(0,0,0,0.7);
+            --grid-line: rgba(255, 255, 255, 0.035);
+        }
+
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            max-height: 100vh;
+            overflow: hidden !important; /* 彻底移除全局最外层与最右侧多余滚动条 */
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            transition: background-color 0.25s ease, color 0.25s ease;
+            user-select: none;
+        }
+
+        /* 线性矢量图标通用样式 */
+        .icon {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            stroke-width: 1.75;
+            stroke: currentColor;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            vertical-align: middle;
+            flex-shrink: 0;
+        }
+        .icon-lg { width: 20px; height: 20px; }
+        .icon-sm { width: 13px; height: 13px; }
+
+        /* 顶部导航栏 */
+        .app-header {
+            height: 60px;
+            background: var(--bg-surface);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border-main);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+        .header-logo {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .header-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .header-title-wrap {
+            display: flex;
+            flex-direction: column;
+        }
+        .header-title {
+            font-size: 1.05rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .header-badge {
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 999px;
+            background: var(--accent-subtle);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-main);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            position: relative;
+        }
+
+        /* 状态胶囊 (可点击弹出控制面板) */
+        .status-pill-wrap {
+            position: relative;
+        }
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            background: var(--bg-surface-solid);
+            border: 1px solid var(--border-main);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .status-pill:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-hover);
+        }
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #eab308;
+            box-shadow: 0 0 6px #eab308;
+        }
+        .status-pill.ready .status-dot {
+            background: var(--accent-emerald);
+            box-shadow: 0 0 8px var(--accent-emerald);
+        }
+        .status-pill.ready {
+            border-color: rgba(4, 120, 87, 0.3);
+            color: var(--accent-emerald);
+        }
+        .status-pill.disabled .status-dot {
+            background: var(--accent-rose);
+            box-shadow: 0 0 6px var(--accent-rose);
+        }
+        .status-pill.disabled {
+            border-color: rgba(190, 18, 60, 0.3);
+            color: var(--accent-rose);
+        }
+
+        /* 状态控制悬浮卡片 */
+        .status-popover {
+            display: none;
+            position: absolute;
+            top: 44px;
+            right: 0;
+            width: 280px;
+            background: var(--bg-surface-solid);
+            border: 1px solid var(--border-main);
+            border-radius: 10px;
+            padding: 14px 16px;
+            box-shadow: var(--shadow-lg);
+            z-index: 200;
+            animation: fadeIn 0.15s ease;
+        }
+        .status-popover-title {
+            font-size: 0.84rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .status-popover-desc {
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+        .status-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .nav-btn {
+            height: 34px;
+            padding: 0 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-main);
+            background: var(--bg-surface-solid);
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s;
+        }
+        .nav-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border-color: var(--border-hover);
+        }
+        .nav-btn-icon {
+            width: 34px;
+            padding: 0;
+            justify-content: center;
+        }
+
+        /* 主体布局 */
+        .app-layout {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 14px;
+            padding: 12px 18px;
+            max-width: 1560px;
+            margin: 0 auto;
+            width: 100%;
+            height: calc(100vh - 60px);
+            box-sizing: border-box;
+            overflow: hidden !important;
+        }
+
+        .main-column {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-width: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .sidebar-panel, .side-column {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* 卡片容器 */
+        .panel-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-main);
+            border-radius: 10px;
+            padding: 12px 14px;
+            box-shadow: var(--shadow-sm);
+            transition: border-color 0.2s;
+        }
+
+        .panel-card-title {
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* 检索输入框组 */
+        .search-bar-wrap {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .input-group {
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .input-prefix-icon {
+            position: absolute;
+            left: 12px;
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+        .text-input {
+            width: 100%;
+            height: 42px;
+            padding: 0 14px 0 38px;
+            border-radius: 8px;
+            border: 1px solid var(--border-main);
+            background: var(--bg-surface-solid);
+            color: var(--text-primary);
+            font-size: 0.88rem;
+            outline: none;
+            transition: all 0.15s;
+        }
+        .text-input:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 2px var(--accent-subtle);
+        }
+
+        .btn-primary {
+            height: 42px;
+            padding: 0 20px;
+            border-radius: 8px;
+            border: none;
+            background: var(--text-primary);
+            color: var(--bg-base);
+            font-size: 0.88rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+        .btn-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* 参数过滤器条 */
+        .filter-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+        }
+        .chips-wrap {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .chip {
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-main);
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .chip:hover, .chip.active {
+            background: var(--text-primary);
+            color: var(--bg-base);
+            border-color: var(--text-primary);
+        }
+
+        .checkbox-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+        }
+        .checkbox-item input {
+            accent-color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        /* 文章表格区域 */
+        .table-panel {
+            flex: 1;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-main);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-height: 440px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .table-toolbar {
+            padding: 12px 18px;
+            background: var(--bg-surface-solid);
+            border-bottom: 1px solid var(--border-main);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .table-title-stats {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .stat-badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: var(--bg-subtle);
+            color: var(--text-secondary);
+        }
+        .stat-badge.success { background: var(--accent-emerald-subtle); color: var(--accent-emerald); }
+        .stat-badge.failed { background: var(--accent-rose-subtle); color: var(--accent-rose); }
+
+        .table-container {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            height: 100%;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+            text-align: left;
+        }
+        thead th {
+            position: sticky;
+            top: 0;
+            background: var(--bg-subtle);
+            color: var(--text-secondary);
+            font-weight: 700;
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border-main);
+            white-space: nowrap;
+            z-index: 10;
+        }
+        tbody tr {
+            border-bottom: 1px solid var(--border-main);
+            transition: background 0.12s;
+        }
+        tbody tr:hover {
+            background: var(--bg-hover);
+        }
+        tbody td {
+            padding: 8px 12px;
+            vertical-align: middle;
+            color: var(--text-primary);
+        }
+
+        .art-title-cell {
+            font-weight: 600;
+            min-width: 220px;
+            max-width: 480px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            display: block;
+        }
+
+        /* 公众号档案库切换下拉菜单 */
+        .account-select-btn {
+            background: var(--bg-surface-solid);
+            border: 1px solid var(--border-main);
+            border-radius: 8px;
+            padding: 4px 10px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.15s;
+        }
+        .account-select-btn:hover {
+            background: var(--bg-hover);
+            border-color: var(--border-hover);
+        }
+        .account-dropdown-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            margin-top: 6px;
+            width: 320px;
+            background: var(--bg-surface-solid);
+            border: 1px solid var(--border-main);
+            border-radius: 10px;
+            box-shadow: var(--shadow-lg);
+            z-index: 100;
+            overflow: hidden;
+        }
+        .account-dropdown-header {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--border-main);
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-subtle);
+        }
+        .account-history-list {
+            max-height: 260px;
+            overflow-y: auto;
+            padding: 6px;
+        }
+        .account-history-item {
+            padding: 8px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            transition: background 0.15s;
+        }
+        .account-history-item:hover {
+            background: var(--bg-hover);
+        }
+        .account-history-item.active {
+            background: var(--accent-subtle);
+            border-left: 3px solid var(--text-primary);
+        }
+
+        /* 状态芯片 */
+        .badge-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .badge-pending { background: var(--bg-subtle); color: var(--text-muted); }
+        .badge-downloading { background: var(--accent-blue-subtle); color: var(--accent-blue); }
+        .badge-completed { background: var(--accent-emerald-subtle); color: var(--accent-emerald); }
+        .badge-failed { background: var(--accent-rose-subtle); color: var(--accent-rose); cursor: help; }
+
+        .btn-link {
+            background: none;
+            border: none;
+            color: var(--accent-blue);
+            font-size: 0.76rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 4px;
+            border-radius: 4px;
+            text-decoration: none;
+        }
+        .btn-link:hover {
+            background: var(--accent-subtle);
+            text-decoration: underline;
+        }
+
+        /* 导出格式选择器 (紧凑双列网格，确保整个右栏一屏完整展示，无需上下滚动) */
+        .format-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-bottom: 0px;
+        }
+        .format-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 7px 9px;
+            border-radius: 8px;
+            border: 1px solid var(--border-main);
+            background: var(--bg-surface-solid);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .format-card:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-hover);
+        }
+        .format-card.active {
+            border-color: var(--border-focus);
+            background: var(--accent-subtle);
+        }
+        .format-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            overflow: hidden;
+        }
+        .format-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 5px;
+            background: var(--bg-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-primary);
+            flex-shrink: 0;
+        }
+        .format-icon .icon {
+            width: 14px;
+            height: 14px;
+        }
+        .format-title {
+            font-size: 0.78rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+        .format-desc {
+            font-size: 0.66rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 105px;
+        }
+
+        /* 导出大按钮 */
+        .btn-export-massive {
+            width: 100%;
+            height: 48px;
+            border-radius: 10px;
+            border: none;
+            background: var(--text-primary);
+            color: var(--bg-base);
+            font-size: 0.95rem;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: var(--shadow-md);
+            transition: all 0.2s;
+        }
+        .btn-export-massive:hover {
+            opacity: 0.92;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+        .btn-export-massive:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* 进度条卡片 */
+        .progress-card {
+            background: var(--bg-surface-solid);
+            border: 1px solid var(--border-main);
+            border-radius: 8px;
+            padding: 12px 14px;
+            display: none;
+            margin-top: 12px;
+        }
+        .progress-text {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .progress-track {
+            height: 6px;
+            background: var(--bg-subtle);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--accent-emerald);
+            transition: width 0.15s ease;
+        }
+
+        /* 关于作者大模态框 */
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .modal-card {
+            width: 100%;
+            max-width: 820px;
+            max-height: 90vh;
+            overflow-y: auto;
+            background: var(--bg-surface-solid);
+            border: 1px solid var(--border-main);
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            color: var(--text-primary);
+        }
+        .modal-close {
+            position: absolute;
+            top: 20px; right: 20px;
+            background: none;
+            border: none;
+            font-size: 1.3rem;
+            cursor: pointer;
+            color: var(--text-muted);
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s;
+        }
+        .modal-close:hover {
+            background: var(--bg-subtle);
+            color: var(--text-primary);
+        }
+
+        /* 图片放大模态框 (Lightbox) - 确保最高层级置顶 */
+        .lightbox-backdrop {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.88);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            z-index: 99999;
+            align-items: center;
+            justify-content: center;
+            cursor: zoom-out;
+        }
+        .lightbox-content {
+            position: relative;
+            max-width: 90vw;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .lightbox-img {
+            max-width: 85vw;
+            max-height: 75vh;
+            object-fit: contain;
+            border-radius: 12px;
+            background: #fff;
+            padding: 8px;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.6);
+        }
+        .lightbox-caption {
+            color: #fff;
+            font-size: 0.95rem;
+            font-weight: 700;
+            margin-top: 14px;
+            text-align: center;
+        }
+
+        /* 项目矩阵 Bento 卡片 */
+        .bento-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-main);
+            border-radius: 10px;
+            padding: 12px 16px;
+            text-decoration: none;
+            color: var(--text-primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.15s;
+        }
+        .bento-card:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-hover);
+            transform: translateY(-1px);
+        }
+
+        /* 动画 */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+        /* 主导航与专栏大厅样式 */
+        .main-nav-tabs {
+            display: flex;
+            gap: 8px;
+            padding: 8px 24px 0;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border-main);
+        }
+        .main-nav-tab {
+            padding: 8px 16px;
+            font-size: 0.84rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+        .main-nav-tab:hover {
+            color: var(--text-primary);
+        }
+        .main-nav-tab.active {
+            color: var(--accent-emerald);
+            border-bottom-color: var(--accent-emerald);
+            font-weight: 700;
+        }
+
+        .album-grid-card {
+            background: var(--bg-surface-solid);
+            border: 1px solid var(--border-main);
+            border-radius: 10px;
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 10px;
+            transition: all 0.15s ease;
+            box-shadow: var(--shadow-sm);
+        }
+        .album-grid-card:hover {
+            border-color: var(--accent-emerald);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+        .album-card-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .album-card-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: rgba(16, 185, 129, 0.12);
+            color: var(--accent-emerald);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 1.2rem;
+        }
+        .album-card-title {
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .album-card-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.74rem;
+            color: var(--text-muted);
+            padding-top: 8px;
+            border-top: 1px dashed var(--border-main);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="toastBox" class="toast-box"></div>
+
+    <!-- 顶部导航栏 -->
+    <header class="app-header">
+        <div class="header-brand">
+            <div class="header-logo">
+                <img src="assets/logo_icon.svg" alt="Logo">
+            </div>
+            <div class="header-title-wrap">
+                <div class="header-title">
+                    BlogDistiller <span style="font-weight: 500; font-size: 0.9rem; color: var(--text-secondary);">(博萃)</span>
+                    <span class="header-badge">微信文章导出</span>
+                    <span class="header-badge" style="background: rgba(14, 165, 233, 0.12); color: var(--accent-sky); font-weight: 800; border: 1px solid rgba(14, 165, 233, 0.3);">v1.0.0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="header-actions">
+            <!-- 状态提示胶囊与控制面板 -->
+            <div class="status-pill-wrap">
+                <div id="statusPill" class="status-pill" onclick="toggleStatusPopover(event)" title="点击查看微信凭证状态与续期指南">
+                    <span class="status-dot"></span>
+                    <span id="statusPillText">微信阅读凭证: 监听中</span>
+                    <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </div>
+
+                <!-- 浮窗控制卡片 -->
+                <div id="statusPopover" class="status-popover" style="width: 320px;" onclick="event.stopPropagation()">
+                    <div class="status-popover-title">
+                        <span>🔑 微信阅读凭证通道</span>
+                        <span id="popoverStatusBadge" style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(34, 197, 94, 0.15); color: #16a34a;">有效</span>
+                    </div>
+                    <div id="popoverCountdownWrap" style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-subtle); padding:6px 10px; border-radius:6px; margin-bottom:8px; font-size:0.76rem;">
+                        <span style="color:var(--text-secondary);">凭证有效倒计时:</span>
+                        <strong id="popoverCountdown" style="color:var(--accent-emerald); font-family:monospace; font-size:0.85rem;">29:59</strong>
+                    </div>
+                    <div class="status-popover-desc" id="popoverDesc" style="font-size:0.75rem; line-height:1.5; margin-bottom:10px;">
+                        💡 <b>如何捕获 / 0秒续期？</b><br>
+                        在电脑微信中点开任意公众号文章（或按 Ctrl+R 刷新），客户端嗅探器将在 <b>1 秒内自动截获最新密钥</b>！
+                    </div>
+                    <div class="status-actions" style="flex-direction: column; gap: 8px;">
+                        <button class="btn-primary" style="width: 100%; font-size: 0.78rem; height: 32px; justify-content: center; background: #16a34a; border: none; color: #fff;" onclick="handleCopyProfileGuideLink()">
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                            <span>📋 获取专属主页链接 (发微信点开)</span>
+                        </button>
+                        <div style="display: flex; gap: 8px; width: 100%;">
+                            <button class="nav-btn" style="flex: 1; font-size: 0.75rem; justify-content: center;" onclick="handleToggleProxy(true)">
+                                <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                <span>刷新通信</span>
+                            </button>
+                            <button class="nav-btn" style="flex: 1; font-size: 0.75rem; color: var(--accent-rose); justify-content: center;" onclick="handleToggleProxy(false)">
+                                <span>关闭代理</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 切换主题 -->
+            <button id="themeToggleBtn" class="nav-btn nav-btn-icon" title="切换浅色 / 深色模式" onclick="toggleTheme()">
+                <svg id="themeIconSun" class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                <svg id="themeIconMoon" class="icon" viewBox="0 0 24 24" style="display: none;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            </button>
+
+            <!-- 诊断日志 -->
+            <button class="nav-btn" onclick="openDebugLogModal()" title="查看软件运行底层诊断日志">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                <span>诊断日志</span>
+                <span id="debugLogCountBadge" style="font-size: 0.7rem; background: rgba(14, 165, 233, 0.15); color: var(--accent-sky); padding: 1px 5px; border-radius: 10px; margin-left: 3px;">0</span>
+            </button>
+
+            <!-- 检测更新 -->
+            <button class="nav-btn" onclick="checkAppUpdate(true)" title="检测软件最新版本 (GitHub)">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                <span>检测更新</span>
+            </button>
+
+            <!-- GitHub 源码 -->
+            <button class="nav-btn" onclick="openAuthorGitHub()" title="查看 GitHub 开源仓库">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+                <span>GitHub</span>
+            </button>
+
+            <!-- 关于作者 -->
+            <button class="nav-btn" onclick="openAboutModal()" title="关于作者「艺杯羹」与项目矩阵">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                <span>关于作者</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- 主工作区 -->
+    <main class="app-layout">
+        
+        <!-- 左侧：工作流面板 (占大面积) -->
+        <section class="main-column">
+            
+            <!-- 检索面板 -->
+            <div class="panel-card">
+                <!-- 三步走向导 (横向不换行，清晰美观) -->
+                <div style="display:flex; align-items:center; justify-content:space-between; background:var(--bg-subtle); padding:8px 14px; border-radius:6px; margin-bottom:10px; font-size:0.78rem; color:var(--text-secondary); white-space:nowrap; overflow:hidden;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="background:var(--accent-emerald); color:#fff; border-radius:50%; width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; font-size:0.68rem; font-weight:bold;">1</span>
+                        <span>粘贴文章链接点【获取专属链接】</span>
+                    </div>
+                    <span style="color:var(--text-muted); opacity:0.6;">➔</span>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="background:var(--accent-emerald); color:#fff; border-radius:50%; width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; font-size:0.68rem; font-weight:bold;">2</span>
+                        <span>发给电脑微信点开(1秒截获密钥)</span>
+                    </div>
+                    <span style="color:var(--text-muted); opacity:0.6;">➔</span>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="background:var(--accent-emerald); color:#fff; border-radius:50%; width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; font-size:0.68rem; font-weight:bold;">3</span>
+                        <span>点击【提取/解析文章】开始导出</span>
+                    </div>
+                </div>
+
+                <div class="search-bar-wrap">
+                    <div class="input-group">
+                        <svg class="icon input-prefix-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <input type="text" id="targetInput" class="text-input" placeholder="粘贴公众号任意一篇文章链接 (如: https://mp.weixin.qq.com/s/xxx)">
+                    </div>
+                    <button class="nav-btn" style="height:42px; padding:0 14px; font-size:0.82rem; font-weight:600; flex-shrink:0;" onclick="handleCopyProfileGuideLink()" title="一键生成并在剪切板复制该公众号的专属历史主页链接">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                        <span>📋 获取专属链接</span>
+                    </button>
+                    <button id="searchBtn" class="btn-primary" onclick="handleSearchCatalog()">
+                        <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                        <span>提取 / 解析文章</span>
+                    </button>
+                </div>
+
+                <div class="filter-row">
+                    <div class="chips-wrap">
+                        <span style="font-size: 0.78rem; color: var(--text-muted);">抓取篇数：</span>
+                        <div class="chip active" onclick="setCountPreset(0, this)">全部历史</div>
+                        <div class="chip" onclick="setCountPreset(50, this)">前 50 篇</div>
+                        <div class="chip" onclick="setCountPreset(100, this)">前 100 篇</div>
+                        <input type="number" id="customCountInput" min="0" placeholder="自定义" style="width: 70px; height: 26px; border-radius: 4px; border: 1px solid var(--border-main); background: var(--bg-surface-solid); color: var(--text-primary); padding: 0 6px; font-size: 0.78rem; outline: none;" oninput="onCustomCountInput(this.value)">
+                    </div>
+
+                    <div style="display: flex; gap: 16px; align-items: center;">
+                        <label class="checkbox-item" title="智能识别并过滤推文底部的广告、赞赏卡片与关注引导">
+                            <input type="checkbox" id="cleanAdCheck" checked>
+                            <span>过滤底部广告与二维码</span>
+                        </label>
+                        <label class="checkbox-item" title="默认关闭，保留原图水印以保护公众号原作者版权">
+                            <input type="checkbox" id="cleanWatermarkCheck">
+                            <span>提取高清去水印原图</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 文章列表表格 -->
+            <div class="table-panel" style="flex:1;">
+                <div class="table-toolbar">
+                    <div class="table-title-stats">
+                        <div class="account-selector-wrap" style="position: relative; display: inline-block;">
+                            <button class="account-select-btn" onclick="toggleAccountHistoryDropdown(event)" title="点击切换已收录的公众号档案，随时本地无限导出">
+                                <span id="authorTitleDisplay" style="font-weight: 800; color: var(--text-primary);">【艺杯羹】</span>
+                                <span id="totalBadge" class="stat-badge">共 0 篇</span>
+                                <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                            
+                            <!-- 下拉菜单浮层 -->
+                            <div id="accountHistoryDropdown" class="account-dropdown-menu" style="display: none;">
+                                <div class="account-dropdown-header">
+                                    <span>📚 公众号历史档案库</span>
+                                    <span style="font-size: 0.7rem; color: var(--accent-emerald);">本地无限导出</span>
+                                </div>
+                                <div id="accountHistoryList" class="account-history-list">
+                                    <!-- 动态渲染历史列表 -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <span id="successBadge" class="stat-badge success" style="display: none;">已完成 0</span>
+                        <span id="failedBadge" class="stat-badge failed" style="display: none;">失败 0</span>
+                    </div>
+
+                    <div style="display: flex; gap: 8px;">
+                        <button class="nav-btn" style="height: 28px; padding: 0 10px; font-size: 0.75rem;" onclick="selectAllArticles(true)">全选</button>
+                        <button class="nav-btn" style="height: 28px; padding: 0 10px; font-size: 0.75rem;" onclick="selectAllArticles(false)">取消全选</button>
+                        <button class="nav-btn" style="height: 28px; padding: 0 10px; font-size: 0.75rem; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" onclick="handleClearArticleList()" title="清空当前列表，方便开始下一轮全新提取">
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                            <span>清空列表</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 44px; text-align: center;"><input type="checkbox" id="headerCheckbox" checked onchange="toggleHeaderSelect(this.checked)"></th>
+                                <th style="width: 55px; text-align: center;">序号</th>
+                                <th>文章标题</th>
+                                <th style="width: 105px; text-align: center;">发布日期</th>
+                                <th style="width: 70px; text-align: center;">属性</th>
+                                <th style="width: 95px; text-align: center;">状态</th>
+                                <th style="width: 70px; text-align: center;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="articleTableBody">
+                            <tr>
+                                <td colspan="7" style="text-align: center; padding: 48px; color: var(--text-muted);">
+                                    暂无文章数据，请在上方输入链接并点击【提取 / 解析文章】
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- 右侧：导出配置与执行 -->
+        <aside class="sidebar-panel">
+            
+            <!-- 导出格式选择 (6大格式支持) -->
+            <div class="panel-card">
+                <div class="panel-card-title">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    <span>1. 选择导出格式 (支持多选)</span>
+                </div>
+
+                <div class="format-grid">
+                    <!-- PDF -->
+                    <div class="format-card active" data-fmt="pdf" onclick="toggleFormat('pdf', this)">
+                        <div class="format-info">
+                            <div class="format-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg></div>
+                            <div>
+                                <div class="format-title">PDF 电子书 (.pdf)</div>
+                                <div class="format-desc">矢量排版 · 高清图文打印级阅读</div>
+                            </div>
+                        </div>
+                        <input type="checkbox" checked style="pointer-events: none;">
+                    </div>
+
+                    <!-- 离线 HTML -->
+                    <div class="format-card active" data-fmt="html" onclick="toggleFormat('html', this)">
+                        <div class="format-info">
+                            <div class="format-icon"><svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg></div>
+                            <div>
+                                <div class="format-title">离线网页 (.html)</div>
+                                <div class="format-desc">原汁原味 · 独立离线无网可读</div>
+                            </div>
+                        </div>
+                        <input type="checkbox" checked style="pointer-events: none;">
+                    </div>
+
+                    <!-- Markdown -->
+                    <div class="format-card" data-fmt="md" onclick="toggleFormat('md', this)">
+                        <div class="format-info">
+                            <div class="format-icon"><svg class="icon" viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg></div>
+                            <div>
+                                <div class="format-title">Markdown (.md)</div>
+                                <div class="format-desc">知识库归档 · 兼容 Obsidian/Notion</div>
+                            </div>
+                        </div>
+                        <input type="checkbox" style="pointer-events: none;">
+                    </div>
+
+                    <!-- Word -->
+                    <div class="format-card" data-fmt="docx" onclick="toggleFormat('docx', this)">
+                        <div class="format-info">
+                            <div class="format-icon"><svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg></div>
+                            <div>
+                                <div class="format-title">Word 文档 (.docx)</div>
+                                <div class="format-desc">办公编辑 · 支持 Office/WPS 打开</div>
+                            </div>
+                        </div>
+                        <input type="checkbox" style="pointer-events: none;">
+                    </div>
+
+                    <!-- 纯文本 TXT -->
+                    <div class="format-card" data-fmt="txt" onclick="toggleFormat('txt', this)">
+                        <div class="format-info">
+                            <div class="format-icon"><svg class="icon" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg></div>
+                            <div>
+                                <div class="format-title">纯文本 (.txt)</div>
+                                <div class="format-desc">纯净提取 · 方便 AI 投喂与检索</div>
+                            </div>
+                        </div>
+                        <input type="checkbox" style="pointer-events: none;">
+                    </div>
+
+                    <!-- Excel 表格 (.xlsx) -->
+                    <div class="format-card" data-fmt="xlsx" onclick="toggleFormat('xlsx', this)">
+                        <div class="format-info">
+                            <div class="format-icon"><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg></div>
+                            <div>
+                                <div class="format-title">Excel 表格 (.xlsx)</div>
+                                <div class="format-desc">数据清单 · 标题与发布时间整理</div>
+                            </div>
+                        </div>
+                        <input type="checkbox" style="pointer-events: none;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 导出保存路径 -->
+            <div class="panel-card">
+                <div class="panel-card-title">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    <span>2. 本地存储路径</span>
+                </div>
+
+                <div style="font-size: 0.78rem; color: var(--text-muted); background: var(--bg-subtle); border: 1px solid var(--border-main); padding: 8px 10px; border-radius: 6px; word-break: break-all; margin-bottom: 10px;" id="saveDirPath">
+                    C:\Users\30574\Downloads\BlogDistiller文章导出
+                </div>
+
+                <div style="display: flex; gap: 8px;">
+                    <button class="nav-btn" style="flex: 1;" onclick="handleSelectDir()">更改目录</button>
+                    <button class="nav-btn" style="flex: 1;" onclick="handleOpenDir()">打开文件夹</button>
+                </div>
+            </div>
+
+            <!-- 导出执行区 (饱满撑满剩余高度，与左侧表格底边完美对齐) -->
+            <div class="panel-card" style="flex: 1; min-height: 160px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <div class="panel-card-title" style="margin-bottom: 8px;">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
+                        <span>3. 任务控制台</span>
+                    </div>
+                    <div id="exportStatusMsg" style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; background: var(--bg-subtle); padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-main);">
+                        准备就绪，选择文章与格式后一键批量导出。
+                    </div>
+                </div>
+
+                <div>
+                    <div id="progressBox" class="progress-card" style="margin-bottom: 10px;">
+                        <div class="progress-text">
+                            <span id="progressStepText">正在处理...</span>
+                            <span id="progressPercent">0%</span>
+                        </div>
+                        <div class="progress-track">
+                            <div id="progressBarFill" class="progress-bar-fill"></div>
+                        </div>
+                    </div>
+
+                    <button id="exportMainBtn" class="btn-export-massive" onclick="handleStartExport()" disabled>
+                        <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                        <span id="exportBtnText">请勾选要导出的文章</span>
+                    </button>
+                </div>
+            </div>
+
+        </aside>
+    </main>
+
+    <!-- 官网同款：关于作者「艺杯羹」与项目矩阵模态框 -->
+    <div id="aboutModal" class="modal-backdrop" onclick="closeAboutModal()">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <button class="modal-close" onclick="closeAboutModal()">&times;</button>
+            
+            <div style="text-align: center; margin-bottom: 24px;">
+                <div style="font-size: 0.78rem; font-weight: 700; color: var(--accent-emerald); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Author Profile</div>
+                <h2 style="font-size: 1.4rem; font-weight: 800; color: var(--text-primary);">关于作者「艺杯羹」</h2>
+                <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;">专注前沿工具研发、知识提纯与个人数字生产力构建。</p>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start;">
+                <!-- 左列：博主名片与社交联系 -->
+                <div>
+                    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
+                        <img src="assets/avatar.png" alt="博主头像" style="width: 52px; height: 52px; border-radius: 12px; object-fit: cover; border: 1px solid var(--border-main);">
+                        <div>
+                            <div style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary);">博主：艺杯羹</div>
+                            <div style="font-size: 0.78rem; color: var(--accent-emerald); font-weight: 600;">独立开发者 · 效率工具创作者</div>
+                        </div>
+                    </div>
+
+                    <!-- 官方交流群邀请通知条 -->
+                    <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                        <div style="font-size: 0.78rem; color: var(--text-primary); line-height: 1.4;">
+                            📢 <b>官方交流群：</b>加微信 <code style="font-family: monospace; font-weight:700; color:var(--accent-emerald); background:var(--bg-surface); padding:1px 5px; border-radius:4px;">peace-83</code> 备注【进群】
+                        </div>
+                        <button type="button" class="nav-btn" onclick="copyToClipboard('peace-83', '作者微信号')" style="font-size: 0.72rem; height: 26px; padding: 0 8px; background: var(--accent-emerald); color: white; border: none; font-weight: 700; flex-shrink: 0;">复制微信</button>
+                    </div>
+
+                    <!-- 联系方式与平台 -->
+                    <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.82rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-muted); font-weight: 600;">QQ 号：</span>
+                            <span style="font-family: monospace; font-weight: 700; color: var(--text-primary);">3057454077</span>
+                            <button type="button" onclick="copyToClipboard('3057454077', 'QQ号')" class="nav-btn" style="font-size: 0.7rem; height: 24px; padding: 0 6px;">复制</button>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-muted); font-weight: 600;">微信号：</span>
+                            <span style="font-family: monospace; font-weight: 700; color: var(--text-primary);">peace-83</span>
+                            <button type="button" onclick="copyToClipboard('peace-83', '微信号')" class="nav-btn" style="font-size: 0.7rem; height: 24px; padding: 0 6px;">复制</button>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-muted); font-weight: 600;">微信公众号：</span>
+                            <span style="font-weight: 700; color: var(--accent-emerald);">艺杯羹</span>
+                            <a href="javascript:void(0)" onclick="openImageLightbox('assets/wechat_qr.png', '微信公众号【艺杯羹】· 扫码关注')" style="font-size: 0.72rem; color: var(--accent-gold); text-decoration: underline;">查看二维码</a>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-muted); font-weight: 600;">个人站点：</span>
+                            <span style="font-weight: 600;">yibeigen.pages.dev</span>
+                            <button type="button" onclick="openExternalUrl('https://yibeigen.pages.dev/')" class="nav-btn" style="font-size: 0.7rem; height: 24px; padding: 0 6px;">访问 ↗</button>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-muted); font-weight: 600;">CSDN 博客：</span>
+                            <span style="font-weight: 600;">博主 CSDN 主页</span>
+                            <button type="button" onclick="openExternalUrl('https://blog.csdn.net/qq_46987323?spm=1000.2115.3001.5343')" class="nav-btn" style="font-size: 0.7rem; height: 24px; padding: 0 6px;">访问 ↗</button>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-muted); font-weight: 600;">个人微博：</span>
+                            <span style="font-weight: 600;">@7583841270</span>
+                            <button type="button" onclick="openExternalUrl('https://www.weibo.com/u/7583841270')" class="nav-btn" style="font-size: 0.7rem; height: 24px; padding: 0 6px;">访问 ↗</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右列：二维码与赞赏支持 -->
+                <div>
+                    <div style="background: linear-gradient(135deg, rgba(217, 119, 6, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%); border: 1px solid rgba(217, 119, 6, 0.25); border-radius: 12px; padding: 18px;">
+                        <div style="font-size: 0.9rem; font-weight: 800; color: #d97706; margin-bottom: 14px; text-align: center;">
+                            💖 赞赏支持 & 官方公众号
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <!-- 公众号二维码 (单击放大) -->
+                            <div style="background: var(--bg-surface-solid); border: 1px solid var(--border-main); border-radius: 8px; padding: 10px; text-align: center;">
+                                <img src="assets/wechat_qr.png" alt="公众号" onclick="openImageLightbox('assets/wechat_qr.png', '微信公众号【艺杯羹】')" title="点击放大查看大图" style="width: 100px; height: 100px; border-radius: 6px; cursor: zoom-in; object-fit: contain; margin-bottom: 6px; transition: transform 0.15s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='none'">
+                                <div style="font-size: 0.76rem; font-weight: 800; color: var(--accent-emerald);">公众号【艺杯羹】</div>
+                                <div style="font-size: 0.68rem; color: var(--text-muted); margin-top: 2px;">
+                                    <span style="color:var(--accent-gold); cursor:pointer;" onclick="openImageLightbox('assets/wechat_qr.png', '微信公众号【艺杯羹】')">🔍 点击看大图</span>
+                                </div>
+                            </div>
+
+                            <!-- 赞赏二维码 (单击放大) -->
+                            <div style="background: var(--bg-surface-solid); border: 1px solid rgba(217, 119, 6, 0.35); border-radius: 8px; padding: 10px; text-align: center;">
+                                <img src="assets/reward_qr.png" alt="赞赏支持" onclick="openImageLightbox('assets/reward_qr.png', '赞赏支持博主「艺杯羹」')" title="点击放大查看大图" style="width: 100px; height: 100px; border-radius: 6px; cursor: zoom-in; object-fit: contain; margin-bottom: 6px; transition: transform 0.15s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='none'">
+                                <div style="font-size: 0.76rem; font-weight: 800; color: #d97706;">💖 赞赏支持作者</div>
+                                <div style="font-size: 0.68rem; color: var(--text-muted); margin-top: 2px;">
+                                    <span style="color:var(--accent-gold); cursor:pointer;" onclick="openImageLightbox('assets/reward_qr.png', '赞赏支持博主「艺杯羹」')">🔍 点击看大图</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.76rem; color: var(--text-muted); border-top: 1px dashed var(--border-main); padding-top: 14px; margin-top: 16px;">
+                <span>
+                    © 2026 <b>BlogDistiller (博萃)</b> · 独立开发者「<b>艺杯羹</b>」出品
+                    <a href="javascript:void(0)" onclick="resetActivation()" style="color: var(--text-muted); text-decoration: underline; margin-left: 8px; font-size: 0.72rem; opacity: 0.7;" title="重置激活状态以重新测试弹窗">重置激活状态</a>
+                </span>
+                <span style="display: flex; align-items: center; gap: 6px;">
+                    <span>⭐ 觉得好用欢迎到</span>
+                    <a href="javascript:void(0)" onclick="openAuthorGitHub()" style="color: var(--accent-blue); text-decoration: underline; font-weight: 700;">GitHub 点个 Star</a>
+                    <span>支持作者！</span>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 图片放大预览模态框 (Lightbox) -->
+    <div id="imageLightboxModal" class="lightbox-backdrop" onclick="closeImageLightbox()">
+        <div class="lightbox-content" onclick="event.stopPropagation()">
+            <button type="button" onclick="closeImageLightbox()" style="position: absolute; top: -40px; right: 0; background: rgba(255, 255, 255, 0.25); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 1.2rem; display: flex; align-items: center; justify-content: center;">&times;</button>
+            <img id="lightboxImg" class="lightbox-img" src="" alt="预览大图">
+            <div id="lightboxCaption" class="lightbox-caption"></div>
+        </div>
+    </div>
+
+    <!-- 运行诊断日志大弹窗 (Modal) -->
+    <div id="debugLogModal" class="modal-backdrop" onclick="closeDebugModal()">
+        <div class="modal-card" style="width: 820px; max-width: 92vw; height: 620px; max-height: 88vh; display: flex; flex-direction: column; padding: 20px;" onclick="event.stopPropagation()">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-main); padding-bottom: 14px; margin-bottom: 14px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(59, 130, 246, 0.1); color: var(--accent-blue); display: flex; align-items: center; justify-content: center;">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                    </div>
+                    <div>
+                        <div style="font-weight: 800; font-size: 0.95rem; color: var(--text-primary);">🔍 实时运行诊断与底层网络通信日志</div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">实时追踪推文解析、微信协议会话、接口返回代码等底层通信细节</div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <span id="modalLogCountBadge" class="stat-badge" style="font-size: 0.72rem; padding: 2px 8px;">0 条记录</span>
+                    <button type="button" onclick="clearDebugLog()" class="nav-btn" style="height: 28px; font-size: 0.75rem; padding: 0 10px; font-weight: 600;">清空记录</button>
+                    <button type="button" onclick="closeDebugModal()" class="nav-btn" style="height: 28px; width: 28px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; border-radius: 50%;">&times;</button>
+                </div>
+            </div>
+            <div id="modalDebugLogContainer" style="flex: 1; background: var(--bg-main); border: 1px solid var(--border-main); border-radius: 8px; padding: 14px; font-family: 'Consolas', 'Fira Code', 'Courier New', monospace; font-size: 0.8rem; line-height: 1.7; color: var(--text-secondary); overflow-y: auto;">
+                <div id="modalDebugLogLines"><div style="color: var(--text-muted);">🟢 诊断日志监听已就绪，点击【检索历史文章】即可在此查看全流程详细细节...</div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 软件激活授权弹窗 (Modal) -->
+    <div id="activationModal" class="modal-backdrop" style="display: none; z-index: 10000; background: rgba(0,0,0,0.65); backdrop-filter: blur(6px);">
+        <div class="modal-card" style="width: 520px; max-width: 92vw; padding: 26px; border-radius: 16px; box-shadow: var(--shadow-xl);" onclick="event.stopPropagation()">
+            
+            <!-- 头部 -->
+            <div style="text-align: center; margin-bottom: 20px;">
+                <div style="width: 52px; height: 52px; border-radius: 14px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%); color: var(--accent-emerald); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 12px;">
+                    <svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                </div>
+                <div style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary);">欢迎使用 BlogDistiller (博萃)</div>
+                <div style="font-size: 0.8rem; color: var(--accent-emerald); font-weight: 700; margin-top: 4px;">
+                    🌱 永久完全免费 · 纯净本地运行 · 无任何广告推广
+                </div>
+            </div>
+
+            <!-- 公众号二维码与获取方式卡片 -->
+            <div style="background: var(--bg-surface-solid); border: 1px solid var(--border-main); border-radius: 12px; padding: 14px; margin-bottom: 18px; display: flex; gap: 14px; align-items: center;">
+                <div style="text-align: center; flex-shrink: 0;">
+                    <img src="assets/wechat_qr.png" alt="公众号二维码" onclick="openImageLightbox('assets/wechat_qr.png', '微信扫码关注公众号【艺杯羹】')" title="点击放大查看大图" style="width: 110px; height: 72px; object-fit: contain; border-radius: 6px; border: 1px solid var(--border-main); background: var(--bg-surface); cursor: zoom-in; display: block; margin-bottom: 4px; transition: transform 0.15s;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='none'">
+                    <span style="font-size: 0.68rem; color: var(--accent-gold); cursor: pointer; font-weight: 700;" onclick="openImageLightbox('assets/wechat_qr.png', '微信扫码关注公众号【艺杯羹】')">🔍 点击看大图</span>
+                </div>
+                <div style="flex: 1; font-size: 0.82rem; line-height: 1.6; color: var(--text-secondary);">
+                    <div style="font-weight: 800; color: var(--text-primary); margin-bottom: 4px;">关注公众号即可免费获取激活码：</div>
+                    <div>1. 微信扫码关注【<b>艺杯羹</b>】公众号</div>
+                    <div>2. 后台发送文字【<b>文章</b>】即可获取激活码</div>
+                    <div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 6px; border-top: 1px dashed var(--border-main); padding-top: 4px;">
+                        💡 <b>提示</b>：本软件与官方网站使用同一套激活密钥，若您在网站已获取，直接输入即可！
+                    </div>
+                </div>
+            </div>
+
+            <!-- 激活输入框组 -->
+            <div style="margin-bottom: 16px;">
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="activationCodeInput" class="text-input" placeholder="请输入激活码" style="font-size: 0.95rem; letter-spacing: 0.05em; font-weight: 700; text-align: center;" onkeydown="if(event.key==='Enter') handleVerifyActivation()">
+                    <button type="button" class="btn-primary" style="padding: 0 22px; font-size: 0.88rem; flex-shrink: 0;" onclick="handleVerifyActivation()">立即激活</button>
+                </div>
+                <div id="activationErrorMsg" style="font-size: 0.78rem; color: var(--accent-rose); margin-top: 6px; text-align: center; display: none;"></div>
+            </div>
+
+            <!-- 底部作者承诺与联系支持 -->
+            <div style="border-top: 1px solid var(--border-main); padding-top: 14px; font-size: 0.74rem; color: var(--text-muted); line-height: 1.6; text-align: center;">
+                <div>本工具完全由独立开发者原创打造，承诺绝不含任何广告或收费套路。</div>
+                <div style="margin-top: 4px;">
+                    如遇任何疑问或建议，欢迎随时联系博主微信：
+                    <b style="color: var(--text-primary); cursor: pointer; text-decoration: underline; background: var(--bg-subtle); padding: 1px 6px; border-radius: 4px;" onclick="copyText('peace-83', '博主微信号 peace-83 已复制到剪贴板！')" title="点击复制微信号">peace-83</b>
+                    （QQ: <b style="color: var(--text-primary); cursor: pointer; text-decoration: underline; background: var(--bg-subtle); padding: 1px 6px; border-radius: 4px;" onclick="copyText('3057454077', '博主 QQ 号 3057454077 已复制到剪贴板！')" title="点击复制 QQ 号">3057454077</b>）
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 版本检测与更新弹窗 (Modal) -->
+    <div id="updateModal" class="modal-backdrop" style="display: none; z-index: 10001;" onclick="closeUpdateModal()">
+        <div class="modal-card" style="width: 480px; max-width: 90vw; padding: 24px;" onclick="event.stopPropagation()">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                </div>
+                <div>
+                    <div style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary);">🎉 发现新版本 <span id="updateVersionTag" style="color: var(--accent-emerald);">v1.1.0</span></div>
+                    <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 2px;">BlogDistiller 微信文章导出助手</div>
+                </div>
+            </div>
+            <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">更新说明：</div>
+            <div style="background: var(--bg-surface-solid); border: 1px solid var(--border-main); border-radius: 8px; padding: 12px; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; margin-bottom: 18px; max-height: 160px; overflow-y: auto;" id="updateChangelog">
+                全新功能升级与性能优化！
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button type="button" class="nav-btn" onclick="closeUpdateModal()">稍后再说</button>
+                <button type="button" class="btn-primary" onclick="openDownloadRelease()" style="padding: 0 18px;">🚀 立即前往 GitHub 下载</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 专属主页直达链接与操作指引模态框 -->
+    <div id="profileUrlModal" class="modal-backdrop" style="display: none; z-index: 10002;" onclick="closeProfileUrlModal()">
+        <div class="modal-card" style="width: 580px; max-width: 92vw; padding: 26px;" onclick="event.stopPropagation()">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 36px; height: 36px; border-radius: 10px; background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
+                        🔗
+                    </div>
+                    <div>
+                        <div style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary);">公众号专属主页链接</div>
+                        <div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 2px;">一秒激活公众号全部推文抓取权限</div>
+                    </div>
+                </div>
+                <button type="button" class="modal-close" onclick="closeProfileUrlModal()">&times;</button>
+            </div>
+
+            <!-- 当前公众号信息徽标 -->
+            <div style="background: var(--bg-surface); border: 1px solid var(--border-main); border-radius: 8px; padding: 8px 12px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.8rem; color: var(--text-muted);">目标公众号：</span>
+                <span id="profileModalAuthor" style="font-size: 0.88rem; font-weight: 800; color: var(--accent-emerald);">【艺杯羹】</span>
+            </div>
+
+            <!-- 专属链接展示与手动复制输入框组 -->
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-primary); margin-bottom: 6px; display: flex; justify-content: space-between;">
+                    <span>主页直达链接 (已自动生成)：</span>
+                    <span style="color: var(--accent-blue); cursor: pointer;" onclick="copyToClipboard(document.getElementById('profileUrlInput').value, '专属主页链接')">📋 点击复制</span>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="profileUrlInput" class="text-input" readonly style="font-family: monospace; font-size: 0.8rem; background: var(--bg-surface-solid); color: var(--text-secondary); cursor: text;" onclick="this.select()">
+                    <button type="button" class="btn-primary" style="padding: 0 16px; font-size: 0.82rem; flex-shrink: 0;" onclick="copyToClipboard(document.getElementById('profileUrlInput').value, '专属主页链接')">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        <span>复制链接</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2 步极速操作指引卡片 -->
+            <div style="background: var(--bg-subtle); border: 1px solid var(--border-main); border-radius: 10px; padding: 14px; margin-bottom: 18px; font-size: 0.8rem; line-height: 1.6; color: var(--text-secondary);">
+                <div style="font-weight: 800; color: var(--text-primary); margin-bottom: 6px;">👉 极速操作指引（仅需 2 步）：</div>
+                <div style="margin-bottom: 4px;"><b>1. 发送到微信</b>：点击上方【复制链接】，切换到电脑微信，发送到微信「<b>文件传输助手</b>」；</div>
+                <div style="margin-bottom: 4px;"><b>2. 在微信中点击打开</b>：微信将展示该公众号的历史推文主页，软件将在 <b>1 秒内自动截获激活凭证</b>；</div>
+                <div style="color: var(--accent-emerald); font-weight: 700; margin-top: 6px;"><b>3. 自动就绪</b>：返回本软件，点击【提取 / 解析文章】即可全量极速提取！</div>
+            </div>
+
+            <!-- 底部动作按钮 -->
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button type="button" class="nav-btn" onclick="closeProfileUrlModal()">关闭</button>
+                <button type="button" class="btn-primary" onclick="copyAndCloseProfileModal()" style="padding: 0 20px;">
+                    <span>📋 复制链接并去微信打开</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript 交互驱动 -->
+    <script>
+        let currentArticles = [];
+        let currentAuthor = "微信公众号";
+        let currentBiz = "";
+        let selectedFormats = ["pdf", "html"]; // 默认仅选中 PDF 和 HTML
+        let currentTargetCount = 0;
+
+        // 初始化
+        window.addEventListener("DOMContentLoaded", async () => {
+            // 加载主题 (默认 light)
+            const savedTheme = localStorage.getItem("app_theme") || "light";
+            applyTheme(savedTheme);
+
+            // 恢复用户偏好导出格式 (默认仅 PDF 和 HTML)
+            try {
+                const savedFormats = localStorage.getItem("app_export_formats");
+                if (savedFormats) {
+                    const parsed = JSON.parse(savedFormats);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        selectedFormats = parsed;
+                    }
+                }
+            } catch(e) {}
+            renderFormatCards();
+
+            // 恢复自定义存储目录 (持久化记忆)
+            const savedOutputDir = localStorage.getItem("app_output_dir");
+            if (savedOutputDir) {
+                document.getElementById("saveDirPath").textContent = savedOutputDir;
+            } else {
+                const settings = await window.blogDistiller.getSettings();
+                if (settings && settings.exportDir) {
+                    document.getElementById("saveDirPath").textContent = settings.exportDir;
+                }
+            }
+
+            // 恢复上一轮已提取的文章列表与公众号历史档案 (0秒本地瞬间恢复)
+            await loadLatestAccountFromHistory();
+
+            const auth = await window.blogDistiller.getWeChatStatus();
+            updateStatusBadge(auth);
+
+            // 检查软件激活状态
+            checkActivationStatus();
+
+            window.blogDistiller.onWeChatStatusChange((auth) => {
+                updateStatusBadge(auth);
+            });
+
+            // 监听快速索引目录检索进度 (实时流式把文章一条条渲染到左侧列表)
+            window.blogDistiller.onFetchProgress((data) => {
+                if (data.message) {
+                    document.getElementById("exportStatusMsg").textContent = data.message;
+                }
+                if (data.articles && Array.isArray(data.articles) && data.articles.length > 0) {
+                    currentArticles = data.articles;
+                    if (data.author) currentAuthor = data.author;
+                    document.getElementById("authorTitleDisplay").textContent = `【${currentAuthor}】`;
+                    document.getElementById("totalBadge").textContent = `已选 ${currentArticles.length}/${currentArticles.length} 篇`;
+                    renderArticleTable(currentArticles);
+                    document.getElementById("exportMainBtn").disabled = false;
+                }
+            });
+
+            // 监听逐篇抓取状态广播 (工号三刀行内状态更新)
+            window.blogDistiller.onArticleStatus((data) => {
+                const { index, id, status, failReason } = data;
+                updateRowStatus(index, id, status, failReason);
+            });
+
+            // 监听导出进度
+            window.blogDistiller.onExportProgress((data) => {
+                document.getElementById("exportStatusMsg").textContent = data.message;
+                const pBox = document.getElementById("progressBox");
+                const pBar = document.getElementById("progressBarFill");
+                const pText = document.getElementById("progressStepText");
+                const pPct = document.getElementById("progressPercent");
+
+                pBox.style.display = "block";
+                pText.textContent = data.message;
+                if (data.total > 0) {
+                    const pct = Math.min(100, Math.round((data.current / data.total) * 100));
+                    pBar.style.width = pct + "%";
+                    pPct.textContent = pct + "%";
+                }
+            });
+
+            // 微信公众平台官方通道连接状态监听
+            if (window.blogDistiller.onMpStatusChange) {
+                window.blogDistiller.onMpStatusChange((data) => {
+                    if (data && data.connected) {
+                        const mpBtn = document.getElementById("mpLoginBtn");
+                        const mpText = document.getElementById("mpBtnText");
+                        if (mpBtn && mpText) {
+                            mpBtn.style.background = "rgba(34, 197, 94, 0.2)";
+                            mpText.textContent = "🟢 微信官方通道已就绪";
+                        }
+                        document.getElementById("exportStatusMsg").innerHTML = `🟢 <b>微信公众平台官方通道已连通！</b> 现在输入任意公众号或推文链接，系统将秒级拉取全部历史文章！`;
+                    }
+                });
+            }
+
+            // 逐篇文章抓取状态实时监听 (精准匹配选中的文章行)
+            if (window.blogDistiller.onArticleStatus) {
+                window.blogDistiller.onArticleStatus((data) => {
+                    updateRowStatus(data.index, data.id, data.status, data.failReason);
+                });
+            }
+
+            // 凭证就绪后自动重新触发检索拉取全部历史
+            if (window.blogDistiller.onAutoTriggerSearch) {
+                window.blogDistiller.onAutoTriggerSearch(() => {
+                    handleSearchCatalog();
+                });
+            }
+
+            // 微信嗅探历史文章实时同步监听 (当用户在电脑微信打开主页或向下滚动时，秒级同步全部历史文章)
+            if (window.blogDistiller.onStreamArticles) {
+                window.blogDistiller.onStreamArticles(({ articles, author }) => {
+                    if (!articles || articles.length === 0) return;
+                    if (author && author !== "微信公众号") {
+                        currentAuthor = author;
+                        document.getElementById("authorTitleDisplay").textContent = `【${currentAuthor}】`;
+                    }
+                    const existingUrls = new Set(currentArticles.map(a => a.url));
+                    let added = 0;
+                    for (const a of articles) {
+                        if (!existingUrls.has(a.url)) {
+                            currentArticles.push(a);
+                            existingUrls.add(a.url);
+                            added++;
+                        }
+                    }
+                    if (added > 0 || currentArticles.length > 1) {
+                        renderArticleTable(currentArticles);
+                        document.getElementById("totalBadge").textContent = `共 ${currentArticles.length} 篇`;
+                        document.getElementById("exportMainBtn").disabled = false;
+                        document.getElementById("exportStatusMsg").textContent = `✅ 实时捕获已同步：当前已截获【${currentAuthor}】${currentArticles.length} 篇历史文章！勾选后即可一键导出。`;
+                    }
+                });
+            }
+
+            // 实时运行诊断日志监听
+            if (window.blogDistiller.onDebugLog) {
+                window.blogDistiller.onDebugLog((data) => {
+                    const box = document.getElementById("modalDebugLogLines");
+                    const countBadge = document.getElementById("debugLogCountBadge");
+                    const modalCountBadge = document.getElementById("modalLogCountBadge");
+                    const container = document.getElementById("modalDebugLogContainer");
+                    if (!box) return;
+
+                    window.debugLogCount = (window.debugLogCount || 0) + 1;
+                    if (countBadge) countBadge.textContent = `${window.debugLogCount} 条记录`;
+                    if (modalCountBadge) modalCountBadge.textContent = `${window.debugLogCount} 条记录`;
+
+                    let color = "var(--text-secondary)";
+                    if (data.level === "warn") color = "#f59e0b";
+                    if (data.level === "error") color = "#ef4444";
+                    if (data.level === "success") color = "var(--accent-emerald)";
+
+                    const line = document.createElement("div");
+                    line.style.color = color;
+                    line.style.padding = "3px 0";
+                    line.style.borderBottom = "1px dashed var(--border-main)";
+                    line.innerHTML = `<span style="color: var(--text-muted); font-size: 0.72rem;">[${data.time}]</span> ${data.text}`;
+                    box.appendChild(line);
+
+                    if (container) {
+                        container.scrollTop = container.scrollHeight;
+                    }
+                });
+            }
+
+            // 全局点击关闭浮窗
+            document.addEventListener("click", () => {
+                const popover = document.getElementById("statusPopover");
+                if (popover) popover.style.display = "none";
+            });
+
+            // 键盘 ESC 退出所有模态框
+            document.addEventListener("keydown", (e) => {
+                if (e.key === "Escape") {
+                    closeDebugLogModal();
+                    closeImageLightbox();
+                    closeAboutModal();
+                }
+            });
+
+            // 初始化微信会话状态
+            const authState = await window.blogDistiller.getWeChatStatus();
+            updateStatusBadge(authState);
+            if (authState && authState.mpToken) {
+                const mpBtn = document.getElementById("mpLoginBtn");
+                const mpText = document.getElementById("mpBtnText");
+                if (mpBtn && mpText) {
+                    mpBtn.style.background = "rgba(34, 197, 94, 0.2)";
+                    mpText.textContent = "🟢 微信官方通道已就绪";
+                }
+            }
+        });
+
+        async function handleOpenMpLogin() {
+            if (window.blogDistiller.openMpLogin) {
+                document.getElementById("exportStatusMsg").innerHTML = `🔗 正在打开微信公众平台官方扫码窗口 (mp.weixin.qq.com)，请使用手机微信扫码...`;
+                await window.blogDistiller.openMpLogin();
+            }
+        }
+
+        // 更新微信连接与嗅探凭证状态
+        function updateStatusBadge(authData) {
+            const pill = document.getElementById("statusPill");
+            const text = document.getElementById("statusPillText");
+            const popBadge = document.getElementById("popoverStatusBadge");
+            const popDesc = document.querySelector(".status-popover-desc");
+
+            if (authData && (authData.mpToken || authData.mpConnected)) {
+                if (pill) {
+                    pill.classList.add("ready");
+                    pill.classList.remove("disabled");
+                }
+                if (text) text.textContent = "公众平台已连接";
+                if (popBadge) {
+                    popBadge.textContent = "官方直连";
+                    popBadge.style.background = "rgba(16, 185, 129, 0.15)";
+                    popBadge.style.color = "var(--accent-emerald)";
+                }
+                if (popDesc) {
+                    popDesc.textContent = "微信公众平台官方通道已连通！直接输入任意公众号名称或文章链接，系统将秒级拉取全部历史推文。";
+                }
+            } else if (authData && authData.captured && authData.key) {
+                if (pill) {
+                    pill.classList.add("ready");
+                    pill.classList.remove("disabled");
+                }
+                if (text) text.textContent = "微信通信正常";
+                if (popBadge) {
+                    popBadge.textContent = "已捕获会话";
+                    popBadge.style.background = "rgba(16, 185, 129, 0.15)";
+                    popBadge.style.color = "var(--accent-emerald)";
+                }
+                if (popDesc) {
+                    popDesc.textContent = `已成功捕获电脑微信通信密钥（捕获于 ${authData.captured_at || '刚刚'}），推文解析通道已畅通。`;
+                }
+            } else {
+                if (pill) {
+                    pill.classList.remove("ready", "disabled");
+                }
+                if (text) text.textContent = "待连接微信";
+                if (popBadge) {
+                    popBadge.textContent = "未连接";
+                    popBadge.style.background = "rgba(234, 179, 8, 0.15)";
+                    popBadge.style.color = "#eab308";
+                }
+                if (popDesc) {
+                    popDesc.textContent = "推荐方式：点击下方【扫码登录公众号后台】，直接以官方通道 1 秒拉取全网任意公众号的全部历史文章！";
+                }
+            }
+        }
+
+        // 软件激活验证逻辑 (首次使用引导关注公众号获取 1588)
+        function checkActivationStatus() {
+            const isActivated = localStorage.getItem("app_activated") === "true";
+            const modal = document.getElementById("activationModal");
+            if (!isActivated && modal) {
+                modal.style.display = "flex";
+            }
+        }
+
+        function handleVerifyActivation() {
+            const input = document.getElementById("activationCodeInput");
+            const errBox = document.getElementById("activationErrorMsg");
+            const code = (input.value || "").trim().toLowerCase();
+
+            // 预设激活密钥 (1588 为主，支持网站通用码)
+            const validCodes = ["1588", "ybg888", "yibeigen", "8888"];
+
+            if (validCodes.includes(code)) {
+                localStorage.setItem("app_activated", "true");
+                if (window.blogDistiller && window.blogDistiller.saveSettings) {
+                    window.blogDistiller.saveSettings({ activated: true });
+                }
+                const modal = document.getElementById("activationModal");
+                if (modal) modal.style.display = "none";
+                if (errBox) errBox.style.display = "none";
+            } else {
+                if (errBox) {
+                    errBox.textContent = "❌ 激活码有误，请关注公众号【艺杯羹】回复【文章】免费获取正确激活码";
+                    errBox.style.display = "block";
+                }
+                input.focus();
+            }
+        }
+
+        function resetActivation() {
+            localStorage.removeItem("app_activated");
+            const modal = document.getElementById("activationModal");
+            if (modal) modal.style.display = "flex";
+            const aboutModal = document.getElementById("aboutModal");
+            if (aboutModal) aboutModal.style.display = "none";
+            showToast("已重置激活状态，可重新进行测试！");
+        }
+
+
+
+        // 版本检测与更新 (GitHub Releases API)
+        const CURRENT_APP_VERSION = "v1.0.0";
+        let latestDownloadUrl = "https://github.com/yibeigen/wechat-article-exporter/releases/latest";
+
+        async function checkAppUpdate(isManual = false) {
+            if (isManual) showToast("🔍 正在连接 GitHub 检测最新版本...");
+            try {
+                const res = await fetch("https://api.github.com/repos/yibeigen/wechat-article-exporter/releases/latest", {
+                    headers: { "Accept": "application/vnd.github.v3+json" }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    const latestTag = data.tag_name || data.name || "";
+                    if (latestTag && latestTag !== CURRENT_APP_VERSION && latestTag > CURRENT_APP_VERSION) {
+                        showUpdateModal(latestTag, data.body || "功能升级与稳定性优化", data.html_url || latestDownloadUrl);
+                        return;
+                    }
+                }
+                if (isManual) {
+                    showToast(`🎉 当前已是最新版本 (${CURRENT_APP_VERSION})！`);
+                }
+            } catch (e) {
+                if (isManual) {
+                    showToast("🌐 正在为您打开 GitHub 发布页面...");
+                    setTimeout(() => {
+                        window.blogDistiller.openExternal(latestDownloadUrl);
+                    }, 500);
+                }
+            }
+        }
+
+        function showUpdateModal(version, changelog, downloadUrl) {
+            latestDownloadUrl = downloadUrl;
+            document.getElementById("updateVersionTag").textContent = version;
+            document.getElementById("updateChangelog").textContent = changelog || "全新功能升级与性能优化！";
+            const modal = document.getElementById("updateModal");
+            if (modal) modal.style.display = "flex";
+        }
+
+        function closeUpdateModal() {
+            const modal = document.getElementById("updateModal");
+            if (modal) modal.style.display = "none";
+        }
+
+        function openDownloadRelease() {
+            window.blogDistiller.openExternal(latestDownloadUrl);
+            closeUpdateModal();
+        }
+
+        // 诊断日志大弹窗控制
+        function openDebugModal() {
+            const modal = document.getElementById("debugLogModal");
+            if (modal) {
+                modal.style.display = "flex";
+                const container = document.getElementById("modalDebugLogContainer");
+                if (container) container.scrollTop = container.scrollHeight;
+            }
+        }
+
+        function closeDebugModal() {
+            const modal = document.getElementById("debugLogModal");
+            if (modal) modal.style.display = "none";
+        }
+
+        function clearDebugLog() {
+            const box = document.getElementById("modalDebugLogLines");
+            const countBadge = document.getElementById("debugLogCountBadge");
+            const modalCountBadge = document.getElementById("modalLogCountBadge");
+            if (box) box.innerHTML = `<div style="color: var(--text-muted);">日志已清空，等待新指令...</div>`;
+            window.debugLogCount = 0;
+            if (countBadge) countBadge.textContent = `0 条记录`;
+            if (modalCountBadge) modalCountBadge.textContent = `0 条记录`;
+        }
+
+        // 主题切换
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute("data-theme") || "light";
+            const next = current === "light" ? "dark" : "light";
+            applyTheme(next);
+            localStorage.setItem("app_theme", next);
+        }
+
+        function applyTheme(theme) {
+            document.documentElement.setAttribute("data-theme", theme);
+            const sun = document.getElementById("themeIconSun");
+            const moon = document.getElementById("themeIconMoon");
+            if (theme === "dark") {
+                sun.style.display = "none";
+                moon.style.display = "inline-block";
+            } else {
+                sun.style.display = "inline-block";
+                moon.style.display = "none";
+            }
+        }
+
+        // 微信阅读端通信状态与30分钟倒计时维护
+        function updateStatusBadge(auth) {
+            const pill = document.getElementById("statusPill");
+            const text = document.getElementById("statusPillText");
+            const badge = document.getElementById("popoverStatusBadge");
+            const countdown = document.getElementById("popoverCountdown");
+            const desc = document.getElementById("popoverDesc");
+
+            if (auth && auth.captured && (auth.key || auth.pass_ticket || auth.wap_sid2)) {
+                // 计算 30 分钟 (1800秒) 倒计时
+                const nowSec = Math.floor(Date.now() / 1000);
+                let capturedSec = nowSec;
+                if (auth.captured_at) {
+                    const parsed = Math.floor(new Date(auth.captured_at).getTime() / 1000);
+                    if (!isNaN(parsed) && parsed > 0) capturedSec = parsed;
+                }
+                const elapsed = Math.max(0, nowSec - capturedSec);
+                const remainSec = Math.max(0, 1800 - elapsed);
+                const min = Math.floor(remainSec / 60);
+                const sec = remainSec % 60;
+                const formatted = `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+
+                if (remainSec > 0) {
+                    pill.className = "status-pill ready";
+                    text.textContent = `凭证有效 (${formatted})`;
+                    if (badge) {
+                        badge.textContent = "有效";
+                        badge.style.color = "var(--accent-emerald)";
+                        badge.style.background = "rgba(16, 185, 129, 0.15)";
+                    }
+                    if (countdown) countdown.textContent = formatted;
+                    if (desc) {
+                        desc.innerHTML = `✅ 已成功截获微信密钥（捕获于 ${auth.captured_at || '刚刚'}），倒计时 <b>${formatted}</b>。<br><span style="color:var(--text-muted); font-size:0.72rem;">💡 到期后在电脑微信打开任意推文 (Ctrl+R 刷新) 即可 0 秒自动续期！</span>`;
+                    }
+                } else {
+                    pill.className = "status-pill disabled";
+                    text.textContent = "凭证已过期 (0秒续期)";
+                    if (badge) {
+                        badge.textContent = "已过期";
+                        badge.style.color = "var(--accent-rose)";
+                        badge.style.background = "rgba(225, 29, 72, 0.15)";
+                    }
+                    if (countdown) countdown.textContent = "00:00 (已过期)";
+                    if (desc) {
+                        desc.innerHTML = `⚠️ <b>微信凭证已满 30 分钟自然过期！</b><br>👉 <span style="color:var(--accent-emerald); font-weight:600;">0 秒恢复指南</span>：只需在电脑微信中点开任意公众号文章（按 Ctrl+R 刷新一次），嗅探器 1 秒内自动截获新凭证！`;
+                    }
+                }
+            } else {
+                pill.className = "status-pill";
+                text.textContent = "微信阅读凭证: 监听中";
+                if (badge) {
+                    badge.textContent = "待连接";
+                    badge.style.color = "var(--accent-gold)";
+                    badge.style.background = "rgba(234, 179, 8, 0.15)";
+                }
+                if (countdown) countdown.textContent = "00:00";
+                if (desc) {
+                    desc.innerHTML = `💡 <b>如何捕获 / 0秒续期？</b><br>在电脑微信中点开任意公众号文章（或按 Ctrl+R 刷新），客户端嗅探器将在 <b>1 秒内自动截获最新密钥</b>！`;
+                }
+            }
+        }
+
+        // 全局现代 Toast 消息提示组件
+        function showToast(message, type = 'success') {
+            let toast = document.getElementById("appGlobalToast");
+            if (!toast) {
+                toast = document.createElement("div");
+                toast.id = "appGlobalToast";
+                toast.style.cssText = `
+                    position: fixed;
+                    top: 24px;
+                    left: 50%;
+                    transform: translateX(-50%) translateY(-20px);
+                    background: rgba(15, 23, 42, 0.92);
+                    backdrop-filter: blur(12px);
+                    -webkit-backdrop-filter: blur(12px);
+                    color: #ffffff;
+                    padding: 10px 22px;
+                    border-radius: 999px;
+                    font-size: 0.86rem;
+                    font-weight: 700;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+                    border: 1px solid rgba(255,255,255,0.15);
+                    z-index: 999999;
+                    opacity: 0;
+                    pointer-events: none;
+                    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+                `;
+                document.body.appendChild(toast);
+            }
+            toast.innerHTML = (type === 'success' ? '✅ ' : type === 'error' ? '❌ ' : '💡 ') + message;
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(-50%) translateY(0)';
+            
+            if (window._toastTimer) clearTimeout(window._toastTimer);
+            window._toastTimer = setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(-50%) translateY(-20px)';
+            }, 2400);
+        }
+
+        // 健壮的多重剪贴板复制引擎
+        async function copyToClipboard(text, label = "内容") {
+            try {
+                if (window.blogDistiller && window.blogDistiller.copyToClipboard) {
+                    await window.blogDistiller.copyToClipboard(text);
+                } else if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(text);
+                } else {
+                    const ta = document.createElement("textarea");
+                    ta.value = text;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(ta);
+                }
+                showToast(`已成功复制【${label}】到剪贴板！`, 'success');
+            } catch(e) {
+                showToast(`复制失败: ${e.message}`, 'error');
+            }
+        }
+        const copyText = copyToClipboard;
+
+        // 一键生成并展示公众号专属主页直达链接 (现代化内嵌弹窗与手动复制)
+        async function handleCopyProfileGuideLink() {
+            const val = (document.getElementById("targetInput").value || "").trim();
+            if (!val) {
+                showToast("请先在上方输入框粘贴公众号文章链接！", "info");
+                return;
+            }
+
+            try {
+                const res = await window.blogDistiller.generateProfileUrl({ target: val });
+                const profileUrl = res.profileUrl;
+                const author = res.author || "该公众号";
+
+                document.getElementById("profileModalAuthor").textContent = `【${author}】`;
+                document.getElementById("profileUrlInput").value = profileUrl;
+
+                // 默认先自动复制到剪贴板一次
+                await copyToClipboard(profileUrl, "专属主页链接");
+
+                // 打开专属主页直达模态弹窗，提供手动复制与操作指引
+                const modal = document.getElementById("profileUrlModal");
+                if (modal) modal.style.display = "flex";
+            } catch (err) {
+                showToast(`生成专属主页链接异常: ${err.message || err}`, "error");
+            }
+        }
+
+        function closeProfileUrlModal() {
+            const modal = document.getElementById("profileUrlModal");
+            if (modal) modal.style.display = "none";
+        }
+
+        async function copyAndCloseProfileModal() {
+            const val = document.getElementById("profileUrlInput").value;
+            await copyToClipboard(val, "专属主页链接");
+            closeProfileUrlModal();
+        }
+
+        function toggleStatusPopover(event) {
+            event.stopPropagation();
+            const popover = document.getElementById("statusPopover");
+            if (popover) {
+                popover.style.display = popover.style.display === "block" ? "none" : "block";
+            }
+        }
+
+        async function handleToggleProxy(enable) {
+            try {
+                await window.blogDistiller.triggerSystemProxy(enable);
+                const pill = document.getElementById("statusPill");
+                const text = document.getElementById("statusPillText");
+                if (!enable) {
+                    pill.className = "status-pill disabled";
+                    text.textContent = "连接已关闭";
+                } else {
+                    const auth = await window.blogDistiller.getWeChatStatus();
+                    updateStatusBadge(auth);
+                }
+                const popover = document.getElementById("statusPopover");
+                if (popover) popover.style.display = "none";
+            } catch(e) {}
+        }
+
+        function setCountPreset(num, el) {
+            currentTargetCount = num;
+            document.querySelectorAll(".chips-wrap .chip").forEach(c => c.classList.remove("active"));
+            if (el) el.classList.add("active");
+            document.getElementById("customCountInput").value = "";
+        }
+
+        function onCustomCountInput(val) {
+            const num = parseInt(val, 10);
+            currentTargetCount = isNaN(num) ? 0 : Math.max(0, num);
+            document.querySelectorAll(".chips-wrap .chip").forEach(c => c.classList.remove("active"));
+        }
+
+        // 格式选择与记忆
+        function renderFormatCards() {
+            document.querySelectorAll(".format-card").forEach(card => {
+                const fmt = card.dataset.fmt;
+                const isSelected = selectedFormats.includes(fmt);
+                card.classList.toggle("active", isSelected);
+                const cb = card.querySelector("input[type=checkbox]");
+                if (cb) cb.checked = isSelected;
+            });
+            updateSelectedStats();
+        }
+
+        function toggleFormat(fmt, el) {
+            if (selectedFormats.includes(fmt)) {
+                selectedFormats = selectedFormats.filter(f => f !== fmt);
+            } else {
+                selectedFormats.push(fmt);
+            }
+            localStorage.setItem("app_export_formats", JSON.stringify(selectedFormats));
+            renderFormatCards();
+        }
+
+        // 阶段一：快速索引目录检索
+        async function handleSearchCatalog() {
+            const target = document.getElementById("targetInput").value.trim();
+            if (!target) {
+                alert("请先输入微信公众号推文链接！");
+                return;
+            }
+
+            const searchBtn = document.getElementById("searchBtn");
+            clearDebugLog();
+            searchBtn.disabled = true;
+            searchBtn.innerHTML = `<svg class="icon animate-spin" viewBox="0 0 24 24"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg><span>正在索引文章目录...</span>`;
+            document.getElementById("exportStatusMsg").textContent = "正在快速解析并索引全部历史文章目录...";
+
+            try {
+                const res = await window.blogDistiller.searchArticles({
+                    target,
+                    maxArticles: currentTargetCount
+                });
+
+                currentArticles = res.articles || [];
+                currentAuthor = res.author || "微信公众号";
+                currentBiz = res.biz || "";
+
+                document.getElementById("authorTitleDisplay").textContent = `【${currentAuthor}】`;
+                document.getElementById("totalBadge").textContent = `共 ${currentArticles.length} 篇`;
+
+                renderArticleTable(currentArticles);
+
+                if (currentArticles.length > 0) {
+                    document.getElementById("exportMainBtn").disabled = false;
+                    // 自动沉淀保存至公众号历史档案库 (永久本地存储)
+                    saveAccountToHistory(currentAuthor, currentBiz, currentArticles, target);
+
+                    if (currentArticles.length === 1) {
+                        document.getElementById("exportStatusMsg").innerHTML = `✅ <b>已成功载入文章</b>《${currentArticles[0].title.slice(0, 26)}...》，勾选右侧格式后点击下方按钮即可一键导出！<br><span style="color:var(--text-muted); font-size:0.82rem;">💡 如需批量导出多篇：可直接在上方粘贴多行链接（一行一条），或在电脑微信中打开该公众号主页。</span>`;
+                    } else {
+                        document.getElementById("exportStatusMsg").innerHTML = `✅ <b>已成功载入【${currentAuthor}】全部 ${currentArticles.length} 篇推文！</b> 勾选右侧格式后点击下方按钮即可批量导出。`;
+                    }
+                }
+
+                // 自动拉取并展示该公众号已聚合的所有合集专栏
+                if (currentBiz) {
+                    fetchAndRenderAlbums(currentBiz, currentAuthor);
+                }
+            } catch(e) {
+                let cleanErr = (e.message || "").replace(/Error invoking remote method 'wechat:search-articles':\s*(Error:\s*)?/i, "").trim();
+                if (currentArticles.length === 0) {
+                    renderArticleTable([]);
+                    document.getElementById("totalBadge").textContent = `共 0 篇`;
+                    document.getElementById("exportMainBtn").disabled = true;
+                    document.getElementById("exportStatusMsg").innerHTML = `⚠️ <span style="color:var(--accent-amber); font-weight:600;">${cleanErr.replace(/\n/g, '<br>')}</span>`;
+                } else {
+                    saveAccountToHistory(currentAuthor, currentBiz, target, currentArticles);
+                    document.getElementById("exportMainBtn").disabled = false;
+                    document.getElementById("exportStatusMsg").innerHTML = `✅ <b>已成功载入【${currentAuthor}】全部 ${currentArticles.length} 篇推文！</b> 勾选右侧格式后点击下方按钮即可批量导出。`;
+                }
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.innerHTML = `<svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>提取 / 解析文章</span>`;
+            }
+        }
+
+        // 公众号历史档案库管理系统 (多公众号本地持久化与无限极速导出)
+        function saveAccountToHistory(author, biz, url, articles) {
+            if (!author || author === "微信公众号" || !articles || articles.length === 0) return;
+            try {
+                let history = JSON.parse(localStorage.getItem("app_account_history_list") || "[]");
+                history = history.filter(item => item.biz !== biz && item.author !== author);
+                history.unshift({
+                    author,
+                    biz: biz || "",
+                    url: url || "",
+                    count: articles.length,
+                    updatedAt: new Date().toISOString().split("T")[0],
+                    articles: articles
+                });
+                if (history.length > 30) history = history.slice(0, 30);
+                localStorage.setItem("app_account_history_list", JSON.stringify(history));
+                renderAccountHistoryDropdown();
+            } catch(e) {}
+        }
+
+        function renderAccountHistoryDropdown() {
+            const listEl = document.getElementById("accountHistoryList");
+            if (!listEl) return;
+            try {
+                const history = JSON.parse(localStorage.getItem("app_account_history_list") || "[]");
+                if (history.length === 0) {
+                    listEl.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">暂无已收录的历史公众号<br><span style="font-size:0.72rem; color:var(--text-muted);">提取一次推文后将自动永久收录在此处</span></div>`;
+                    return;
+                }
+                listEl.innerHTML = history.map((item, idx) => `
+                    <div class="account-history-item ${item.author === currentAuthor ? 'active' : ''}" onclick="selectAccountFromHistory(${idx})">
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 700; color: var(--text-primary); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                【${item.author}】
+                            </div>
+                            <div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 2px;">
+                                共 ${item.count} 篇推文 · ${item.updatedAt}
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span class="badge-status badge-completed" style="font-size: 0.68rem; padding: 1px 5px;">离线就绪</span>
+                            <button class="nav-btn-icon" style="width: 20px; height: 20px; border: none; background: transparent; color: var(--accent-rose); font-size: 0.8rem; cursor: pointer;" onclick="deleteAccountFromHistory(event, ${idx})" title="从档案库中移除">✕</button>
+                        </div>
+                    </div>
+                `).join("");
+            } catch(e) {}
+        }
+
+        function selectAccountFromHistory(idx) {
+            try {
+                const history = JSON.parse(localStorage.getItem("app_account_history_list") || "[]");
+                const item = history[idx];
+                if (item) {
+                    currentArticles = item.articles || [];
+                    currentAuthor = item.author || "微信公众号";
+                    currentBiz = item.biz || "";
+                    if (item.url) document.getElementById("targetInput").value = item.url;
+                    document.getElementById("authorTitleDisplay").textContent = `【${currentAuthor}】`;
+                    renderArticleTable(currentArticles);
+                    updateSelectedStats();
+                    document.getElementById("exportStatusMsg").innerHTML = `📁 <b>已无缝切换到【${currentAuthor}】全部 ${currentArticles.length} 篇推文！</b>可随时直接勾选右侧格式进行无限次极速导出！`;
+                    if (currentBiz) fetchAndRenderAlbums(currentBiz, currentAuthor);
+                    
+                    localStorage.setItem("app_last_articles_data", JSON.stringify({
+                        articles: currentArticles,
+                        author: currentAuthor,
+                        biz: currentBiz,
+                        targetUrl: item.url
+                    }));
+                }
+            } catch(e) {}
+            const dropdown = document.getElementById("accountHistoryDropdown");
+            if (dropdown) dropdown.style.display = "none";
+        }
+
+        function deleteAccountFromHistory(e, idx) {
+            e.stopPropagation();
+            try {
+                let history = JSON.parse(localStorage.getItem("app_account_history_list") || "[]");
+                history.splice(idx, 1);
+                localStorage.setItem("app_account_history_list", JSON.stringify(history));
+                renderAccountHistoryDropdown();
+            } catch(e) {}
+        }
+
+        function toggleAccountHistoryDropdown(e) {
+            e.stopPropagation();
+            const dropdown = document.getElementById("accountHistoryDropdown");
+            if (dropdown) {
+                const isVisible = dropdown.style.display === "block";
+                dropdown.style.display = isVisible ? "none" : "block";
+                if (!isVisible) renderAccountHistoryDropdown();
+            }
+        }
+
+        // 清空当前文章列表并重置状态
+        function handleClearArticleList() {
+            currentArticles = [];
+            currentAuthor = "微信公众号";
+            currentBiz = "";
+            localStorage.removeItem("app_last_articles_data");
+            document.getElementById("targetInput").value = "";
+            document.getElementById("authorTitleDisplay").textContent = "【微信公众号】";
+            document.getElementById("totalBadge").textContent = "共 0 篇";
+            const sBadge = document.getElementById("successBadge");
+            const fBadge = document.getElementById("failedBadge");
+            if (sBadge) sBadge.style.display = "none";
+            if (fBadge) fBadge.style.display = "none";
+            renderArticleTable([]);
+            updateSelectedStats();
+            document.getElementById("exportStatusMsg").textContent = "列表已清空，请在上方输入新的公众号文章链接开始提取。";
+            const albumPanel = document.getElementById("albumPanel");
+            if (albumPanel) albumPanel.style.display = "none";
+        }
+
+        // 顶层主视图切换
+        let currentMainView = "history";
+        let discoveredAlbumsList = [];
+
+        function switchMainView(viewName) {
+            currentMainView = viewName;
+            document.querySelectorAll(".main-nav-tab").forEach(t => t.classList.remove("active"));
+            
+            const historyView = document.getElementById("viewHistoryMode");
+            const albumsView = document.getElementById("viewAlbumsMode");
+            const singleView = document.getElementById("viewSingleMode");
+
+            if (historyView) historyView.style.display = "none";
+            if (albumsView) albumsView.style.display = "none";
+            if (singleView) singleView.style.display = "none";
+
+            if (viewName === "history") {
+                document.getElementById("tabNavHistory").classList.add("active");
+                if (historyView) historyView.style.display = "flex";
+            } else if (viewName === "albums") {
+                document.getElementById("tabNavAlbums").classList.add("active");
+                if (albumsView) albumsView.style.display = "flex";
+                // 如果在历史页已经提取过公众号，同步到合集页
+                const histInput = document.getElementById("targetInput").value.trim();
+                const albumInput = document.getElementById("albumTargetInput");
+                if (histInput && albumInput && !albumInput.value) {
+                    albumInput.value = histInput;
+                    handleScanAllAlbums();
+                }
+            } else if (viewName === "single") {
+                document.getElementById("tabNavSingle").classList.add("active");
+                if (singleView) singleView.style.display = "flex";
+            }
+        }
+
+        function renderArticleTable(articles) {
+            const tbody = document.getElementById("articleTableBody");
+            if (!articles || articles.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);">暂无文章</td></tr>`;
+                return;
+            }
+
+            let completedCount = 0;
+            let failedCount = 0;
+
+            tbody.innerHTML = articles.map((a, i) => {
+                const isCached = a.status === "completed";
+                if (isCached) completedCount++;
+
+                let statusBadge = `<span id="status-${a.id}" data-id="${a.id}" class="badge-status badge-pending">待抓取</span>`;
+                if (isCached) {
+                    statusBadge = `<span id="status-${a.id}" data-id="${a.id}" class="badge-status badge-completed">已缓存</span>`;
+                } else if (a.status === "failed") {
+                    failedCount++;
+                    statusBadge = `<span id="status-${a.id}" data-id="${a.id}" class="badge-status badge-failed" title="${a.fail_reason || '抓取失败'}">${a.fail_reason || '失败'}</span>`;
+                }
+
+                const propBadge = a.is_original 
+                    ? `<span style="color: var(--accent-emerald); font-size: 0.75rem; font-weight: 700;">原创</span>` 
+                    : `<span style="color: var(--text-muted); font-size: 0.75rem;">常规</span>`;
+
+                return `
+                <tr id="row-${i}">
+                    <td style="text-align: center;"><input type="checkbox" class="art-check" data-idx="${i}" checked onchange="updateSelectedStats()"></td>
+                    <td style="color: var(--text-muted); font-family: monospace;">${i + 1}</td>
+                    <td>
+                        <span class="art-title-cell" title="${a.title}">${a.title}</span>
+                    </td>
+                    <td style="color: var(--text-secondary); font-family: monospace; font-size: 0.78rem;">${a.create_time}</td>
+                    <td>${propBadge}</td>
+                    <td>${statusBadge}</td>
+                    <td style="text-align: right;">
+                        <button class="btn-link" onclick="openOriginalUrl('${a.url}')" title="在默认浏览器中打开原文">
+                            <span>原文</span>
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                        </button>
+                    </td>
+                </tr>
+                `;
+            }).join("");
+
+            updateSelectedStats();
+        }
+
+        function updateRowStatus(index, id, status, failReason) {
+            let badge = null;
+            if (id) badge = document.getElementById('status-' + id);
+            if (!badge && index !== undefined && currentArticles[index]) {
+                badge = document.getElementById('status-' + currentArticles[index].id);
+            }
+            if (!badge && index !== undefined) {
+                badge = document.getElementById('status-' + index);
+            }
+            if (!badge) return;
+
+            if (status === "downloading") {
+                badge.className = "badge-status badge-downloading";
+                badge.innerHTML = '<svg class="icon icon-sm animate-spin" viewBox="0 0 24 24"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg> 抓取中';
+            } else if (status === "completed") {
+                badge.className = "badge-status badge-completed";
+                badge.innerHTML = '已完成';
+                badge.title = '';
+            } else if (status === "failed") {
+                badge.className = "badge-status badge-failed";
+                badge.innerHTML = (failReason || '抓取失败');
+                badge.title = failReason || '抓取失败';
+            }
+        }
+
+        function updateSelectedStats() {
+            const checkedBoxes = document.querySelectorAll(".art-check:checked");
+            const checked = checkedBoxes.length;
+            const total = currentArticles.length;
+
+            const badge = document.getElementById("totalBadge");
+            if (badge) badge.textContent = `已选 ${checked}/${total} 篇`;
+            const exportBtn = document.getElementById("exportMainBtn");
+            if (!exportBtn) return;
+
+            if (checked === 0) {
+                exportBtn.disabled = true;
+                exportBtn.innerHTML = `<svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span id="exportBtnText">请勾选要导出的文章</span>`;
+            } else {
+                exportBtn.disabled = selectedFormats.length === 0;
+                const text = (checked === total && total > 0) ? `导出全部 ${total} 篇文章` : `导出已选 ${checked} 篇文章`;
+                exportBtn.innerHTML = `<svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span id="exportBtnText">${text}</span>`;
+            }
+        }
+
+        function selectAllArticles(select) {
+            document.querySelectorAll(".art-check").forEach(cb => cb.checked = select);
+            document.getElementById("headerCheckbox").checked = select;
+            updateSelectedStats();
+        }
+
+        function toggleHeaderSelect(select) {
+            selectAllArticles(select);
+        }
+
+        // 阶段二：逐篇全量抓取与导出
+        async function handleStartExport() {
+            const selectedIndices = [];
+            document.querySelectorAll(".art-check:checked").forEach(cb => {
+                selectedIndices.push(parseInt(cb.dataset.idx, 10));
+            });
+
+            if (selectedIndices.length === 0) {
+                alert("请先选择要导出的文章！");
+                return;
+            }
+            if (selectedFormats.length === 0) {
+                alert("请至少选择一种导出格式！");
+                return;
+            }
+
+            const targetArticles = selectedIndices.map(i => currentArticles[i]);
+            const exportBtn = document.getElementById("exportMainBtn");
+            exportBtn.disabled = true;
+            exportBtn.innerHTML = `<svg class="icon animate-spin" viewBox="0 0 24 24"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line></svg><span>正在抓取并导出中...</span>`;
+
+            try {
+                const outputDir = document.getElementById("saveDirPath").textContent.trim();
+                const cleanAd = document.getElementById("cleanAdCheck") ? document.getElementById("cleanAdCheck").checked : true;
+                const cleanWatermark = document.getElementById("cleanWatermarkCheck") ? document.getElementById("cleanWatermarkCheck").checked : false;
+                const saveCover = document.getElementById("saveCoverCheck") ? document.getElementById("saveCoverCheck").checked : false;
+
+                const res = await window.blogDistiller.exportArticles({
+                    articles: targetArticles,
+                    author: currentAuthor,
+                    formats: selectedFormats,
+                    outputDir,
+                    biz: currentBiz,
+                    cleanAd,
+                    cleanWatermark,
+                    saveCover
+                });
+
+                if (res.success) {
+                    document.getElementById("exportStatusMsg").innerHTML = `🎉 <b>导出大功告成！</b>成功导出 ${res.savedFiles.length} 份文件到本地目录。`;
+                    setTimeout(() => {
+                        window.blogDistiller.openOutputDir(res.saveDir || outputDir);
+                    }, 500);
+                }
+            } catch(e) {
+                document.getElementById("exportStatusMsg").textContent = "导出异常：" + e.message;
+            } finally {
+                exportBtn.disabled = false;
+                updateSelectedStats();
+                setTimeout(() => {
+                    const pBox = document.getElementById("progressBox");
+                    if (pBox) pBox.style.display = "none";
+                }, 2000);
+            }
+        }
+
+        async function handleSelectDir() {
+            const dir = await window.blogDistiller.selectOutputDir();
+            if (dir) {
+                document.getElementById("saveDirPath").textContent = dir;
+                localStorage.setItem("app_output_dir", dir);
+                await window.blogDistiller.saveSettings({ exportDir: dir });
+            }
+        }
+
+        function handleOpenDir() {
+            const dir = document.getElementById("saveDirPath").textContent.trim();
+            window.blogDistiller.openOutputDir(dir);
+        }
+
+        function openOriginalUrl(url) {
+            window.blogDistiller.openExternal(url);
+        }
+
+        function openExternalUrl(url) {
+            window.blogDistiller.openExternal(url);
+        }
+
+        function openAuthorGitHub() {
+            window.blogDistiller.openExternal("https://github.com/yibeigen/wechat-article-exporter");
+        }
+
+        function openAboutModal() {
+            document.getElementById("aboutModal").style.display = "flex";
+        }
+
+        function closeAboutModal() {
+            document.getElementById("aboutModal").style.display = "none";
+        }
+
+        // 图片 Lightbox 大图预览
+        function openImageLightbox(src, title) {
+            const modal = document.getElementById("imageLightboxModal");
+            const img = document.getElementById("lightboxImg");
+            const caption = document.getElementById("lightboxCaption");
+            if (modal && img && caption) {
+                img.src = src;
+                caption.textContent = title || "大图预览";
+                modal.style.display = "flex";
+            }
+        }
+
+        function closeImageLightbox() {
+            const modal = document.getElementById("imageLightboxModal");
+            if (modal) modal.style.display = "none";
+        }
+
+        function openDebugLogModal() {
+            document.getElementById("debugLogModal").style.display = "flex";
+        }
+
+        function closeDebugLogModal() {
+            document.getElementById("debugLogModal").style.display = "none";
+        }
+
+        function clearDebugLogs() {
+            const box = document.getElementById("modalDebugLogLines");
+            if (box) box.innerHTML = "";
+            window.debugLogCount = 0;
+            const countBadge = document.getElementById("debugLogCountBadge");
+            const modalCountBadge = document.getElementById("modalLogCountBadge");
+            if (countBadge) countBadge.textContent = "0";
+            if (modalCountBadge) modalCountBadge.textContent = "0 条记录";
+        }
+
+        // ==========================================
+        // 📚 公众号历史档案库核心逻辑 (多号沉淀与无限导出)
+        // ==========================================
+        function getAccountHistoryMap() {
+            try {
+                const raw = localStorage.getItem("app_account_history_map");
+                return raw ? JSON.parse(raw) : {};
+            } catch(e) {
+                return {};
+            }
+        }
+
+        function saveAccountToHistory(author, biz, articles, targetUrl) {
+            if (!articles || articles.length === 0) return;
+            const authorName = (author && author !== "微信公众号") ? author : (articles[0].author || "公众号文章合集");
+            const map = getAccountHistoryMap();
+            const key = biz || authorName;
+            map[key] = {
+                author: authorName,
+                biz: biz || "",
+                articles: articles,
+                targetUrl: targetUrl || "",
+                updatedAt: new Date().toLocaleString(),
+                count: articles.length
+            };
+            localStorage.setItem("app_account_history_map", JSON.stringify(map));
+            localStorage.setItem("app_last_active_account_key", key);
+            localStorage.setItem("app_last_articles_data", JSON.stringify({
+                author: authorName,
+                biz: biz || "",
+                articles: articles,
+                targetUrl: targetUrl || ""
+            }));
+            renderAccountHistoryDropdown();
+        }
+
+        function renderAccountHistoryDropdown() {
+            const map = getAccountHistoryMap();
+            const listEl = document.getElementById("accountHistoryList");
+            if (!listEl) return;
+            const keys = Object.keys(map);
+            if (keys.length === 0) {
+                listEl.innerHTML = `<div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 0.76rem;">暂无历史公众号记录<br>提取一次后将自动沉淀在此</div>`;
+                return;
+            }
+
+            listEl.innerHTML = keys.map(k => {
+                const item = map[k];
+                const isActive = (currentBiz === item.biz && currentBiz) || (currentAuthor === item.author);
+                return `
+                    <div class="account-history-item ${isActive ? 'active' : ''}" onclick="selectAccountFromHistory('${k}')">
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="font-weight: 800; font-size: 0.82rem; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                                【${item.author}】
+                            </div>
+                            <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">
+                                共 ${item.count} 篇 · ${item.updatedAt}
+                            </div>
+                        </div>
+                        <button type="button" class="account-delete-btn" onclick="deleteAccountFromHistory(event, '${k}')" title="从历史档案库移除此号">
+                            &times;
+                        </button>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        function toggleAccountHistoryDropdown(event) {
+            event.stopPropagation();
+            const menu = document.getElementById("accountHistoryDropdown");
+            if (!menu) return;
+            renderAccountHistoryDropdown();
+            menu.style.display = menu.style.display === "block" ? "none" : "block";
+        }
+
+        // 点击外部区域自动关闭历史记录下拉框
+        document.addEventListener("click", (e) => {
+            const menu = document.getElementById("accountHistoryDropdown");
+            if (menu && !menu.contains(e.target) && !e.target.closest(".account-select-btn")) {
+                menu.style.display = "none";
+            }
+        });
+
+        function selectAccountFromHistory(accountKey) {
+            const map = getAccountHistoryMap();
+            const item = map[accountKey];
+            if (!item) return;
+
+            currentArticles = item.articles || [];
+            currentAuthor = item.author || "微信公众号";
+            currentBiz = item.biz || "";
+            if (item.targetUrl) {
+                document.getElementById("targetInput").value = item.targetUrl;
+            }
+
+            document.getElementById("authorTitleDisplay").textContent = `【${currentAuthor}】`;
+            document.getElementById("totalBadge").textContent = `已选 ${currentArticles.length}/${currentArticles.length} 篇`;
+            renderArticleTable(currentArticles);
+            updateSelectedStats();
+
+            localStorage.setItem("app_last_active_account_key", accountKey);
+            localStorage.setItem("app_last_articles_data", JSON.stringify({
+                author: currentAuthor,
+                biz: currentBiz,
+                articles: currentArticles,
+                targetUrl: item.targetUrl || ""
+            }));
+
+            showToast(`已成功切换到【${currentAuthor}】(${currentArticles.length} 篇)，可随时无限导出！`, "success");
+            const menu = document.getElementById("accountHistoryDropdown");
+            if (menu) menu.style.display = "none";
+
+            if (currentBiz) {
+                fetchAndRenderAlbums(currentBiz, currentAuthor);
+            }
+        }
+
+        function deleteAccountFromHistory(event, accountKey) {
+            event.stopPropagation();
+            const map = getAccountHistoryMap();
+            delete map[accountKey];
+            localStorage.setItem("app_account_history_map", JSON.stringify(map));
+            renderAccountHistoryDropdown();
+            showToast("已从历史档案库移除该记录", "info");
+        }
+
+        function handleClearArticleList() {
+            if (currentArticles.length === 0) {
+                showToast("当前列表已经是空的啦", "info");
+                return;
+            }
+            currentArticles = [];
+            currentAuthor = "微信公众号";
+            currentBiz = "";
+            document.getElementById("targetInput").value = "";
+            document.getElementById("authorTitleDisplay").textContent = "【微信公众号】";
+            document.getElementById("totalBadge").textContent = "共 0 篇";
+            localStorage.removeItem("app_last_articles_data");
+            renderArticleTable([]);
+            updateSelectedStats();
+            showToast("列表已清空，可粘贴新公众号链接开始新一轮提取！", "info");
+        }
+
+        async function loadLatestAccountFromHistory() {
+            try {
+                let map = getAccountHistoryMap();
+                let keys = Object.keys(map);
+
+                // 如果本地 localStorage 还没有，自动从磁盘 ~/.blogdistiller_data/cache 读取历史公众号
+                if (keys.length === 0 && window.blogDistiller && window.blogDistiller.getHistoryAccounts) {
+                    try {
+                        const diskAccounts = await window.blogDistiller.getHistoryAccounts();
+                        if (diskAccounts && Array.isArray(diskAccounts) && diskAccounts.length > 0) {
+                            for (const acc of diskAccounts) {
+                                saveAccountToHistory(acc.author, acc.biz, acc.articles, "");
+                            }
+                            map = getAccountHistoryMap();
+                            keys = Object.keys(map);
+                        }
+                    } catch(eDisk) {}
+                }
+
+                const lastKey = localStorage.getItem("app_last_active_account_key");
+                let item = lastKey ? map[lastKey] : null;
+                if (!item && keys.length > 0) {
+                    item = map[keys[0]];
+                }
+                if (!item) {
+                    const savedDataStr = localStorage.getItem("app_last_articles_data");
+                    if (savedDataStr) item = JSON.parse(savedDataStr);
+                }
+
+                if (item && Array.isArray(item.articles) && item.articles.length > 0) {
+                    currentArticles = item.articles;
+                    currentAuthor = item.author || "微信公众号";
+                    currentBiz = item.biz || "";
+                    if (item.targetUrl) {
+                        document.getElementById("targetInput").value = item.targetUrl;
+                    }
+                    document.getElementById("authorTitleDisplay").textContent = `【${currentAuthor}】`;
+                    renderArticleTable(currentArticles);
+                    updateSelectedStats();
+                    document.getElementById("exportStatusMsg").innerHTML = `📁 <b>已自动恢复上次提取的【${currentAuthor}】全部 ${currentArticles.length} 篇推文</b>，可随时直接无限导出，或点击「清空列表」开始新提取！`;
+                    if (currentBiz) {
+                        fetchAndRenderAlbums(currentBiz, currentAuthor);
+                    }
+                }
+            } catch(e) {}
+            renderAccountHistoryDropdown();
+        }
+    </script>
+
+    <!-- 运行诊断日志弹窗 -->
+    <div id="debugLogModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:var(--bg-surface-solid); border:1px solid var(--border-main); border-radius:12px; width:760px; max-width:92vw; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 20px 40px rgba(0,0,0,0.4); overflow:hidden;">
+            <div style="padding:16px 20px; border-bottom:1px solid var(--border-main); display:flex; align-items:center; justify-content:space-between;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-weight:700; font-size:1rem; color:var(--text-primary);">🛠️ 系统运行与微信嗅探诊断日志</span>
+                    <span id="modalLogCountBadge" style="font-size:0.75rem; background:rgba(14,165,233,0.15); color:var(--accent-sky); padding:2px 8px; border-radius:12px;">0 条记录</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <button class="nav-btn" style="font-size:0.75rem; padding:4px 10px;" onclick="clearDebugLogs()">清空日志</button>
+                    <button class="nav-btn" style="font-size:0.75rem; padding:4px 10px;" onclick="closeDebugLogModal()">✕ 关闭</button>
+                </div>
+            </div>
+            <div id="modalDebugLogContainer" style="flex:1; overflow-y:auto; padding:16px 20px; background:rgba(0,0,0,0.25); font-family:Consolas, Monaco, monospace; font-size:0.8rem; line-height:1.6;">
+                <div id="modalDebugLogLines"></div>
+            </div>
+            <div style="padding:10px 20px; border-top:1px solid var(--border-main); font-size:0.75rem; color:var(--text-muted); display:flex; justify-content:space-between;">
+                <span>💡 实时记录微信网络通信、凭证拦截及翻页抓取全流程</span>
+                <span>BlogDistiller Core Diagnostic</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

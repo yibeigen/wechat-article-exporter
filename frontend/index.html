@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文章批量导出助手 | 博客与公众号文章一键抓取与合并归档</title>
+    <meta name="description" content="文章批量导出助手 · 专为博文离线备份与知识库设计的多平台文章批量下载工具。支持微信公众号、知乎专栏、微博、掘金、CSDN、博客园、51CTO 等平台文章一键抓取、智能过滤广告噪音，自动生成目录并合并导出为 Markdown、PDF、离线网页、Word 与纯文本。">
+    <link rel="icon" type="image/svg+xml" href="/assets/logo_icon.svg">
+    <link rel="alternate icon" type="image/png" href="/assets/logo_icon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@600;700;900&display=swap" rel="stylesheet">
+    <style>
+        /* ==============================================
+           Design System: Luxury Warm Editorial / Studio
+           (温润砂岩浅色 + 钛金暗黑深度模式)
+           ============================================== */
+        :root[data-theme="light"] {
+            --bg-base: #f7f6f2;
+            --bg-surface: rgba(255, 255, 255, 0.82);
+            --bg-surface-solid: #ffffff;
+            --bg-subtle: #eeede7;
+            --bg-hover: #e4e2d8;
+            --border-main: rgba(214, 210, 198, 0.7);
+            --border-hover: #bcb7a5;
+            --border-focus: #18181b;
+            --text-primary: #18181b;
+            --text-secondary: #52525b;
+            --text-muted: #8c897f;
+            --accent-primary: #18181b;
+            --accent-hover: #27272a;
+            --accent-subtle: rgba(24, 24, 27, 0.06);
+            --accent-gold: #b45309;
+            --accent-gold-subtle: #fef3c7;
+            --accent-emerald: #047857;
+            --accent-emerald-subtle: #d1fae5;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.03), 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 12px -2px rgba(28, 25, 23, 0.06), 0 2px 6px -1px rgba(28, 25, 23, 0.04);
+            --shadow-lg: 0 20px 35px -8px rgba(28, 25, 23, 0.08), 0 10px 15px -3px rgba(28, 25, 23, 0.04);
+            --shadow-3d: 0 25px 50px -12px rgba(44, 39, 32, 0.22), 0 0 0 1px rgba(214, 210, 198, 0.6);
+            --grid-line: rgba(214, 210, 198, 0.35);
+        }
+
+        :root[data-theme="dark"] {
+            --bg-base: #0c0e12;
+            --bg-surface: rgba(18, 21, 28, 0.85);
+            --bg-surface-solid: #131720;
+            --bg-subtle: #191e2b;
+            --bg-hover: #22293a;
+            --border-main: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(255, 255, 255, 0.18);
+            --border-focus: #f4f4f5;
+            --text-primary: #f4f4f5;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --accent-primary: #f4f4f5;
+            --accent-hover: #e4e4e7;
+            --accent-subtle: rgba(244, 244, 245, 0.08);
+            --accent-gold: #fbbf24;
+            --accent-gold-subtle: rgba(251, 191, 36, 0.1);
+            --accent-emerald: #34d399;
+            --accent-emerald-subtle: rgba(52, 211, 153, 0.1);
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+            --shadow-md: 0 6px 16px -2px rgba(0,0,0,0.6);
+            --shadow-lg: 0 20px 40px -8px rgba(0,0,0,0.7);
+            --shadow-3d: 0 30px 60px -15px rgba(0,0,0,0.85), 0 0 0 1px rgba(255, 255, 255, 0.12);
+            --grid-line: rgba(255, 255, 255, 0.035);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* 质感网格与微光背景 */
+        .bg-ambient {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1000px;
+            background-image: 
+                radial-gradient(at 50% 0%, rgba(180, 83, 9, 0.05) 0%, transparent 60%),
+                radial-gradient(at 90% 20%, rgba(4, 120, 87, 0.04) 0%, transparent 50%),
+                linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+            background-size: 100% 100%, 100% 100%, 56px 56px, 56px 56px;
+            mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+            -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .icon {
+            display: inline-block;
+            width: 17px;
+            height: 17px;
+            stroke-width: 1.75;
+            stroke: currentColor;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            vertical-align: middle;
+            flex-shrink: 0;
+        }
+        .icon-lg { width: 22px; height: 22px; }
+        .icon-sm { width: 14px; height: 14px; }
+
+        /* 顶部导航 */
+        .navbar {
+            height: 68px;
+            border-bottom: 1px solid var(--border-main);
+            background: var(--bg-surface);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            transition: all 0.25s;
+        }
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 800;
+            font-size: 1.15rem;
+            color: var(--text-primary);
+            text-decoration: none;
+            letter-spacing: -0.02em;
+        }
+        .brand-logo {
+            width: 34px;
+            height: 34px;
+            border-radius: 9px;
+            background: var(--text-primary);
+            color: var(--bg-base);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow-sm);
+        }
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+        }
+        .nav-link {
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: color 0.15s;
+        }
+        .nav-link:hover {
+            color: var(--text-primary);
+        }
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .navbar { padding: 0 20px; }
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .theme-toggle-btn {
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-main);
+            color: var(--text-secondary);
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .theme-toggle-btn:hover {
+            color: var(--text-primary);
+            border-color: var(--border-hover);
+            background: var(--bg-hover);
+        }
+
+        /* 按钮体系 */
+        .btn-luxury {
+            background: var(--accent-primary);
+            color: var(--bg-base) !important;
+            padding: 10px 22px;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid transparent;
+            box-shadow: var(--shadow-md);
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-luxury:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+        .btn-secondary {
+            background: var(--bg-surface);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-main);
+            color: var(--text-primary);
+            padding: 10px 22px;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+        .btn-secondary:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-hover);
+            transform: translateY(-1px);
+        }
+
+        /* Hero 区域 */
+        .hero-section {
+            position: relative;
+            z-index: 1;
+            padding: 80px 24px 60px;
+            max-width: 1200px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border-main);
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-sm);
+        }
+        .badge-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--accent-emerald);
+            box-shadow: 0 0 8px var(--accent-emerald);
+        }
+        .hero-title {
+            font-size: clamp(2.4rem, 5vw, 4.2rem);
+            font-weight: 800;
+            letter-spacing: -0.035em;
+            line-height: 1.15;
+            color: var(--text-primary);
+            margin-bottom: 20px;
+        }
+        .hero-title-accent {
+            font-family: 'Noto Serif SC', Georgia, serif;
+            font-weight: 900;
+            font-style: italic;
+            background: linear-gradient(135deg, var(--text-primary) 30%, var(--accent-gold) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero-desc {
+            font-size: 1.12rem;
+            color: var(--text-secondary);
+            max-width: 760px;
+            margin: 0 auto 36px;
+            line-height: 1.7;
+            font-weight: 400;
+        }
+        .hero-actions {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 70px;
+        }
+        @media (max-width: 600px) {
+            .hero-actions { flex-direction: column; width: 100%; }
+            .hero-actions a { width: 100%; justify-content: center; }
+        }
+
+        /* 平台快捷胶囊标 */
+        .supported-chips-row {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 40px;
+        }
+        .support-chip {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-main);
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 0.76rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        /* ==============================================
+           3D 真实层叠纸张与悬浮文档效果 (3D Paper Stack)
+           ============================================== */
+        .stage-3d-wrapper {
+            perspective: 1400px;
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .paper-stack-container {
+            position: relative;
+            transform-style: preserve-3d;
+            transform: rotateX(10deg) rotateY(-4deg) rotateZ(1deg);
+            transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+            cursor: pointer;
+        }
+        .paper-stack-container:hover {
+            transform: rotateX(4deg) rotateY(-1deg) rotateZ(0deg) translateY(-8px);
+        }
+
+        /* 底层纸张 3 */
+        .paper-layer-3 {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            height: 380px;
+            background: var(--bg-surface-solid);
+            border: 1px solid var(--border-main);
+            border-radius: 14px;
+            transform: translate3d(-24px, 32px, -60px) rotate(-4.5deg);
+            opacity: 0.5;
+            box-shadow: var(--shadow-sm);
+            pointer-events: none;
+        }
+        /* 中间层纸张 2 */
+        .paper-layer-2 {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            height: 380px;
+            background: var(--bg-surface-solid);
+            border: 1px solid var(--border-main);
+            border-radius: 14px;
+            transform: translate3d(18px, 16px, -30px) rotate(2.5deg);
+            opacity: 0.75;
+            box-shadow: var(--shadow-md);
+            pointer-events: none;
+        }
+        /* 顶层主文档 1 */
+        .paper-layer-main {
+            position: relative;
+            background: var(--bg-surface-solid);
+            border: 1px solid var(--border-main);
+            border-radius: 14px;
+            box-shadow: var(--shadow-3d);
+            padding: 28px 32px;
+            text-align: left;
+            overflow: hidden;
+        }
+        .doc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-main);
+            padding-bottom: 16px;
+            margin-bottom: 20px;
+        }
+        .doc-tags {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .doc-tag-badge {
+            font-size: 0.72rem;
+            font-family: 'JetBrains Mono', monospace;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-main);
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+        .doc-body-grid {
+            display: grid;
+            grid-template-columns: 1.1fr 1fr;
+            gap: 24px;
+        }
+        @media (max-width: 768px) {
+            .doc-body-grid { grid-template-columns: 1fr; }
+        }
+
+        .doc-code-block {
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-main);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+        .doc-toc-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            font-size: 0.85rem;
+        }
+        .doc-toc-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: var(--bg-subtle);
+            border-radius: 6px;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+        .doc-toc-item:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-hover);
+        }
+
+        /* 3D 浮动胶囊产物栏 */
+        .floating-export-capsules {
+            margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 16px;
+            border-top: 1px dashed var(--border-main);
+        }
+        .capsule-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-main);
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* Bento 网格特性区 */
+        .section-wrap {
+            position: relative;
+            z-index: 1;
+            max-width: 1140px;
+            margin: 0 auto;
+            padding: 90px 24px;
+        }
+        .section-header-center {
+            text-align: center;
+            margin-bottom: 52px;
+        }
+        .section-eyebrow {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--accent-gold);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 10px;
+        }
+        .section-headline {
+            font-size: 2.2rem;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            color: var(--text-primary);
+        }
+
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 20px;
+        }
+        .bento-card {
+            background: var(--bg-surface);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-main);
+            border-radius: 14px;
+            padding: 32px;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .bento-card:hover {
+            border-color: var(--border-hover);
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-3px);
+        }
+        .col-8 { grid-column: span 8; }
+        .col-4 { grid-column: span 4; }
+        .col-6 { grid-column: span 6; }
+        .col-12 { grid-column: span 12; }
+        @media (max-width: 860px) {
+            .col-8, .col-4, .col-6, .col-12 { grid-column: span 12; }
+        }
+
+        .bento-icon-box {
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            background: var(--bg-subtle);
+            border: 1px solid var(--border-main);
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .bento-title {
+            font-size: 1.18rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            letter-spacing: -0.01em;
+        }
+        .bento-desc {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.65;
+        }
+
+        /* 3D 平台沉浸式空间展示 (3D Spatial Holographic Showcase) */
+        .platforms-3d-stage {
+            perspective: 1200px;
+            margin-top: 36px;
+        }
+        .platforms-3d-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            transform-style: preserve-3d;
+        }
+        @media (max-width: 1080px) {
+            .platforms-3d-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+        }
+        @media (max-width: 580px) {
+            .platforms-3d-grid { grid-template-columns: 1fr; gap: 14px; }
+        }
+
+        .platform-card-3d {
+            background: var(--bg-surface);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--border-main);
+            border-radius: 16px;
+            padding: 24px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 14px;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.4, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+            cursor: pointer;
+            overflow: hidden;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+            text-decoration: none;
+            color: inherit;
+        }
+        .platform-card-3d::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            border-radius: 16px;
+            background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255, 255, 255, 0.28), transparent 70%);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 1;
+        }
+        .platform-card-3d:hover::before {
+            opacity: 1;
+        }
+        .platform-card-3d:hover {
+            border-color: var(--card-brand, var(--accent-gold));
+            box-shadow: 0 24px 48px -12px var(--card-glow, rgba(0, 0, 0, 0.15)), 0 0 0 1px var(--card-brand, rgba(0,0,0,0.1));
+            z-index: 10;
+        }
+
+        .card-3d-icon-wrap {
+            width: 46px;
+            height: 46px;
+            border-radius: 12px;
+            background: var(--card-icon-bg, var(--bg-subtle));
+            color: var(--card-brand, var(--text-primary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-main);
+            transform: translateZ(28px);
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.04);
+        }
+        .platform-card-3d:hover .card-3d-icon-wrap {
+            transform: translateZ(42px) scale(1.08);
+            box-shadow: 0 8px 20px var(--card-glow, rgba(0,0,0,0.15));
+        }
+
+        .card-3d-content {
+            transform: translateZ(18px);
+            width: 100%;
+        }
+        .card-3d-title-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 4px;
+        }
+        .card-3d-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+        }
+        .card-3d-tag {
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: var(--card-tag-bg, var(--bg-subtle));
+            color: var(--card-brand, var(--text-secondary));
+            border: 1px solid var(--border-main);
+        }
+        .card-3d-desc {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            margin-top: 4px;
+        }
+        .card-3d-meta {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.76rem;
+            color: var(--card-brand, var(--text-secondary));
+            font-weight: 600;
+            margin-top: 8px;
+            transform: translateZ(12px);
+        }
+
+        /* 流程步骤 */
+        .process-flow {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+        @media (max-width: 768px) {
+            .process-flow { grid-template-columns: 1fr; }
+        }
+        .flow-step-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-main);
+            border-radius: 12px;
+            padding: 28px;
+            position: relative;
+        }
+        .flow-index {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: var(--accent-gold);
+            opacity: 0.35;
+            margin-bottom: 12px;
+        }
+
+        /* FAQ */
+        .faq-accordion {
+            max-width: 860px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .faq-box {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-main);
+            border-radius: 10px;
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+        .faq-box[open] {
+            border-color: var(--border-hover);
+        }
+        .faq-box summary {
+            padding: 18px 22px;
+            font-size: 0.96rem;
+            font-weight: 700;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .faq-content {
+            padding: 0 22px 20px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+
+        /* 底部 CTA 区域 */
+        .cta-monolith {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-main);
+            border-radius: 16px;
+            padding: 60px 32px;
+            text-align: center;
+            box-shadow: var(--shadow-lg);
+            position: relative;
+            overflow: hidden;
+        }
+        .cta-headline {
+            font-size: 2.2rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 12px;
+        }
+
+        /* 页脚 */
+        footer {
+            border-top: 1px solid var(--border-main);
+            background: var(--bg-surface);
+            padding: 48px 24px;
+            position: relative;
+            z-index: 1;
+        }
+        .footer-inner {
+            max-width: 1140px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 质感背景底纹 -->
+    <div class="bg-ambient"></div>
+
+    <!-- 顶部导航 -->
+    <nav class="navbar">
+        <a href="/" class="nav-brand">
+            <img src="/assets/logo_icon.svg" alt="Logo" style="width: 32px; height: 32px; border-radius: 8px; box-shadow: 0 2px 10px rgba(14, 165, 233, 0.35); vertical-align: middle;">
+            <span>文章批量导出助手</span>
+            <span style="font-size: 0.72rem; padding: 2px 7px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-emerald); font-weight: 700; border: 1px solid var(--border-main); margin-left: 2px;">纯净无广告</span>
+        </a>
+        <div class="nav-links">
+            <a href="#features" class="nav-link">核心特性</a>
+            <a href="#platforms" class="nav-link">支持平台</a>
+            <a href="#workflow" class="nav-link">工作流程</a>
+            <a href="#faq" class="nav-link">常见问题</a>
+        </div>
+        <div class="nav-actions">
+            <button class="theme-toggle-btn" id="themeToggleBtn" title="切换明暗模式" onclick="toggleTheme()">
+                <svg id="themeIconSun" class="icon" viewBox="0 0 24 24" style="display:none;"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                <svg id="themeIconMoon" class="icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            </button>
+            <a href="/app" class="btn-luxury">
+                <span>进入工作台</span>
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </a>
+        </div>
+    </nav>
+
+    <!-- Hero 区域 -->
+    <header class="hero-section">
+        <div class="hero-badge">
+            <span class="badge-dot"></span>
+            <span>告别逐篇复制 · 智能去广告 · 离线电子书与知识库打包</span>
+        </div>
+        <h1 class="hero-title">
+            多平台博主文章批量导出<br>
+            <span class="hero-title-accent">一键去广告清洗 · 离线归档与排版合并</span>
+        </h1>
+        <p class="hero-desc">
+            一键批量抓取掘金、知乎专栏、微信公众号、CSDN、博客园、51CTO、微博等平台博主历史公开文章。自动过滤关注求赞、二维码与广告噪音，自动编排全局目录，合并导出为 Markdown、PDF、离线网页、Word 与纯文本 5 种格式。
+        </p>
+
+        <div class="supported-chips-row">
+            <span class="support-chip">微信公众号 WeChat</span>
+            <span class="support-chip">知乎专栏 Zhihu</span>
+            <span class="support-chip">新浪微博 Weibo</span>
+            <span class="support-chip">掘金 Juejin</span>
+            <span class="support-chip">CSDN 博客</span>
+            <span class="support-chip">博客园 CNBlogs</span>
+            <span class="support-chip">51CTO</span>
+            <span class="support-chip">自定义多链接</span>
+        </div>
+
+        <div class="hero-actions">
+            <a href="/app" class="btn-luxury" style="padding: 13px 32px; font-size: 0.95rem;">
+                <span>进入文章导出工作台</span>
+                <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </a>
+            <a href="https://github.com/yibeigen/wechat-article-exporter" target="_blank" rel="noopener noreferrer" class="btn-secondary" style="padding: 13px 24px; font-size: 0.95rem;">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+                <span>GitHub 源码开源</span>
+            </a>
+        </div>
+
+        <!-- 3D 悬浮重叠纸张/文档舞台 (3D Stacked Documents) -->
+        <div class="stage-3d-wrapper">
+            <div class="paper-stack-container" id="paperStack">
+                <!-- 底部第 3 层文档 (各平台散乱博文) -->
+                <div class="paper-layer-3"></div>
+                <!-- 中部第 2 层文档 (多篇长文合并) -->
+                <div class="paper-layer-2"></div>
+                <!-- 顶层主文档 (BlogDistiller 清洗与编排后的离线合集) -->
+                <div class="paper-layer-main">
+                    <div class="doc-header">
+                        <div class="doc-tags">
+                            <span class="doc-tag-badge" style="color: var(--accent-emerald);">● 纯净无广告</span>
+                            <span class="doc-tag-badge">● 自动编排目录</span>
+                            <span class="doc-tag-badge">● 88 篇合集打包</span>
+                        </div>
+                        <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--text-muted);">
+                            blog-archive-collection.md
+                        </div>
+                    </div>
+                    <div class="doc-body-grid">
+                        <!-- 左侧：结构化 YAML 与正文 -->
+                        <div>
+                            <div class="doc-code-block">
+                                <div style="color: var(--accent-gold); font-weight: 600;">---</div>
+                                <div><span style="color: var(--text-muted);">title:</span> 高并发分布式系统核心架构实战</div>
+                                <div><span style="color: var(--text-muted);">author:</span> 技术博主张三</div>
+                                <div><span style="color: var(--text-muted);">platform:</span> 微信公众号 / 知乎 / 掘金 / CSDN</div>
+                                <div><span style="color: var(--text-muted);">total_articles:</span> 88 篇</div>
+                                <div><span style="color: var(--text-muted);">archived_at:</span> 2026-08-19</div>
+                                <div style="color: var(--accent-gold); font-weight: 600;">---</div>
+                                <div style="margin-top: 10px; color: var(--text-primary); font-weight: 600;"># 1. 现代架构的演进与核心边界</div>
+                                <div style="color: var(--text-muted); font-size: 0.72rem; margin-top: 4px;">已自动清洗关注二维码、点赞在看、营销引流等干扰内容...</div>
+                            </div>
+                        </div>
+                        <!-- 右侧：自动生成的全局目录树 -->
+                        <div>
+                            <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                                <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                                <span>自动生成全局目录 (TOC)</span>
+                            </div>
+                            <div class="doc-toc-list">
+                                <div class="doc-toc-item">
+                                    <span>01. 分布式高可用缓存治理方案</span>
+                                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--text-muted);">01 ~ 18</span>
+                                </div>
+                                <div class="doc-toc-item">
+                                    <span>02. 大模型知识库与切块检索实战</span>
+                                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--text-muted);">19 ~ 45</span>
+                                </div>
+                                <div class="doc-toc-item">
+                                    <span>03. 底层性能调优与架构复盘</span>
+                                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--text-muted);">46 ~ 88</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 底部导出的 5 种产物胶囊 -->
+                    <div class="floating-export-capsules">
+                        <div style="font-size: 0.78rem; font-weight: 600; color: var(--text-secondary);">支持一键合并导出 5 大格式：</div>
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <span class="capsule-badge"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg> Markdown (.md)</span>
+                            <span class="capsule-badge"><svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg> 离线网页 (.html)</span>
+                            <span class="capsule-badge"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M6 2v20h12V8l-6-6H6z"></path></svg> 排版文档 (.pdf)</span>
+                            <span class="capsule-badge"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"></path></svg> Word (.docx)</span>
+                            <span class="capsule-badge"><svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="21" y1="10" x2="3" y2="10"></line></svg> 纯文本 (.txt)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Bento 现代卡片特性区 -->
+    <section id="features" class="section-wrap">
+        <div class="section-header-center">
+            <div class="section-eyebrow">Practical Features</div>
+            <h2 class="section-headline">为文章收藏与知识构建打造的核心能力</h2>
+        </div>
+        <div class="bento-grid">
+            <!-- 卡片 1 (宽卡片): 智能去广告 -->
+            <div class="bento-card col-8">
+                <div>
+                    <div class="bento-icon-box">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                    </div>
+                    <h3 class="bento-title">智能广告与引流套话过滤</h3>
+                    <p class="bento-desc">
+                        技术文章中经常混杂“长按扫码关注”、“点赞在看”、“本文首发于公众号”等营销尾巴。BlogDistiller 自动清洗这些干扰内容，完整保留代码块、数学公式与核心技术插图，输出清爽纯净的知识正文。
+                    </p>
+                </div>
+            </div>
+
+            <!-- 卡片 2: 本地缓存与断点续爬 -->
+            <div class="bento-card col-4">
+                <div>
+                    <div class="bento-icon-box">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline></svg>
+                    </div>
+                    <h3 class="bento-title">本地缓存与断点续爬</h3>
+                    <p class="bento-desc">
+                        内置本地 SQLite 缓存。若抓取中断或重新执行，已抓取的文章秒级跳过，绝不重复发送网络请求，既保护平台账号，又大幅提高导出速度。
+                    </p>
+                </div>
+            </div>
+
+            <!-- 卡片 3: 5 种单文件合并 -->
+            <div class="bento-card col-4">
+                <div>
+                    <div class="bento-icon-box">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+                    </div>
+                    <h3 class="bento-title">5 种单文件合并导出</h3>
+                    <p class="bento-desc">
+                        自动将几十上百篇散乱博文打包为单一文件：带目录的 Markdown、带侧边栏搜索的离线 HTML 电子书、高清 PDF、Word 及纯语料包。
+                    </p>
+                </div>
+            </div>
+
+            <!-- 卡片 4: 范围切片控制器 -->
+            <div class="bento-card col-4">
+                <div>
+                    <div class="bento-icon-box">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line></svg>
+                    </div>
+                    <h3 class="bento-title">灵活的抓取范围控制</h3>
+                    <p class="bento-desc">
+                        支持博主全部历史文章一键全量抓取、最新 N 篇快速提取，或自由指定“第 X 篇 到 第 Y 篇”区间精确提取。
+                    </p>
+                </div>
+            </div>
+
+            <!-- 卡片 5: 知识库与数字分身就绪 -->
+            <div class="bento-card col-4">
+                <div>
+                    <div class="bento-icon-box">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    </div>
+                    <h3 class="bento-title">AI 知识库与本地笔记就绪</h3>
+                    <p class="bento-desc">
+                        导出的 Markdown 带有标准 YAML 元数据与章节层次，可无缝拖入 Dify、FastGPT、Obsidian 或 NotebookLM 构建精准知识库。
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 支持平台 3D 沉浸式空间展示 -->
+    <section id="platforms" class="section-wrap" style="border-top: 1px solid var(--border-main);">
+        <div class="section-header-center">
+            <div class="section-eyebrow">Supported Platforms</div>
+            <h2 class="section-headline">支持的主流技术社区与内容平台</h2>
+            <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 6px;">全自动突破反爬与风控，支持按博主全量或多链接自由导出</p>
+        </div>
+        <div class="platforms-3d-stage">
+            <div class="platforms-3d-grid">
+                <!-- 1. 微信公众号 -->
+                <a href="/app" class="platform-card-3d" style="--card-brand: #07c160; --card-glow: rgba(7, 193, 96, 0.22); --card-icon-bg: rgba(7, 193, 96, 0.1); --card-tag-bg: rgba(7, 193, 96, 0.12);">
+                    <div class="card-3d-icon-wrap">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                    </div>
+                    <div class="card-3d-content">
+                        <div class="card-3d-title-row">
+                            <span class="card-3d-name">微信公众号</span>
+                            <span class="card-3d-tag">官方免风控</span>
+                        </div>
+                        <div class="card-3d-desc">支持公众号后台 Token 全量检索与多篇文章 URL 免登录一键合并。</div>
+                        <div class="card-3d-meta">
+                            <span>进入导出</span>
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- 2. 知乎 -->
+                <a href="/app" class="platform-card-3d" style="--card-brand: #0084ff; --card-glow: rgba(0, 132, 255, 0.22); --card-icon-bg: rgba(0, 132, 255, 0.1); --card-tag-bg: rgba(0, 132, 255, 0.12);">
+                    <div class="card-3d-icon-wrap">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                    </div>
+                    <div class="card-3d-content">
+                        <div class="card-3d-title-row">
+                            <span class="card-3d-name">知乎专栏与回答</span>
+                            <span class="card-3d-tag">全量历史</span>
+                        </div>
+                        <div class="card-3d-desc">批量导出博主全部历史高赞回答、专栏长文与想法，支持单篇溯源全量。</div>
+                        <div class="card-3d-meta">
+                            <span>进入导出</span>
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- 3. 新浪微博 -->
+                <a href="/app" class="platform-card-3d" style="--card-brand: #eb182c; --card-glow: rgba(235, 24, 44, 0.22); --card-icon-bg: rgba(235, 24, 44, 0.1); --card-tag-bg: rgba(235, 24, 44, 0.12);">
+                    <div class="card-3d-icon-wrap">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path></svg>
+                    </div>
+                    <div class="card-3d-content">
+                        <div class="card-3d-title-row">
+                            <span class="card-3d-name">新浪微博</span>
+                            <span class="card-3d-tag">长文/相册/转发</span>
+                        </div>
+                        <div class="card-3d-desc">自动展开长文本，完整提取转发原博正文、九宫格高清原图与视频多媒体卡片。</div>
+                        <div class="card-3d-meta">
+                            <span>进入导出</span>
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- 4. 掘金 -->
+                <a href="/app" class="platform-card-3d" style="--card-brand: #1e80ff; --card-glow: rgba(30, 128, 255, 0.22); --card-icon-bg: rgba(30, 128, 255, 0.1); --card-tag-bg: rgba(30, 128, 255, 0.12);">
+                    <div class="card-3d-icon-wrap">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><polygon points="12 2 2 12 12 22 22 12 12 2"></polygon><polyline points="7 12 12 17 17 12"></polyline><polyline points="9 8 12 11 15 8"></polyline></svg>
+                    </div>
+                    <div class="card-3d-content">
+                        <div class="card-3d-title-row">
+                            <span class="card-3d-name">掘金 Juejin</span>
+                            <span class="card-3d-tag">原生 Markdown</span>
+                        </div>
+                        <div class="card-3d-desc">一键全量抓取技术博主全部专栏与博文，提取原汁原味原生 Markdown 格式。</div>
+                        <div class="card-3d-meta">
+                            <span>进入导出</span>
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- 5. CSDN -->
+                <a href="/app" class="platform-card-3d" style="--card-brand: #fc5531; --card-glow: rgba(252, 85, 49, 0.22); --card-icon-bg: rgba(252, 85, 49, 0.1); --card-tag-bg: rgba(252, 85, 49, 0.12);">
+                    <div class="card-3d-icon-wrap">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                    </div>
+                    <div class="card-3d-content">
+                        <div class="card-3d-title-row">
+                            <span class="card-3d-name">CSDN 博客</span>
+                            <span class="card-3d-tag">防盗链突破</span>
+                        </div>
+                        <div class="card-3d-desc">智能突破图片防盗链，剔除末尾广告与营销套话，保留纯净技术代码块。</div>
+                        <div class="card-3d-meta">
+                            <span>进入导出</span>
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- 6. 博客园 -->
+                <a href="/app" class="platform-card-3d" style="--card-brand: #2b7cd3; --card-glow: rgba(43, 124, 211, 0.22); --card-icon-bg: rgba(43, 124, 211, 0.1); --card-tag-bg: rgba(43, 124, 211, 0.12);">
+                    <div class="card-3d-icon-wrap">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                    </div>
+                    <div class="card-3d-content">
+                        <div class="card-3d-title-row">
+                            <span class="card-3d-name">博客园 CNBlogs</span>
+                            <span class="card-3d-tag">公式/代码无损</span>
+                        </div>
+                        <div class="card-3d-desc">全量分页爬取所有文章，完美支持行内/块级 LaTeX 数学公式与多语言高亮。</div>
+                        <div class="card-3d-meta">
+                            <span>进入导出</span>
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- 7. 51CTO -->
+                <a href="/app" class="platform-card-3d" style="--card-brand: #2172f3; --card-glow: rgba(33, 114, 243, 0.22); --card-icon-bg: rgba(33, 114, 243, 0.1); --card-tag-bg: rgba(33, 114, 243, 0.12);">
+                    <div class="card-3d-icon-wrap">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+                    </div>
+                    <div class="card-3d-content">
+                        <div class="card-3d-title-row">
+                            <span class="card-3d-name">51CTO 博客</span>
+                            <span class="card-3d-tag">专栏批量</span>
+                        </div>
+                        <div class="card-3d-desc">分页深度遍历博主历史技术博文与运维/架构专栏合集，高质量合并归档。</div>
+                        <div class="card-3d-meta">
+                            <span>进入导出</span>
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- 8. 自定义多链接 -->
+                <a href="/app" class="platform-card-3d" style="--card-brand: #8b5cf6; --card-glow: rgba(139, 92, 246, 0.22); --card-icon-bg: rgba(139, 92, 246, 0.1); --card-tag-bg: rgba(139, 92, 246, 0.12);">
+                    <div class="card-3d-icon-wrap">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                    </div>
+                    <div class="card-3d-content">
+                        <div class="card-3d-title-row">
+                            <span class="card-3d-name">自定义多链接</span>
+                            <span class="card-3d-tag">跨站通用合并</span>
+                        </div>
+                        <div class="card-3d-desc">智能网页文章提取器，粘贴多条散落的网页链接，自动聚合为统一电子书。</div>
+                        <div class="card-3d-meta">
+                            <span>进入导出</span>
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- 工作流程 -->
+    <section id="workflow" class="section-wrap" style="border-top: 1px solid var(--border-main);">
+        <div class="section-header-center">
+            <div class="section-eyebrow">Streamlined Workflow</div>
+            <h2 class="section-headline">三步完成博主文章批量导出与打包</h2>
+        </div>
+        <div class="process-flow">
+            <div class="flow-step-card">
+                <div class="flow-index">01</div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 8px;">选定平台与博主链接</h3>
+                <p style="font-size: 0.88rem; color: var(--text-secondary);">选择目标平台（如掘金、知乎、微信公众号等），粘贴博主主页链接或文章列表。</p>
+            </div>
+            <div class="flow-step-card">
+                <div class="flow-index">02</div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 8px;">设置导出格式与篇数</h3>
+                <p style="font-size: 0.88rem; color: var(--text-secondary);">勾选需要的导出格式（Markdown/PDF/电子书/Word/TXT），启用智能去广告并设置抓取范围。</p>
+            </div>
+            <div class="flow-step-card">
+                <div class="flow-index">03</div>
+                <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 8px;">实时进度与一键下载</h3>
+                <p style="font-size: 0.88rem; color: var(--text-secondary);">查看实时抓取进度，抓取完成后直接在界面一键下载合并后的单文件。</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="section-wrap" style="border-top: 1px solid var(--border-main);">
+        <div class="section-header-center">
+            <div class="section-eyebrow">FAQ</div>
+            <h2 class="section-headline">常见问题与使用说明</h2>
+        </div>
+        <div class="faq-accordion">
+            <details class="faq-box">
+                <summary>
+                    <span>这个工具的主要用途是什么？</span>
+                    <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </summary>
+                <div class="faq-content">
+                    主要解决两大痛点：1. <strong>离线备份与个人阅读</strong>：将喜欢的技术博主历史文章一网打尽，做成整本 PDF 或离线电子书在本地阅读；2. <strong>AI 知识库语料构建</strong>：自动去除营销噪音，生成带标准 YAML 元数据和目录的 Markdown，直接喂给 Dify、FastGPT 或 Obsidian 等知识库。
+                </div>
+            </details>
+            <details class="faq-box">
+                <summary>
+                    <span>抓取微信公众号文章需要配置什么吗？</span>
+                    <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </summary>
+                <div class="faq-content">
+                    支持两种便捷模式：1. <strong>直接粘贴 URL</strong>：直接在输入框粘贴多篇公众号文章链接（每行一条），即可一键抓取并合并；2. <strong>公众号全量遍历</strong>：在高级设置中填入微信公众平台后台的 Token 与 Cookie，即可通过官方超链接检索接口免风控、全自动遍历该公众号的所有历史文章。
+                </div>
+            </details>
+            <details class="faq-box">
+                <summary>
+                    <span>文章被合并后，如何快速查看目录和定位章节？</span>
+                    <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </summary>
+                <div class="faq-content">
+                    导出的每个文件都内置了自动生成的结构化目录（TOC）：Markdown 文件顶部包含锚点目录树，HTML 文件内置自适应侧边栏目录与全文实时搜索，PDF 文件带有标准书签与页码索引。
+                </div>
+            </details>
+            <details class="faq-box">
+                <summary>
+                    <span>如果抓取过程中断了，需要从头重新开始吗？</span>
+                    <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </summary>
+                <div class="faq-content">
+                    不需要。系统默认开启本地 SQLite 缓存与断点续爬机制，已经成功下载清洗过的文章会在本地缓存，重新执行时会直接秒级跳过已抓取内容，只抓取未完成的部分。
+                </div>
+            </details>
+        </div>
+
+    <!-- 关于博主与矩阵项目生态 -->
+    <section id="author" class="section-wrap" style="border-top: 1px solid var(--border-main);">
+        <div class="section-header-center">
+            <div class="section-eyebrow">Creator & Ecosystem</div>
+            <h2 class="section-headline">关于作者「艺杯羹」与项目矩阵</h2>
+            <p class="section-subline">专注前沿工具研发、知识提纯与个人数字生产力构建。</p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 1100px; margin: 0 auto;">
+            <!-- 博主名片与社交联系 -->
+            <div class="bento-card" style="padding: 28px;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 18px;">
+                        <img src="/assets/avatar.png" alt="博主头像" style="width: 54px; height: 54px; border-radius: 12px; object-fit: cover; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); border: 1px solid var(--border-main);">
+                        <div>
+                            <div style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary);">博主：艺杯羹</div>
+                            <div style="font-size: 0.82rem; color: var(--accent-emerald); font-weight: 600;">独立开发者 · 效率工具创作者</div>
+                        </div>
+                    </div>
+
+                    <!-- 官方交流群邀请通知条 -->
+                    <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+                        <div style="font-size: 0.82rem; color: var(--text-primary); line-height: 1.4;">
+                            📢 <b>官方技术支持群：</b>加微信 <code style="font-family: monospace; font-weight:700; color:var(--accent-emerald); background:var(--bg-surface); padding:1px 6px; border-radius:4px;">peace-83</code> 备注【进群】，第一时间获取更新！
+                        </div>
+                        <button type="button" class="nav-btn" onclick="copyText('peace-83', '作者微信号')" style="font-size: 0.75rem; height: 28px; padding: 0 10px; background: var(--accent-emerald); color: white; border: none; font-weight: 700; flex-shrink: 0; cursor: pointer;">
+                            📋 复制微信号
+                        </button>
+                    </div>
+
+                    <!-- 联系方式与平台 (带一键复制与跳转) -->
+                    <div style="display: flex; flex-direction: column; gap: 10px; font-size: 0.86rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <span style="color: var(--text-muted); font-weight: 600; min-width: 82px; flex-shrink: 0;">QQ：</span>
+                                <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary);">3057454077</span>
+                            </div>
+                            <button type="button" onclick="copyText('3057454077', 'QQ号')" class="nav-btn" style="font-size: 0.72rem; height: 26px; padding: 0 8px; cursor: pointer;">复制</button>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <span style="color: var(--text-muted); font-weight: 600; min-width: 82px; flex-shrink: 0;">微信：</span>
+                                <span style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary);">peace-83</span>
+                            </div>
+                            <button type="button" onclick="copyText('peace-83', '微信号')" class="nav-btn" style="font-size: 0.72rem; height: 26px; padding: 0 8px; cursor: pointer;">复制</button>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <span style="color: var(--text-muted); font-weight: 600; min-width: 82px; flex-shrink: 0;">公众号：</span>
+                                <span style="font-weight: 700; color: var(--accent-emerald);">艺杯羹</span>
+                            </div>
+                            <span style="font-size: 0.76rem; color: var(--text-muted);">搜一搜或扫码</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <span style="color: var(--text-muted); font-weight: 600; min-width: 82px; flex-shrink: 0;">个人站点：</span>
+                                <span style="font-weight: 600; color: var(--text-primary);">yibeigen.pages.dev</span>
+                            </div>
+                            <a href="https://yibeigen.pages.dev/" target="_blank" rel="noopener noreferrer" class="nav-btn" style="font-size: 0.72rem; height: 26px; padding: 0 8px; text-decoration: none;">访问 ↗</a>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <span style="color: var(--text-muted); font-weight: 600; min-width: 82px; flex-shrink: 0;">CSDN 博客：</span>
+                                <span style="font-weight: 600; color: var(--text-primary);">博主 CSDN 主页</span>
+                            </div>
+                            <a href="https://blog.csdn.net/qq_46987323?spm=1000.2115.3001.5343" target="_blank" rel="noopener noreferrer" class="nav-btn" style="font-size: 0.72rem; height: 26px; padding: 0 8px; text-decoration: none;">访问 ↗</a>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <span style="color: var(--text-muted); font-weight: 600; min-width: 82px; flex-shrink: 0;">个人微博：</span>
+                                <span style="font-weight: 600; color: var(--text-primary);">@7583841270</span>
+                            </div>
+                            <a href="https://www.weibo.com/u/7583841270" target="_blank" rel="noopener noreferrer" class="nav-btn" style="font-size: 0.72rem; height: 26px; padding: 0 8px; text-decoration: none;">访问 ↗</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 底部二维码与赞赏区域 (并排高亮大卡片) -->
+                <div style="background: linear-gradient(135deg, rgba(217, 119, 6, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%); border: 1px solid rgba(217, 119, 6, 0.25); border-radius: 12px; padding: 14px 16px; margin-top: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div style="font-size: 0.9rem; font-weight: 800; color: #d97706; display: flex; align-items: center; gap: 6px;">
+                            <span>💖 赞赏支持 & 官方公众号</span>
+                        </div>
+                        <span style="font-size: 0.74rem; color: var(--text-muted);">用爱发电 · 感谢支持</span>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; align-items: center;">
+                        <div style="background: var(--bg-surface); border: 1px solid var(--border-main); border-radius: 10px; padding: 10px; text-align: center; box-shadow: var(--shadow-sm);">
+                            <img src="/assets/wechat_qr.png" alt="微信公众号二维码" onclick="openImageLightbox('/assets/wechat_qr.png', '微信公众号【艺杯羹】· 扫码关注回复「文章」领激活码')" title="点击放大查看" style="width: 100%; max-width: 170px; height: auto; border-radius: 6px; border: 1px solid var(--border-main); display: block; margin: 0 auto 6px; cursor: zoom-in; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.02)';" onmouseout="this.style.transform='none';">
+                            <div style="font-size: 0.78rem; font-weight: 800; color: var(--accent-emerald);">微信公众号【艺杯羹】</div>
+                            <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">回复「<b>文章</b>」领口令 <span style="color:var(--accent-gold); cursor:pointer;" onclick="openImageLightbox('/assets/wechat_qr.png', '微信公众号【艺杯羹】')">🔍大图</span></div>
+                        </div>
+
+                        <div style="background: var(--bg-surface); border: 1px solid rgba(217, 119, 6, 0.35); border-radius: 10px; padding: 10px; text-align: center; box-shadow: var(--shadow-sm);">
+                            <img src="/assets/reward_qr.png" alt="赞赏支持码" onclick="openImageLightbox('/assets/reward_qr.png', '赞赏支持博主「艺杯羹」')" title="点击放大查看" style="width: 100px; height: 100px; border-radius: 8px; border: 1px solid var(--border-main); display: block; margin: 0 auto 6px; cursor: zoom-in; object-fit: contain; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.04)';" onmouseout="this.style.transform='none';">
+                            <div style="font-size: 0.78rem; font-weight: 800; color: #d97706;">💖 赞赏支持作者</div>
+                            <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">请作者喝杯咖啡 ☕ <span style="color:var(--accent-gold); cursor:pointer;" onclick="openImageLightbox('/assets/reward_qr.png', '赞赏支持博主「艺杯羹」')">🔍大图</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 项目矩阵列表 -->
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+                <div style="font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 2px;">🚀 博主其他精品项目：</div>
+                
+                <!-- 项目 1: 表达力训练 -->
+                <a href="https://305758.xyz/" target="_blank" rel="noopener noreferrer" class="bento-card" style="padding: 18px 20px; text-decoration: none; display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 14px;">
+                    <div>
+                        <div style="font-size: 0.96rem; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">🎯 表达力训练</div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">结构化思维、即兴演讲与公众表达练习助手</div>
+                    </div>
+                    <span style="font-size: 0.78rem; color: var(--accent-emerald); font-weight: 700; flex-shrink: 0;">访问 ↗</span>
+                </a>
+
+                <!-- 项目 2: 英语文章阅读平台 -->
+                <a href="http://cifan.305758.xyz" target="_blank" rel="noopener noreferrer" class="bento-card" style="padding: 18px 20px; text-decoration: none; display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 14px;">
+                    <div>
+                        <div style="font-size: 0.96rem; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">📖 英语文章精读网站</div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">原汁原味英语时文精读、词汇解析与分级阅读平台</div>
+                    </div>
+                    <span style="font-size: 0.78rem; color: var(--accent-emerald); font-weight: 700; flex-shrink: 0;">访问 ↗</span>
+                </a>
+
+                <!-- 项目 3: 语音跟随提词器 -->
+                <a href="http://pip.305758.xyz" target="_blank" rel="noopener noreferrer" class="bento-card" style="padding: 18px 20px; text-decoration: none; display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 14px;">
+                    <div>
+                        <div style="font-size: 0.96rem; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">🎙️ 语音跟随提词器</div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">自适应语速滚屏、录课与演讲口播智能提词神器</div>
+                    </div>
+                    <span style="font-size: 0.78rem; color: var(--accent-emerald); font-weight: 700; flex-shrink: 0;">访问 ↗</span>
+                </a>
+
+                <!-- 项目 4: 本项目 -->
+                <div class="bento-card" style="padding: 18px 20px; background: var(--accent-subtle); border-color: var(--accent-gold);">
+                    <div>
+                        <div style="font-size: 0.96rem; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">📚 BlogDistiller (博萃) · 当前项目</div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary);">博客文章批量下载、去噪提纯与 5 大格式离线归档器</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部 CTA -->
+        <div class="cta-monolith" style="margin-top: 60px;">
+            <h2 class="cta-headline">立即开始批量导出博主文章</h2>
+            <p style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 28px;">无需复杂环境，点击即可进入工作台输入链接开始抓取与合并。</p>
+            <a href="/app" class="btn-luxury" style="padding: 14px 36px; font-size: 1rem;">
+                <span>进入工作台使用</span>
+                <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </a>
+        </div>
+    </section>
+
+    <!-- 全局页脚版权与矩阵信息 (贴底、全宽、精致专业) -->
+    <footer class="app-site-footer" style="width: 100%; border-top: 1px solid var(--border-main); background: var(--bg-surface); padding: 48px 24px 32px; margin-top: 80px;">
+        <div style="max-width: 1100px; margin: 0 auto;">
+            <div style="display: grid; grid-template-columns: 1.5fr 1fr 1fr 1.2fr; gap: 32px; margin-bottom: 36px;" class="footer-grid">
+                <!-- 列 1: 品牌与介绍 -->
+                <div>
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                        <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--accent-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.1rem;">B</div>
+                        <span style="font-size: 1.1rem; font-weight: 800; color: var(--text-primary);">BlogDistiller (博萃)</span>
+                    </div>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 12px;">
+                        专为创作者与知识极客打造的微信公众号及多平台博文一键批量提取、排版与离线电子书归档利器。
+                    </p>
+                    <div style="font-size: 0.76rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 8px; background: var(--bg-subtle); padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border-main);">
+                        💡 <b>定制与扩展：</b>如有其他特定平台、个人博客或企事业单位网站的批量导出需求，可直接微信（<code>peace-83</code>）联系作者反馈定制。
+                    </div>
+                    <div style="font-size: 0.74rem; color: var(--text-muted); line-height: 1.4;">
+                        仅供个人学习交流与知识管理研究使用，尊重原创知识产权。
+                    </div>
+                </div>
+
+                <!-- 列 2: 支持平台 -->
+                <div>
+                    <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary); margin-bottom: 14px;">支持平台与格式</div>
+                    <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.82rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 8px;">
+                        <li>微信公众号公开文章</li>
+                        <li>知乎专栏 / 个人回答</li>
+                        <li>新浪微博头条长文</li>
+                        <li>掘金 / CSDN / 博客园 / 51CTO</li>
+                        <li>导出 PDF / Markdown / HTML / Word</li>
+                    </ul>
+                </div>
+
+                <!-- 列 3: 矩阵精品项目 -->
+                <div>
+                    <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary); margin-bottom: 14px;">博主其他效率工具</div>
+                    <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.82rem; display: flex; flex-direction: column; gap: 8px;">
+                        <li><a href="https://305758.xyz/" target="_blank" rel="noopener noreferrer" style="color: var(--accent-primary); text-decoration: none; font-weight: 600;">🎯 表达力训练 ↗</a></li>
+                        <li><a href="http://pip.305758.xyz" target="_blank" rel="noopener noreferrer" style="color: var(--accent-primary); text-decoration: none; font-weight: 600;">🎙️ 语音跟随提词器 ↗</a></li>
+                        <li><a href="http://cifan.305758.xyz" target="_blank" rel="noopener noreferrer" style="color: var(--accent-primary); text-decoration: none; font-weight: 600;">📖 英语文章精读平台 ↗</a></li>
+                        <li><a href="https://yibeigen.pages.dev/" target="_blank" rel="noopener noreferrer" style="color: var(--accent-primary); text-decoration: none; font-weight: 600;">🌐 博主个人主页 ↗</a></li>
+                    </ul>
+                </div>
+
+                <!-- 列 4: 联系作者与技术支持 -->
+                <div>
+                    <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary); margin-bottom: 14px;">联系作者与技术支持</div>
+                    <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.82rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-muted);">QQ 号：</span>
+                            <span style="font-family: monospace; font-weight: 700; color: var(--text-primary);">3057454077</span>
+                            <button type="button" onclick="copyText('3057454077', 'QQ号')" class="nav-btn" style="font-size: 0.7rem; height: 22px; padding: 0 6px; cursor: pointer;">复制</button>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-muted);">微信号：</span>
+                            <span style="font-family: monospace; font-weight: 700; color: var(--text-primary);">peace-83</span>
+                            <button type="button" onclick="copyText('peace-83', '微信号')" class="nav-btn" style="font-size: 0.7rem; height: 22px; padding: 0 6px; cursor: pointer;">复制</button>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-muted);">微信公众号：</span>
+                            <span style="font-weight: 700; color: var(--accent-emerald);">艺杯羹</span>
+                            <a href="javascript:void(0)" onclick="openImageLightbox('/assets/wechat_qr.png', '微信公众号【艺杯羹】')" style="font-size: 0.72rem; color: var(--accent-gold); text-decoration: underline;">查看二维码</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 底部版权栏 -->
+            <div style="border-top: 1px dashed var(--border-main); padding-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 0.78rem; color: var(--text-muted);">
+                <div>
+                    © 2026 <b>BlogDistiller (博萃)</b> · 独立开发者「<b>艺杯羹</b>」倾力出品 · All Rights Reserved.
+                </div>
+                <div style="display: flex; gap: 16px;">
+                    <a href="/" style="color: var(--text-muted); text-decoration: none;">介绍主页</a>
+                    <a href="/app" style="color: var(--text-muted); text-decoration: none;">在线工作台</a>
+                    <a href="https://blog.csdn.net/qq_46987323?spm=1000.2115.3001.5343" target="_blank" rel="noopener noreferrer" style="color: var(--text-muted); text-decoration: none;">CSDN 博客</a>
+                    <a href="https://www.weibo.com/u/7583841270" target="_blank" rel="noopener noreferrer" style="color: var(--text-muted); text-decoration: none;">新浪微博</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- 图片放大预览模态框 (Lightbox) -->
+    <div id="imageLightboxModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); align-items: center; justify-content: center; cursor: zoom-out;" onclick="closeImageLightbox()">
+        <div style="position: relative; max-width: 92vw; max-height: 92vh; display: flex; flex-direction: column; align-items: center; justify-content: center;" onclick="event.stopPropagation()">
+            <button type="button" onclick="closeImageLightbox()" style="position: absolute; top: -42px; right: 0; background: rgba(255, 255, 255, 0.25); border: none; color: white; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; font-size: 1.3rem; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.4)'" onmouseout="this.style.background='rgba(255,255,255,0.25)'">&times;</button>
+            <img id="lightboxImg" src="" alt="预览图片" style="max-width: 90vw; max-height: 80vh; object-fit: contain; border-radius: 12px; box-shadow: 0 25px 60px rgba(0,0,0,0.65); background: #ffffff; padding: 6px; display: block;">
+            <div id="lightboxCaption" style="color: #ffffff; font-size: 0.95rem; font-weight: 700; margin-top: 14px; text-shadow: 0 2px 8px rgba(0,0,0,0.9); text-align: center;"></div>
+        </div>
+    </div>
+
+    <!-- 官方社群与公众号关注交流通知弹窗 (每日频控自动弹出 1 次) -->
+    <div id="communityModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center;">
+        <div style="background: var(--bg-surface); border: 1px solid var(--border-main); border-radius: 16px; width: 90%; max-width: 480px; box-shadow: var(--shadow-xl); overflow: hidden; animation: popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);">
+            <div style="padding: 16px 20px; border-bottom: 1px solid var(--border-main); display: flex; justify-content: space-between; align-items: center;">
+                <div style="font-size: 1.05rem; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                    <span>📢 官方交流群 & 新版功能通知</span>
+                </div>
+                <button type="button" onclick="closeCommunityModal()" style="background: none; border: none; font-size: 1.4rem; color: var(--text-muted); cursor: pointer; line-height: 1;">&times;</button>
+            </div>
+            <div style="padding: 20px 24px; text-align: center;">
+                <div style="font-size: 0.95rem; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">
+                    欢迎使用 BlogDistiller (博萃) 文章导出助手
+                </div>
+                <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; margin-bottom: 14px; text-align: left; background: var(--bg-subtle); padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-main);">
+                    专为知识创作者与研究者打造，支持微信公众号、知乎、微博、CSDN、51CTO、掘金、博客园等全平台博文一键批量提取、排版与离线电子书归档。<br><br>
+                    <b style="color:var(--accent-emerald);">📢 进群与技术支持：</b>欢迎微信扫码关注官方公众号【<b>艺杯羹</b>】，或添加作者微信 <code style="font-weight:700; color:var(--accent-emerald);">peace-83</code> 备注【进群】，第一时间交流心得与获取最新功能！
+                </p>
+
+                <!-- 二维码 -->
+                <div style="background: var(--bg-subtle); padding: 12px; border-radius: 12px; border: 1px solid var(--border-main); margin-bottom: 14px;">
+                    <img src="/assets/wechat_qr.png" alt="微信公众号" onclick="openImageLightbox('/assets/wechat_qr.png', '微信公众号【艺杯羹】')" title="点击放大查看" style="width: 100%; max-width: 220px; height: auto; border-radius: 6px; border: 1px solid var(--border-main); display: block; margin: 0 auto 6px; cursor: zoom-in;">
+                    <div style="font-size: 0.78rem; font-weight: 700; color: var(--accent-emerald);">
+                        微信扫码关注【艺杯羹】· 扫码回复「文章」领口令
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 8px; justify-content: center;">
+                    <button type="button" onclick="copyText('艺杯羹', '公众号名称'); closeCommunityModal();" style="height: 38px; font-size: 0.85rem; padding: 0 16px; background: var(--accent-emerald); color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">
+                        📋 复制公众号名称 (艺杯羹)
+                    </button>
+                    <button type="button" onclick="closeCommunityModal()" style="height: 38px; font-size: 0.85rem; padding: 0 14px; background: var(--bg-subtle); color: var(--text-primary); border: 1px solid var(--border-main); border-radius: 8px; font-weight: 600; cursor: pointer;">
+                        我知道了 (进入工作台)
+                    </button>
+                </div>
+                <div id="communityModalCountTip" style="font-size: 0.72rem; color: var(--text-muted); margin-top: 10px;">
+                    💡 提示：本通知每日仅提醒 1 次（今日已提醒）
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 全局 Toast 提示条 (置顶居中浮动、绝不遮挡、最高层级) -->
+    <div id="globalToast" style="display: none; position: fixed; top: 76px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.94); color: #fff; padding: 10px 24px; border-radius: 50px; font-size: 0.88rem; font-weight: 700; box-shadow: 0 16px 36px rgba(0,0,0,0.36); z-index: 999999999; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.18); pointer-events: none; animation: toastSlideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);">
+        <span id="globalToastText">✓ 复制成功</span>
+    </div>
+
+    <script>
+        // 图片大图放大预览
+        function openImageLightbox(src, caption) {
+            const modal = document.getElementById('imageLightboxModal');
+            const img = document.getElementById('lightboxImg');
+            const cap = document.getElementById('lightboxCaption');
+            if (modal && img) {
+                img.src = src;
+                if (cap) cap.innerText = caption || '查看大图';
+                modal.style.display = 'flex';
+            }
+        }
+        // 全局 Toast 提示
+        function showToast(msg) {
+            const toast = document.getElementById('globalToast');
+            const text = document.getElementById('globalToastText');
+            if (toast && text) {
+                text.innerText = msg || '操作成功';
+                toast.style.display = 'block';
+                clearTimeout(window._toastTimer);
+                window._toastTimer = setTimeout(() => {
+                    toast.style.display = 'none';
+                }, 2400);
+            }
+        }
+
+        // 一键复制文本到剪贴板
+        function copyText(str, label) {
+            if (!str) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(str).then(() => {
+                    showToast(`✓ ${label || '内容'}【${str}】已复制到剪贴板！`);
+                }).catch(() => fallbackCopy(str, label));
+            } else {
+                fallbackCopy(str, label);
+            }
+        }
+
+        function fallbackCopy(str, label) {
+            const textarea = document.createElement('textarea');
+            textarea.value = str;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast(`✓ ${label || '内容'}【${str}】已复制到剪贴板！`);
+            } catch (e) {
+                prompt(`请手动长按复制 ${label || '内容'}:`, str);
+            }
+            document.body.removeChild(textarea);
+        }
+
+        // 每日 2 次社群弹窗控制 (频控逻辑)
+        // 每日 1 次社群弹窗控制 (频控逻辑)
+        function checkDailyCommunityModal() {
+            try {
+                const todayStr = new Date().toISOString().slice(0, 10);
+                const savedDate = localStorage.getItem('blogdistiller_community_date');
+                let count = parseInt(localStorage.getItem('blogdistiller_community_count') || '0', 10);
+                
+                if (savedDate !== todayStr) {
+                    count = 0;
+                    localStorage.setItem('blogdistiller_community_date', todayStr);
+                }
+
+                if (count < 1) {
+                    const tip = document.getElementById('communityModalCountTip');
+                    if (tip) {
+                        tip.innerText = `💡 提示：本交流通知每日仅提醒 1 次（今日已提醒）`;
+                    }
+                    setTimeout(() => {
+                        const modal = document.getElementById('communityModal');
+                        if (modal) modal.style.display = 'flex';
+                    }, 1200);
+                    localStorage.setItem('blogdistiller_community_count', (count + 1).toString());
+                }
+            } catch (e) {}
+        }
+
+        function closeCommunityModal() {
+            const modal = document.getElementById('communityModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function openImageLightbox(src, caption) {
+            const modal = document.getElementById('imageLightboxModal');
+            const img = document.getElementById('lightboxImg');
+            const cap = document.getElementById('lightboxCaption');
+            if (modal && img) {
+                img.src = src;
+                if (cap) cap.innerText = caption || '查看大图';
+                modal.style.display = 'flex';
+            }
+        }
+
+        function closeImageLightbox() {
+            const modal = document.getElementById('imageLightboxModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeImageLightbox();
+                closeCommunityModal();
+            }
+        });
+
+        // 3D 鼠标微动跟随视差交互 (顶部文档堆叠)
+        const stack = document.getElementById('paperStack');
+        if (stack && window.matchMedia('(pointer: fine)').matches) {
+            window.addEventListener('mousemove', (e) => {
+                const x = (e.clientX / window.innerWidth - 0.5) * 16;
+                const y = (e.clientY / window.innerHeight - 0.5) * 16;
+                stack.style.transform = `rotateX(${10 - y}deg) rotateY(${-4 + x}deg) rotateZ(1deg)`;
+            });
+        }
+
+        // 3D 平台卡片鼠标空间倾斜与动态流光追踪
+        if (window.matchMedia('(pointer: fine)').matches) {
+            document.querySelectorAll('.platform-card-3d').forEach(card => {
+                card.addEventListener('mousemove', (e) => {
+                    const rect = card.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    const centerX = rect.width / 2;
+                    const centerY = rect.height / 2;
+                    const rotateX = ((y - centerY) / centerY) * -12;
+                    const rotateY = ((x - centerX) / centerX) * 12;
+                    card.style.transform = `perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) scale3d(1.035, 1.035, 1.035) translateZ(10px)`;
+                    card.style.setProperty('--mouse-x', `${((x / rect.width) * 100).toFixed(1)}%`);
+                    card.style.setProperty('--mouse-y', `${((y / rect.height) * 100).toFixed(1)}%`);
+                });
+                card.addEventListener('mouseleave', () => {
+                    card.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1) translateZ(0px)';
+                });
+            });
+        }
+
+        // 主题初始化
+        function initTheme() {
+            const savedTheme = localStorage.getItem('blogdistiller_theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            updateThemeUI(savedTheme);
+        }
+
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('blogdistiller_theme', next);
+            updateThemeUI(next);
+        }
+
+        function updateThemeUI(theme) {
+            const sunIcon = document.getElementById('themeIconSun');
+            const moonIcon = document.getElementById('themeIconMoon');
+            if (sunIcon && moonIcon) {
+                if (theme === 'dark') {
+                    sunIcon.style.display = 'inline-block';
+                    moonIcon.style.display = 'none';
+                } else {
+                    sunIcon.style.display = 'none';
+                    moonIcon.style.display = 'inline-block';
+                }
+            }
+        }
+
+        initTheme();
+        checkDailyCommunityModal();
+    </script>
+</body>
+</html>

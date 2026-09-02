@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>文章批量导出助手 · 官方同步助手</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            width: 330px;
+            padding: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: #0f172a;
+            color: #f1f5f9;
+            line-height: 1.5;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        .header img {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+        }
+        .header-title {
+            font-size: 13.5px;
+            font-weight: 800;
+            color: #38bdf8;
+            letter-spacing: -0.2px;
+        }
+        .desc {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-bottom: 12px;
+            line-height: 1.45;
+        }
+        .btn-website {
+            width: 100%;
+            height: 32px;
+            background: rgba(56, 189, 248, 0.12);
+            color: #38bdf8;
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            border-radius: 6px;
+            font-size: 11.5px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            margin-bottom: 12px;
+            transition: all 0.2s;
+        }
+        .btn-website:hover {
+            background: rgba(56, 189, 248, 0.22);
+            border-color: #38bdf8;
+        }
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .status-badge {
+            font-size: 10.5px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .badge-success { background: #064e3b; color: #34d399; }
+        .badge-warn { background: #451a03; color: #fbbf24; }
+        .badge-fail { background: #450a0a; color: #f87171; }
+        .card-desc {
+            font-size: 11px;
+            color: #64748b;
+            margin-bottom: 8px;
+            line-height: 1.3;
+        }
+        .btn-sm {
+            width: 100%;
+            height: 28px;
+            background: #334155;
+            color: #f8fafc;
+            border: 1px solid #475569;
+            border-radius: 5px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-sm:hover { background: #475569; color: #ffffff; }
+        .btn-main {
+            width: 100%;
+            height: 36px;
+            background: linear-gradient(135deg, #0ea5e9, #6366f1);
+            color: #ffffff;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 4px;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+            transition: all 0.2s;
+        }
+        .btn-main:hover { opacity: 0.92; transform: translateY(-1px); }
+        .author-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px dashed #334155;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 11px;
+        }
+        .author-title {
+            font-weight: 700;
+            color: #cbd5e1;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .author-info {
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+        .author-links {
+            display: flex;
+            gap: 10px;
+            margin-top: 6px;
+        }
+        .author-links a {
+            color: #38bdf8;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .author-links a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="icon.png" alt="Logo" />
+        <span class="header-title">文章批量导出助手 · 同步扩展</span>
+    </div>
+    
+    <div class="desc">
+        结合官网 <b>doc.305758.xyz</b> 联动使用。免抓包、免扫码！自动检测并同步知乎与微博已登录凭证。
+    </div>
+
+    <!-- 官网快捷直达 -->
+    <button class="btn-website" id="btnOpenWebsite">
+        🌐 打开文章批量导出助手工作台
+    </button>
+
+    <!-- 知乎卡片 -->
+    <div class="card">
+        <div class="card-header">
+            <span>知乎专栏 / 问答</span>
+            <span id="zhihuBadge" class="status-badge badge-warn">检测中...</span>
+        </div>
+        <div class="card-desc" id="zhihuDesc">检测当前浏览器知乎 Cookie...</div>
+        <button class="btn-sm" id="btnSyncZhihu">同步知乎凭证</button>
+    </div>
+
+    <!-- 微博卡片 -->
+    <div class="card">
+        <div class="card-header">
+            <span>新浪微博</span>
+            <span id="weiboBadge" class="status-badge badge-warn">检测中...</span>
+        </div>
+        <div class="card-desc" id="weiboDesc">检测当前浏览器微博登录态 (SUB)...</div>
+        <button class="btn-sm" id="btnSyncWeibo">同步微博凭证</button>
+    </div>
+
+    <button class="btn-main" id="btnSyncAll">⚡ 一键同步全部平台凭证</button>
+
+    <!-- 作者与项目信息卡片 -->
+    <div class="author-card">
+        <div class="author-title">
+            <span>👨‍💻 关于作者 & 官网</span>
+            <span style="color: #64748b; font-size: 10px;">v1.3.0</span>
+        </div>
+        <div class="author-info">
+            作者：<b>艺杯羹</b> (peace-83)<br>
+            独立开发者 · 专注于高质量知识管理与自动化工具开发
+        </div>
+        <div class="author-links">
+            <a href="https://doc.305758.xyz" target="_blank" id="linkOfficial">🌐 官方网站</a>
+            <a href="https://github.com/yibeigen/wechat-article-exporter" target="_blank" id="linkGithub">⭐ GitHub 开源</a>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

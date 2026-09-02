@@ -1,0 +1,74 @@
+{
+  "name": "blogdistiller-desktop",
+  "productName": "BlogDistiller 微信文章导出助手",
+  "version": "1.0.0",
+  "description": "BlogDistiller —— 微信公众号文章全量抓取与排版导出桌面客户端",
+  "private": true,
+  "main": "./main.js",
+  "author": "BlogDistiller Team",
+  "homepage": "https://doc.305758.xyz/app",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.yibeigen.blogdistiller",
+    "productName": "BlogDistiller 微信文章导出助手",
+    "copyright": "Copyright © 2026 艺杯羹",
+    "directories": {
+      "output": "../dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "icon": "renderer/assets/logo_icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BlogDistiller 微信文章导出助手"
+    }
+  },
+  "dependencies": {
+    "@joplin/turndown-plugin-gfm": "^1.0.67",
+    "@vueuse/core": "^14.3.0",
+    "acorn": "^8.16.0",
+    "docx": "^9.7.1",
+    "echarts": "^6.1.0",
+    "electron-updater": "^6.6.2",
+    "fflate": "^0.8.3",
+    "https-proxy-agent": "^9.1.0",
+    "image-size": "^2.0.2",
+    "linkedom": "^0.18.12",
+    "node-forge": "^1.4.0",
+    "socks-proxy-agent": "^10.1.0",
+    "turndown": "^7.2.4",
+    "write-excel-file": "^4.1.1"
+  },
+  "//dependencies": "仅主进程运行期 externalize 加载的库放这里——electron-builder 把 dependencies 闭包打进 app.asar。渲染层依赖（vue/ag-grid 等）由 Vite 打进 renderer bundle，属构建期依赖，放 devDependencies 避免在 asar 里重复一份 node_modules（约 76MB）。",
+  "devDependencies": {
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3"
+  }
+}

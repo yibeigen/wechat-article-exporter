@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "文章批量导出助手 · 浏览器同步扩展",
+  "version": "1.3.0",
+  "description": "自动无感同步知乎与微博等平台登录态至文章批量导出助手，免抓包、免扫码，一键批量下载全网博文。",
+  "permissions": [
+    "cookies",
+    "storage",
+    "tabs",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "*://*.zhihu.com/*",
+    "*://*.weibo.com/*",
+    "*://*.weibo.cn/*",
+    "https://doc.305758.xyz/*",
+    "http://127.0.0.1:8000/*",
+    "http://localhost:8000/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://doc.305758.xyz/*",
+        "http://127.0.0.1:8000/*",
+        "http://localhost:8000/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "文章批量导出助手 · 官方同步扩展"
+  },
+  "icons": {
+    "128": "icon.png"
+  }
+}

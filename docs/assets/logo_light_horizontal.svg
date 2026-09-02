@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 680" width="2400" height="680">
+  <defs>
+    <linearGradient id="lh-text-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0284C7"/>
+      <stop offset="60%" stop-color="#4F46E5"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+
+    <linearGradient id="lh-badge-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284C7"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
+
+    <filter id="lh-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- 白色优雅浅底板 -->
+  <rect x="0" y="0" width="2400" height="680" rx="40" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="4"/>
+
+  <!-- 左侧独立徽标 (缩放嵌入) -->
+  <g transform="translate(120, 90) scale(0.48)">
+    <rect x="0" y="0" width="1024" height="1024" rx="240" fill="#0F172A" stroke="#0EA5E9" stroke-width="8" stroke-opacity="0.4"/>
+    
+    <!-- 书页层叠 -->
+    <path d="M 240 570 C 360 500, 470 530, 512 550 L 512 700 C 470 670, 360 640, 240 700 Z" fill="#0EA5E9" opacity="0.9"/>
+    <path d="M 784 570 C 664 500, 554 530, 512 550 L 512 700 C 554 670, 664 640, 784 700 Z" fill="#6366F1" opacity="0.9"/>
+
+    <!-- 水滴 -->
+    <g filter="url(#lh-glow)">
+      <path d="M 512 250 C 512 250, 610 390, 610 460 C 610 514, 566 558, 512 558 C 458 558, 414 514, 414 460 C 414 390, 512 250, 512 250 Z" 
+            fill="#38BDF8"/>
+    </g>
+    <circle cx="475" cy="430" r="16" fill="#FFFFFF"/>
+    <circle cx="512" cy="190" r="16" fill="#67E8F9" filter="url(#lh-glow)"/>
+  </g>
+
+  <!-- 右侧品牌大字排版 -->
+  <g transform="translate(680, 180)">
+    <!-- 主标题 BlogDistiller -->
+    <text x="0" y="140" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Plus Jakarta Sans', sans-serif" 
+          font-size="140" font-weight="900" fill="#0F172A" letter-spacing="-3">
+      Blog<tspan fill="url(#lh-text-grad)">Distiller</tspan>
+    </text>
+
+    <!-- 中文胶囊徽章 "博萃" -->
+    <g transform="translate(940, 30)">
+      <rect x="0" y="0" width="160" height="64" rx="32" fill="url(#lh-badge-grad)"/>
+      <text x="80" y="44" font-family="'PingFang SC', 'Microsoft YaHei', sans-serif" 
+            font-size="32" font-weight="800" fill="#FFFFFF" text-anchor="middle" letter-spacing="2">博萃</text>
+    </g>
+
+    <!-- 副标题 Slogan 与定位 -->
+    <text x="5" y="240" font-family="'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif" 
+          font-size="44" font-weight="600" fill="#475569" letter-spacing="4">
+      博客文章批量下载与知识提纯器
+    </text>
+
+    <!-- 平台标签徽标行 -->
+    <g transform="translate(5, 300)">
+      <text font-family="'JetBrains Mono', 'PingFang SC', monospace" font-size="26" font-weight="600" fill="#0284C7" letter-spacing="2">
+        ✦ 全平台批量抓取 · 智能去噪清洗 · 5大格式离线导出 (Markdown / PDF / HTML / Word / TXT)
+      </text>
+    </g>
+  </g>
+</svg>

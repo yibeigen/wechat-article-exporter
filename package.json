@@ -1,0 +1,10 @@
+{
+  "name": "blogdistiller-desktop-app",
+  "version": "1.0.0",
+  "description": "BlogDistiller 微信文章导出助手桌面版",
+  "main": "desktop/main.js",
+  "scripts": {
+    "start": "electron desktop",
+    "dist": "npm run dist --prefix desktop"
+  }
+}
