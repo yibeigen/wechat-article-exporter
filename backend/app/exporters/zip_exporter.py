@@ -6,7 +6,7 @@ import hashlib
 import mimetypes
 import datetime
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 import httpx
 from bs4 import BeautifulSoup
 from app.exporters.base import BaseExporter
@@ -463,7 +463,8 @@ class ZipExporter(BaseExporter):
         articles: List[ArticleItem],
         filename_prefix: str,
         generated_files: Optional[Dict[str, Path]] = None,
-        download_images: bool = True
+        download_images: bool = True,
+        progress_callback: Optional[Any] = None
     ) -> Path:
         zip_output_file = self.output_dir / f"{filename_prefix}_知识归档包.zip"
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -475,7 +476,14 @@ class ZipExporter(BaseExporter):
         image_bytes_map = {}
         url_to_filename = {}
         if download_images:
+            if progress_callback:
+                await progress_callback("正在扫描并下载文章配图离线归档...")
             image_bytes_map, url_to_filename = await self._download_images_task(articles)
+            if progress_callback:
+                await progress_callback(f"配图离线下载完成 (共 {len(image_bytes_map)} 张高清配图)，正在写入压缩包...")
+
+        if progress_callback:
+            await progress_callback("正在初始化 ZIP 归档包结构并写入全量合并总文档...")
 
         with zipfile.ZipFile(str(zip_output_file), "w", zipfile.ZIP_DEFLATED) as zf:
             # 2. 如果下载了图片，写入 images/ 文件夹
@@ -557,71 +565,79 @@ class ZipExporter(BaseExporter):
                     single_html_content = self._generate_single_html(art, idx, now_str, html_body)
                     zf.writestr(single_html_filename, single_html_content.encode("utf-8"))
 
-            # C. PDF 独立篇章（如果勾选了 PDF，批量快速渲染生成单篇独立 PDF）
+            # C. PDF 独立篇章（仅当勾选了 PDF 且文章总数 <= 20 篇时才生成单篇独立 PDF）
+            # 对于大规模批量文章（如数十到数千篇），单篇独立调用数千次无头浏览器将造成数小时的严重卡死与内存耗尽。
+            # 全量博文的高清排版打印文件已在【合并总文档】中完整提供。
             if "pdf" in generated_files:
-                pdf_tasks = []
-                for idx, art in enumerate(articles, 1):
-                    clean_title = re.sub(r'[\\/:*?"<>|]', '_', art.title).strip() or f"文章_{idx}"
-                    single_pdf_arcname = f"单篇独立文章_PDF/{idx:02d}_{clean_title[:45]}.pdf"
-                    
-                    html_body = art.content_html or ""
-                    single_pdf_html = self._generate_single_pdf_html(art, idx, now_str, html_body)
-                    pdf_tasks.append((single_pdf_arcname, single_pdf_html))
+                if len(articles) <= 20:
+                    if progress_callback:
+                        await progress_callback(f"正在快速批量渲染单篇独立 PDF (共 {len(articles)} 篇)...")
+                    pdf_tasks = []
+                    for idx, art in enumerate(articles, 1):
+                        clean_title = re.sub(r'[\\/:*?"<>|]', '_', art.title).strip() or f"文章_{idx}"
+                        single_pdf_arcname = f"单篇独立文章_PDF/{idx:02d}_{clean_title[:45]}.pdf"
+                        
+                        html_body = art.content_html or ""
+                        single_pdf_html = self._generate_single_pdf_html(art, idx, now_str, html_body)
+                        pdf_tasks.append((single_pdf_arcname, single_pdf_html))
 
-                def _render_single_pdfs_batch_sync(tasks: List[Tuple[str, str]]) -> Dict[str, bytes]:
-                    res = {}
-                    # 1. 优先使用系统 Edge / Chrome 无头打印
-                    browser_path = find_system_browser()
-                    if browser_path:
-                        import tempfile, subprocess
-                        with tempfile.TemporaryDirectory() as temp_dir:
-                            temp_dir_p = Path(temp_dir)
-                            for t_idx, (arcname, html_text) in enumerate(tasks):
-                                try:
-                                    temp_html = temp_dir_p / f"temp_{t_idx}.html"
-                                    temp_pdf = temp_dir_p / f"temp_{t_idx}.pdf"
-                                    temp_html.write_text(html_text, encoding="utf-8")
-                                    cmd = [
-                                        browser_path,
-                                        "--headless",
-                                        "--disable-gpu",
-                                        "--no-pdf-header-footer",
-                                        f"--print-to-pdf={str(temp_pdf.resolve())}",
-                                        str(temp_html.resolve())
-                                    ]
-                                    subprocess.run(cmd, capture_output=True, timeout=25)
-                                    if temp_pdf.exists() and temp_pdf.stat().st_size > 1000:
-                                        res[arcname] = temp_pdf.read_bytes()
-                                except Exception:
-                                    pass
-                        if res:
-                            return res
+                    def _render_single_pdfs_batch_sync(tasks: List[Tuple[str, str]]) -> Dict[str, bytes]:
+                        res = {}
+                        # 1. 优先使用系统 Edge / Chrome 无头打印
+                        browser_path = find_system_browser()
+                        if browser_path:
+                            import tempfile, subprocess
+                            with tempfile.TemporaryDirectory() as temp_dir:
+                                temp_dir_p = Path(temp_dir)
+                                for t_idx, (arcname, html_text) in enumerate(tasks):
+                                    try:
+                                        temp_html = temp_dir_p / f"temp_{t_idx}.html"
+                                        temp_pdf = temp_dir_p / f"temp_{t_idx}.pdf"
+                                        temp_html.write_text(html_text, encoding="utf-8")
+                                        cmd = [
+                                            browser_path,
+                                            "--headless",
+                                            "--disable-gpu",
+                                            "--no-pdf-header-footer",
+                                            f"--print-to-pdf={str(temp_pdf.resolve())}",
+                                            str(temp_html.resolve())
+                                        ]
+                                        subprocess.run(cmd, capture_output=True, timeout=25)
+                                        if temp_pdf.exists() and temp_pdf.stat().st_size > 1000:
+                                            res[arcname] = temp_pdf.read_bytes()
+                                    except Exception:
+                                        pass
+                            if res:
+                                return res
 
-                    # 2. 次选 Playwright 同步渲染
-                    try:
-                        from playwright.sync_api import sync_playwright
-                        with sync_playwright() as p:
-                            browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
-                            page = browser.new_page()
-                            for arcname, html_text in tasks:
-                                try:
-                                    page.set_content(html_text, wait_until="domcontentloaded", timeout=12000)
-                                    pdf_bytes = page.pdf(
-                                        format="A4",
-                                        print_background=True,
-                                        margin={"top": "15mm", "bottom": "15mm", "left": "15mm", "right": "15mm"}
-                                    )
-                                    res[arcname] = pdf_bytes
-                                except Exception:
-                                    pass
-                            browser.close()
-                    except Exception:
-                        pass
-                    return res
+                        # 2. 次选 Playwright 同步渲染
+                        try:
+                            from playwright.sync_api import sync_playwright
+                            with sync_playwright() as p:
+                                browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
+                                page = browser.new_page()
+                                for arcname, html_text in tasks:
+                                    try:
+                                        page.set_content(html_text, wait_until="domcontentloaded", timeout=12000)
+                                        pdf_bytes = page.pdf(
+                                            format="A4",
+                                            print_background=True,
+                                            margin={"top": "15mm", "bottom": "15mm", "left": "15mm", "right": "15mm"}
+                                        )
+                                        res[arcname] = pdf_bytes
+                                    except Exception:
+                                        pass
+                                browser.close()
+                        except Exception:
+                            pass
+                        return res
 
-                rendered_pdfs = await asyncio.to_thread(_render_single_pdfs_batch_sync, pdf_tasks)
-                for arcname, pdf_data in rendered_pdfs.items():
-                    zf.writestr(arcname, pdf_data)
+                    rendered_pdfs = await asyncio.to_thread(_render_single_pdfs_batch_sync, pdf_tasks)
+                    for arcname, pdf_data in rendered_pdfs.items():
+                        zf.writestr(arcname, pdf_data)
+                else:
+                    if progress_callback:
+                        await progress_callback(f"检测到文章篇数较多 ({len(articles)} 篇)，已在【合并总文档】中提供全量高清排版文件，自动免去数千次浏览器启停...")
 
             # D. Word 独立篇章（如果勾选了 docx）
             if "docx" in generated_files:

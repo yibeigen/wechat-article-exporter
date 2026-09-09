@@ -24,7 +24,7 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
 from app.config import OUTPUT_DIR, BASE_DIR
-from app.models import TaskCreateRequest, TaskProgress
+from app.models import TaskCreateRequest, TaskProgress, TaskStatusEnum
 from app.task_manager import task_manager
 from app.core.zhihu_auth import (
     check_zhihu_auth_status,
@@ -279,17 +279,25 @@ async def task_events_stream(task_id: str):
         queue = await task_manager.subscribe(task_id)
         try:
             while True:
-                data = await queue.get()
-                yield f"data: {data}\n\n"
-                
-                # 只有当实际发送到前端的数据本身状态是 completed / failed / cancelled 时才断开连接
-                import json
                 try:
-                    event_obj = json.loads(data)
-                    if event_obj.get("status") in ["completed", "failed", "cancelled"]:
+                    data = await asyncio.wait_for(queue.get(), timeout=15.0)
+                    yield f"data: {data}\n\n"
+                    
+                    # 只有当实际发送到前端的数据本身状态是 completed / failed / cancelled 时才断开连接
+                    import json
+                    try:
+                        event_obj = json.loads(data)
+                        if event_obj.get("status") in ["completed", "failed", "cancelled"]:
+                            break
+                    except Exception:
+                        pass
+                except asyncio.TimeoutError:
+                    # 15 秒无新事件，主动发送 SSE 规范注释行保活，彻底防止前端与反向代理网络超时切断连接
+                    yield ": heartbeat-ping\n\n"
+                    cur_task = task_manager.get_task(task_id)
+                    if cur_task and cur_task.status in [TaskStatusEnum.COMPLETED, TaskStatusEnum.FAILED, TaskStatusEnum.CANCELLED]:
+                        yield f"data: {cur_task.model_dump_json()}\n\n"
                         break
-                except Exception:
-                    pass
         finally:
             task_manager.unsubscribe(task_id, queue)
 

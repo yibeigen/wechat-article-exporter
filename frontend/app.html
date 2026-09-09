@@ -4830,16 +4830,30 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
 
             activeEventSource.onerror = async () => {
                 activeEventSource.close();
-                // 容灾检查：如果连接提前关闭，主动拉取一次最新状态以确保渲染完成
-                try {
-                    const res = await fetch(`/api/tasks/${taskId}`);
-                    if (res.ok) {
-                        const task = await res.json();
-                        if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
+                // 容灾检查：如果 SSE 提前断开，启动自动短轮询保底，防止界面假死并确保 100% 渲染完成
+                const checkStatus = async () => {
+                    try {
+                        const res = await fetch(`/api/tasks/${taskId}`);
+                        if (res.ok) {
+                            const task = await res.json();
                             activeEventSource.onmessage({ data: JSON.stringify(task) });
+                            if (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') {
+                                return true;
+                            }
                         }
-                    }
-                } catch (e) {}
+                    } catch (e) {}
+                    return false;
+                };
+
+                const finished = await checkStatus();
+                if (!finished) {
+                    const pollTimer = setInterval(async () => {
+                        const isDone = await checkStatus();
+                        if (isDone) {
+                            clearInterval(pollTimer);
+                        }
+                    }, 2000);
+                }
             };
         }
 

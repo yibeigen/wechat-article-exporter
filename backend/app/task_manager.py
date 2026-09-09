@@ -588,17 +588,27 @@ class TaskManager:
                     print(f"导出格式 {fmt.value} 失败: {export_err}")
 
             # 7. 自动生成全量 ZIP 归档包
+            if task.is_cancelled:
+                task.status = TaskStatusEnum.CANCELLED
+                await self._broadcast(task_id)
+                return
+
             try:
                 task.message = "正在打包全量 ZIP 归档包 (含合并文档 + 分篇独立文章与目录清单)..."
                 task.progress_percent = 98.0
                 await self._broadcast(task_id)
+
+                async def _zip_progress_cb(msg: str):
+                    task.message = msg
+                    await self._broadcast(task_id)
 
                 zip_exporter = ZipExporter(author_name, platform_str, OUTPUT_DIR)
                 zip_path = await zip_exporter.export(
                     scraped_articles,
                     filename_prefix,
                     generated_paths,
-                    download_images=request.download_images
+                    download_images=request.download_images,
+                    progress_callback=_zip_progress_cb
                 )
                 export_files["zip"] = f"/api/download/{zip_path.name}"
             except Exception as zip_err:
