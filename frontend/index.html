@@ -888,22 +888,33 @@
 
     <!-- Hero 区域 -->
     <header class="hero-section">
-        <div class="hero-badge">
-            <span class="badge-dot"></span>
-            <span>告别逐篇复制 · 智能去广告 · 离线电子书与知识库打包</span>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 8px;">
+            <div class="hero-badge">
+                <span class="badge-dot"></span>
+                <span>告别逐篇复制 · 智能去广告 · 离线电子书与知识库打包</span>
+            </div>
+            <!-- 🎉 新增平台重磅升级通知胶囊 -->
+            <div class="update-notice-pill" style="display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, rgba(230, 22, 45, 0.08), rgba(234, 111, 90, 0.1)); border: 1px solid rgba(234, 111, 90, 0.35); border-radius: 9999px; padding: 6px 18px; font-size: 0.84rem; color: var(--text-primary); box-shadow: 0 2px 8px rgba(234, 111, 90, 0.1);">
+                <span style="background: linear-gradient(135deg, #e6162d, #ea6f5a); color: #fff; font-size: 0.7rem; font-weight: 800; padding: 2px 7px; border-radius: 12px; text-transform: uppercase;">NEW</span>
+                <span>🎉 <b>重磅更新：</b>平台矩阵扩充至 <b>9 大主流创作社区</b>！全新上线 <b>【新浪博客】</b> 与 <b>【简书】</b> 专属通道！</span>
+                <a href="/app" style="color: #ea6f5a; text-decoration: underline; font-weight: 700; margin-left: 4px;">立即体验 →</a>
+            </div>
         </div>
+
         <h1 class="hero-title">
             多平台博主文章批量导出<br>
             <span class="hero-title-accent">一键去广告清洗 · 离线归档与排版合并</span>
         </h1>
         <p class="hero-desc">
-            一键批量抓取掘金、知乎专栏、微信公众号、CSDN、博客园、51CTO、微博等平台博主历史公开文章。自动过滤关注求赞、二维码与广告噪音，自动编排全局目录，合并导出为 Markdown、PDF、离线网页、Word 与纯文本 5 种格式。
+            一键批量抓取微信公众号、知乎专栏、新浪微博、新浪博客、简书、掘金、CSDN、博客园、51CTO 等 9 大主流内容平台博主历史公开文章。自动过滤关注求赞、二维码与广告噪音，自动编排全局目录，合并导出为 Markdown、PDF、离线网页、Word 与纯文本 5 种格式。
         </p>
 
         <div class="supported-chips-row">
             <span class="support-chip">微信公众号 WeChat</span>
             <span class="support-chip">知乎专栏 Zhihu</span>
             <span class="support-chip">新浪微博 Weibo</span>
+            <span class="support-chip">新浪博客 SinaBlog</span>
+            <span class="support-chip">简书 Jianshu</span>
             <span class="support-chip">掘金 Juejin</span>
             <span class="support-chip">CSDN 博客</span>
             <span class="support-chip">博客园 CNBlogs</span>
@@ -950,7 +961,7 @@
                 </div>
                 <div class="metric-content">
                     <span class="metric-label">支持主流内容平台</span>
-                    <span class="metric-value">7 大主流平台全能支持</span>
+                    <span class="metric-value">9 大主流平台全能支持</span>
                 </div>
             </div>
         </div>
@@ -1164,7 +1175,43 @@
                     </div>
                 </a>
 
-                <!-- 4. 掘金 -->
+                <!-- 4. 新浪博客 (NEW) -->
+                <a href="/app" class="platform-card-3d" style="--card-brand: #e6162d; --card-glow: rgba(230, 22, 45, 0.22); --card-icon-bg: rgba(230, 22, 45, 0.1); --card-tag-bg: rgba(230, 22, 45, 0.12);">
+                    <div class="card-3d-icon-wrap">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                    </div>
+                    <div class="card-3d-content">
+                        <div class="card-3d-title-row">
+                            <span class="card-3d-name">新浪博客</span>
+                            <span class="card-3d-tag" style="background: rgba(230, 22, 45, 0.15); color: #e6162d;">新上线 · 免登录</span>
+                        </div>
+                        <div class="card-3d-desc">无需登录与插件，支持全量博文目录与分类专栏一键穿透提取，自动解析高清无损大图。</div>
+                        <div class="card-3d-meta">
+                            <span>进入导出</span>
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- 5. 简书 (NEW) -->
+                <a href="/app" class="platform-card-3d" style="--card-brand: #ea6f5a; --card-glow: rgba(234, 111, 90, 0.22); --card-icon-bg: rgba(234, 111, 90, 0.1); --card-tag-bg: rgba(234, 111, 90, 0.12);">
+                    <div class="card-3d-icon-wrap">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path><path d="M10 2v8l3-2.5 3 2.5V2"></path></svg>
+                    </div>
+                    <div class="card-3d-content">
+                        <div class="card-3d-title-row">
+                            <span class="card-3d-name">简书 Jianshu</span>
+                            <span class="card-3d-tag" style="background: rgba(234, 111, 90, 0.15); color: #ea6f5a;">新上线 · 专题/文集</span>
+                        </div>
+                        <div class="card-3d-desc">一键遍历博主历史博文时间线与专题文集，Nuxt SSR 纯净正文直取并自动剥离广告噪音。</div>
+                        <div class="card-3d-meta">
+                            <span>进入导出</span>
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- 6. 掘金 -->
                 <a href="/app" class="platform-card-3d" style="--card-brand: #1e80ff; --card-glow: rgba(30, 128, 255, 0.22); --card-icon-bg: rgba(30, 128, 255, 0.1); --card-tag-bg: rgba(30, 128, 255, 0.12);">
                     <div class="card-3d-icon-wrap">
                         <svg class="icon icon-lg" viewBox="0 0 24 24"><polygon points="12 2 2 12 12 22 22 12 12 2"></polygon><polyline points="7 12 12 17 17 12"></polyline><polyline points="9 8 12 11 15 8"></polyline></svg>
@@ -1508,8 +1555,8 @@
                     <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.82rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 8px;">
                         <li>微信公众号公开文章</li>
                         <li>知乎专栏 / 个人回答</li>
-                        <li>新浪微博头条长文</li>
-                        <li>掘金 / CSDN / 博客园 / 51CTO</li>
+                        <li>新浪微博 / 新浪博客</li>
+                        <li>简书 / 掘金 / CSDN / 博客园 / 51CTO</li>
                         <li>导出 PDF / Markdown / HTML / Word</li>
                     </ul>
                 </div>
@@ -1586,7 +1633,7 @@
                     欢迎使用 BlogDistiller (博萃) 文章导出助手
                 </div>
                 <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; margin-bottom: 14px; text-align: left; background: var(--bg-subtle); padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-main);">
-                    专为知识创作者与研究者打造，支持微信公众号、知乎、微博、CSDN、51CTO、掘金、博客园等全平台博文一键批量提取、排版与离线电子书归档。<br><br>
+                    专为知识创作者与研究者打造，现已支持微信公众号、知乎、微博、新浪博客、简书、CSDN、51CTO、掘金、博客园 9 大平台博文一键批量提取、排版与离线电子书归档。<br><br>
                     <b style="color:var(--accent-emerald);">📢 进群与技术支持：</b>欢迎微信扫码关注官方公众号【<b>艺杯羹</b>】，或添加作者微信 <code style="font-weight:700; color:var(--accent-emerald);">peace-83</code> 备注【进群】，第一时间交流心得与获取最新功能！
                 </p>
 

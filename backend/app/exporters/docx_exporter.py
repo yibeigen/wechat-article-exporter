@@ -120,7 +120,11 @@ def sanitize_markdown_text(text: str) -> str:
         return ""
     # 1. HTML 实体转义
     t = html.unescape(text)
-    # 2. 替换常见残留 HTML 标签
+    # 2. 移除 javascript: 伪链接
+    t = re.sub(r'\(javascript:[^\)]*\)', '', t, flags=re.IGNORECASE)
+    # 3. 移除泄露在普通文本里的未闭合图片 Markdown
+    t = re.sub(r'!\[(?P<alt>.*?)\]\((?P<src>https?://[^\s\)]+)\)', '', t)
+    # 4. 替换常见残留 HTML 标签
     t = re.sub(r'<br\s*/?>', '\n', t, flags=re.IGNORECASE)
     t = re.sub(r'</?(?:b|strong)>', '**', t, flags=re.IGNORECASE)
     t = re.sub(r'</?(?:i|em)>', '*', t, flags=re.IGNORECASE)
@@ -130,9 +134,17 @@ def sanitize_markdown_text(text: str) -> str:
     t = re.sub(r'</?mark>', '', t, flags=re.IGNORECASE)
     # 剥离多余的容器标签
     t = re.sub(r'</?(?:div|p|span|font|section|article)[^>]*>', '', t, flags=re.IGNORECASE)
-    # 3. 剥离 Markdown 转义斜杠
+    # 5. 剥离 Markdown 转义斜杠
     t = re.sub(r'\\([\\`\*_{}\[\]\(\)#\+\-\.!~|])', r'\1', t)
-    # 4. 过滤文章内部的目录标记
+    # 6. 处理孤立未闭合的 **
+    if t.count("**") % 2 != 0:
+        if t.startswith("**") and t.count("**") == 1:
+            t = t[2:]
+        elif t.endswith("**") and t.count("**") == 1:
+            t = t[:-2]
+        else:
+            t = t.replace("**", "")
+    # 7. 过滤文章内部的目录标记
     if t.strip() in ["@目录", "[TOC]", "目录", "[toc]"]:
         return ""
     return t
@@ -332,36 +344,76 @@ def append_article_content_to_docx(
     h_r = h_p.add_run(art.title)
     format_run(h_r, font_size=Pt(18), color=RGBColor(15, 23, 42), bold=True)
 
-    # 2. 元数据说明栏
-    meta_p = doc.add_paragraph()
-    meta_p.paragraph_format.space_before = Pt(0)
-    meta_p.paragraph_format.space_after = Pt(8)
-    meta_r = meta_p.add_run(
-        f"作者: {art.author or author_name}   |   发布时间: {art.publish_time or '未知'}   |   来源平台: {art.platform or platform}\n"
-    )
-    format_run(meta_r, font_size=Pt(9), color=RGBColor(100, 116, 139))
+    # 2. 标签栏 (用户标准格式：横向平铺展示 #标签1   #标签2)
+    if art.tags:
+        tag_p = doc.add_paragraph()
+        tag_p.paragraph_format.space_before = Pt(0)
+        tag_p.paragraph_format.space_after = Pt(4)
+        tag_prefix = tag_p.add_run("🏷️ 标签：")
+        format_run(tag_prefix, font_size=Pt(9.5), color=RGBColor(100, 116, 139), bold=True)
+        tags_formatted = "   ".join([f"#{t.strip().lstrip('#')}" for t in art.tags if t.strip()])
+        tag_val = tag_p.add_run(tags_formatted)
+        format_run(tag_val, font_size=Pt(9.5), color=RGBColor(2, 132, 199))
+
+    # 3. 原文说明栏 (平台/作者/时间)
+    orig_p = doc.add_paragraph()
+    orig_p.paragraph_format.space_before = Pt(0)
+    orig_p.paragraph_format.space_after = Pt(2)
+    orig_prefix = orig_p.add_run("📰 原文：")
+    format_run(orig_prefix, font_size=Pt(9), color=RGBColor(100, 116, 139), bold=True)
+    orig_info = f"{art.platform or platform}  ·  {art.author or author_name}  ·  {art.publish_time or '未知时间'}"
+    orig_val = orig_p.add_run(orig_info)
+    format_run(orig_val, font_size=Pt(9), color=RGBColor(71, 85, 105))
+
+    # 4. 原文链接
     if art.url:
-        url_r = meta_p.add_run(f"原文链接: {art.url}")
-        format_run(url_r, font_size=Pt(9), color=RGBColor(2, 132, 199))
+        link_p = doc.add_paragraph()
+        link_p.paragraph_format.space_before = Pt(0)
+        link_p.paragraph_format.space_after = Pt(8)
+        link_prefix = link_p.add_run("🔗 原文链接：")
+        format_run(link_prefix, font_size=Pt(9), color=RGBColor(100, 116, 139), bold=True)
+        link_val = link_p.add_run(art.url)
+        format_run(link_val, font_size=Pt(9), color=RGBColor(2, 132, 199))
 
     # 装饰分割线
     div_p = doc.add_paragraph()
+    div_p.paragraph_format.space_before = Pt(0)
     div_p.paragraph_format.space_after = Pt(12)
     div_r = div_p.add_run("―" * 45)
     format_run(div_r, font_size=Pt(8), color=RGBColor(226, 232, 240))
 
-    # 3. 正文逐行解析引擎
+    # 5. 正文逐行解析引擎
     raw_text = art.content_markdown or ""
     # 统一换行符并分割
     lines = raw_text.replace("\r\n", "\n").split("\n")
+    
+    # 步骤 A: 剔除正文头部重复的标题、发布时间、作者等冗余信息
+    clean_title_str = art.title.strip().lower()
+    start_idx = 0
+    while start_idx < len(lines):
+        line_clean = lines[start_idx].strip()
+        if not line_clean:
+            start_idx += 1
+            continue
+        line_no_hash = re.sub(r'^#+\s*', '', line_clean).strip().lower()
+        # 如果是重复的标题
+        if line_no_hash == clean_title_str or line_clean.startswith(art.title):
+            start_idx += 1
+            continue
+        # 如果是孤立的时间行或作者行
+        if art.publish_time and (line_clean == art.publish_time or art.publish_time in line_clean and len(line_clean) < 30):
+            start_idx += 1
+            continue
+        if line_clean.startswith(("作者：", "作者:", "来源：", "来源:")) and len(line_clean) < 40:
+            start_idx += 1
+            continue
+        break
+    lines = lines[start_idx:]
     
     in_code_block = False
     code_buffer = []
     quote_buffer = []
     table_buffer = []
-
-    # 图片匹配正则
-    img_pattern = re.compile(r"!\[(?P<alt>.*?)\]\((?P<src>https?://[^\s\)]+)\)")
 
     def flush_quote():
         nonlocal quote_buffer
@@ -395,6 +447,13 @@ def append_article_content_to_docx(
 
     for line in processed_lines:
         stripped = line.strip()
+
+        # ==========================================================
+        # 强阻断信号：遇到文末互动、上一篇/下一篇、分享、版权等，彻底结束渲染
+        # ==========================================================
+        if stripped in ["分享：", "喜欢", "赠金笔", "正文", "字体大小：大 中 小"] or \
+           re.match(r'^(?:阅读[┊|]|收藏\s*\(|.*┊打印|前一篇：|后一篇：|新浪BLOG|Copyright ©|新浪公司\s*版权所有|顶\(\d+\)|•\s*博客)', stripped):
+            break
 
         # ==========================================================
         # 1. 代码块处理 (```)
@@ -443,11 +502,16 @@ def append_article_content_to_docx(
             continue
 
         # ==========================================================
-        # 4. 图片独立行识别与高质量内嵌
+        # 4. 图片识别与高质量内嵌 (所见即所得，彻底消除原始 Markdown 语法泄露)
         # ==========================================================
-        img_match = img_pattern.search(stripped)
-        if img_match and (stripped.startswith("![") or stripped.startswith("<img")):
-            alt = img_match.group("alt").strip()
+        img_match = re.search(r'!\[(?P<alt>.*?)\]\((?P<src>https?://[^\s\)]+)\)', stripped)
+        if not img_match:
+            img_match = re.search(r'<img[^>]+src=["\'](?P<src>https?://[^"\']+)["\'](?:[^>]*alt=["\'](?P<alt>[^"\']*)["\'])?', stripped, re.I)
+
+        if img_match:
+            flush_quote()
+            flush_table()
+            alt = (img_match.group("alt") or "").strip()
             src = img_match.group("src").strip()
 
             inserted = False
@@ -468,12 +532,14 @@ def append_article_content_to_docx(
                     pass
 
             if not inserted:
+                # 无论图片能否下载，绝对不直接暴露丑陋的 ![alt](url) 原始语法
+                clean_alt = alt if alt and alt != "在这里插入图片描述" and not alt.startswith("http") else "插图"
                 fallback_p = doc.add_paragraph()
                 fallback_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 fallback_p.paragraph_format.space_before = Pt(4)
                 fallback_p.paragraph_format.space_after = Pt(4)
-                f_run = fallback_p.add_run(f"🖼️ [配图] {alt if alt and alt != '在这里插入图片描述' else ''} ({src})")
-                format_run(f_run, font_size=Pt(8.5), color=RGBColor(100, 116, 139), italic=True)
+                f_run = fallback_p.add_run(f"🖼️ [{clean_alt}]")
+                format_run(f_run, font_size=Pt(9), color=RGBColor(148, 163, 184), italic=True)
             elif alt and alt != "在这里插入图片描述" and len(alt) < 50:
                 cap_p = doc.add_paragraph()
                 cap_p.alignment = WD_ALIGN_PARAGRAPH.CENTER

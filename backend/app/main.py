@@ -98,6 +98,20 @@ async def get_supported_platforms():
             "tip": "抓取博主头条文章与原创博文，自动展开长文本与配图"
         },
         {
+            "id": "sina_blog",
+            "name": "新浪博客",
+            "category": "经典博客",
+            "placeholder": "输入新浪博客博主主页或博文目录链接，如 https://blog.sina.com.cn/u/5320406686 或 articlelist_...html",
+            "tip": "无需登录与插件，支持按全量博文或分类专栏一键提取，自动解析高清配图"
+        },
+        {
+            "id": "jianshu",
+            "name": "简书",
+            "category": "创作社区",
+            "placeholder": "输入简书博主主页 (jianshu.com/u/xxx)、专题文集 (jianshu.com/c/xxx) 或单篇长文链接",
+            "tip": "免登录一键提取博主全部公开文章或专题文集，高清图文排版无损导出"
+        },
+        {
             "id": "csdn",
             "name": "CSDN",
             "category": "技术博客",
@@ -179,7 +193,10 @@ async def extract_links_endpoint(request: ExtractLinksRequest):
             "platform": request.platform,
             "author": author_info.get("name", "未知博主"),
             "total": len(articles),
-            "articles": articles
+            "articles": articles,
+            "declared_count": getattr(scraper, "declared_count", None),
+            "category_name": getattr(scraper, "category_name", None),
+            "explanation": getattr(scraper, "explanation", None)
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

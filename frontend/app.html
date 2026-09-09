@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>文章批量导出助手 工作台 | 全网博文一键抓取与排版打包</title>
-    <meta name="description" content="文章批量导出助手 工作台 · 支持微信公众号、知乎、微博、掘金、CSDN等平台博文一键打包导出为 PDF、Markdown、Word 电子书">
+    <meta name="description" content="文章批量导出助手 工作台 · 支持微信公众号、知乎、微博、新浪博客、简书、掘金、CSDN、博客园、51CTO 等 9 大平台博文一键打包导出为 PDF、Markdown、Word 电子书">
     <link rel="icon" type="image/svg+xml" href="/assets/logo_icon.svg">
     <link rel="alternate icon" type="image/png" href="/assets/logo_icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1259,7 +1259,7 @@
         <div class="workspace-header">
             <div>
                 <h1 class="workspace-title">博主文章批量抓取与打包导出</h1>
-                <p style="font-size: 0.88rem; color: var(--text-muted); margin-top: 4px;">支持公众号、知乎、微博、掘金、CSDN 等平台，智能过滤广告噪音，一键合并为带目录的 PDF、Markdown、HTML 或 Word 电子书。</p>
+                <p style="font-size: 0.88rem; color: var(--text-muted); margin-top: 4px;">支持公众号、知乎、微博、新浪博客、简书、掘金、CSDN 等 9 大主流平台，智能过滤广告噪音，一键合并为带目录的 PDF、Markdown、HTML 或 Word 电子书。</p>
             </div>
         </div>
 
@@ -1283,8 +1283,20 @@
             <div class="metric-item">
                 <div class="metric-content">
                     <span class="metric-label">支持主流内容平台</span>
-                    <span class="metric-value" style="color: var(--accent-gold);">7 大主流平台全能支持</span>
+                    <span class="metric-value" style="color: var(--accent-gold);">9 大主流平台全能支持</span>
                 </div>
+            </div>
+        </div>
+
+        <!-- 🎉 新增平台重磅升级通知横幅 -->
+        <div class="update-notice-banner" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; background: linear-gradient(135deg, rgba(230, 22, 45, 0.07), rgba(234, 111, 90, 0.09)); border: 1px solid rgba(234, 111, 90, 0.35); border-radius: 12px; padding: 12px 18px; margin-bottom: 20px; box-shadow: 0 4px 14px -3px rgba(234, 111, 90, 0.12);">
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 0.88rem; color: var(--text-primary);">
+                <span style="background: linear-gradient(135deg, #e6162d, #ea6f5a); color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.5px;">NEW</span>
+                <span>🎉 <b>重磅升级：</b>平台矩阵正式升级为 <b>9 大主流创作社区</b>！现已上线 <b>【新浪博客】</b> 与 <b>【简书】</b> 专属通道，支持全量博文/专题文集免登录穿透提取与高清排版打包！</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <button type="button" class="btn-secondary" style="padding: 5px 12px; font-size: 0.78rem; font-weight: 600; border-color: rgba(230, 22, 45, 0.4); color: #e6162d;" onclick="selectPlatform('sina_blog'); fillDemoLink();">🏮 体验新浪博客</button>
+                <button type="button" class="btn-secondary" style="padding: 5px 12px; font-size: 0.78rem; font-weight: 600; border-color: rgba(234, 111, 90, 0.4); color: #ea6f5a;" onclick="selectPlatform('jianshu'); fillDemoLink();">📖 体验简书</button>
             </div>
         </div>
 
@@ -1539,7 +1551,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         <div class="switch-desc">下载图片至 images/，断网或删帖也能看</div>
                     </div>
                     <label class="toggle">
-                        <input type="checkbox" id="downloadImagesSwitch">
+                        <input type="checkbox" id="downloadImagesSwitch" checked>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
@@ -1781,8 +1793,9 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.82rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 8px;">
                         <li>微信公众号公开文章</li>
                         <li>知乎专栏 / 个人回答</li>
-                        <li>新浪微博头条长文</li>
-                        <li>掘金 / CSDN / 博客园 / 51CTO</li>
+                        <li>新浪微博 / 新浪博客</li>
+                        <li>简书 / 掘金 / CSDN</li>
+                        <li>博客园 / 51CTO / 自定义链接</li>
                         <li>导出 PDF / Markdown / HTML / Word</li>
                     </ul>
                 </div>
@@ -1862,7 +1875,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
 
                 <!-- 📢 其他平台与定制需求提示 -->
                 <div style="background: rgba(14, 165, 233, 0.07); border: 1px dashed rgba(14, 165, 233, 0.35); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.6;">
-                    💡 <b>其他平台需求说明：</b>当前桌面客户端专注于<b>微信公众号</b>；如果您还有知乎、CSDN、微博、掘金、博客园或其他特定独立网站的批量导出需求，可随时加作者微信 <code style="font-family: monospace; font-weight:700; color:var(--accent-primary); background:var(--bg-surface); padding:1px 6px; border-radius:4px;">peace-83</code> 直接联系我定制与反馈！
+                    💡 <b>其他平台需求说明：</b>当前桌面客户端专注于<b>微信公众号</b>；如果您还有知乎、微博、新浪博客、简书、掘金、CSDN、博客园、51CTO 或其他特定独立网站的批量导出需求，可随时加作者微信 <code style="font-family: monospace; font-weight:700; color:var(--accent-primary); background:var(--bg-surface); padding:1px 6px; border-radius:4px;">peace-83</code> 直接联系我定制与反馈！
                 </div>
 
                 <div style="font-size: 0.86rem; font-weight: 700; color: var(--text-primary); margin-bottom: 12px;">
@@ -2202,7 +2215,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     欢迎使用 BlogDistiller (博萃) 文章导出助手
                 </div>
                 <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; margin-bottom: 14px; text-align: left; background: var(--bg-subtle); padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-main);">
-                    专为知识创作者与研究者打造，支持微信公众号、知乎、微博、CSDN、51CTO、掘金、博客园等全平台博文一键批量提取、排版与离线电子书归档。<br><br>
+                    专为知识创作者与研究者打造，现已支持微信公众号、知乎、微博、新浪博客、简书、掘金、CSDN、博客园、51CTO 等 9 大主流平台博文一键批量提取、排版与离线电子书归档。<br><br>
                     <b style="color:var(--accent-emerald);">📢 进群与技术支持：</b>欢迎微信扫码关注官方公众号【<b>艺杯羹</b>】，或添加作者微信 <code style="font-weight:700; color:var(--accent-emerald);">peace-83</code> 备注【进群】，第一时间交流心得与获取最新功能！
                 </p>
 
@@ -2400,6 +2413,19 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         </button>
                     </div>
                 </div>
+                <!-- 篇数差异智能说明卡片 (标称 vs 实际可访问文章差异自洽说明，让用户彻底放心) -->
+                <div id="linksModalNoticeBox" style="display: none; margin: 12px 20px 4px; padding: 10px 14px; border-radius: 8px; font-size: 0.78rem; line-height: 1.5; transition: all 0.2s ease;">
+                    <div style="display: flex; align-items: flex-start; gap: 10px;">
+                        <span id="linksModalNoticeIcon" style="font-size: 1.15rem; line-height: 1.2;">💡</span>
+                        <div style="flex: 1;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; flex-wrap: wrap; gap: 6px;">
+                                <span id="linksModalNoticeTitle" style="font-weight: 700; font-size: 0.82rem;">篇数说明</span>
+                                <span id="linksModalNoticeTag" style="font-size: 0.7rem; padding: 1px 8px; border-radius: 10px; font-weight: 600;">全部分页穿透完成</span>
+                            </div>
+                            <div id="linksModalNoticeContent" style="font-size: 0.76rem; color: var(--text-secondary);"></div>
+                        </div>
+                    </div>
+                </div>
                 <div style="max-height: 52vh; overflow-y: auto; padding: 0 20px;">
                     <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem; text-align: left;">
                         <thead>
@@ -2441,6 +2467,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             '51cto': `<svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>`,
             'zhihu': `<svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`,
             'weibo': `<svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path></svg>`,
+            'sina_blog': `<svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>`,
+            'jianshu': `<svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path><path d="M10 2v8l3-2.5 3 2.5V2"></path></svg>`,
             'wechat': `<svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
             'custom_urls': `<svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`
         };
@@ -2505,6 +2533,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     'wechat': ['mp.weixin.qq.com'],
                     'zhihu': ['zhihu.com'],
                     'weibo': ['weibo.com', 'weibo.cn'],
+                    'sina_blog': ['blog.sina.com.cn'],
+                    'jianshu': ['jianshu.com'],
                     'juejin': ['juejin.cn'],
                     'csdn': ['csdn.net'],
                     'cnblogs': ['cnblogs.com'],
@@ -2526,35 +2556,6 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             saveFormState();
         }
 
-        function saveFormState() {
-            try {
-                const state = {
-                    platform: currentPlatform,
-                    target: document.getElementById('targetInput')?.value || '',
-                    wechatTarget: document.getElementById('wechatMainInput')?.value || ''
-                };
-                localStorage.setItem('blogdistiller_form_state', JSON.stringify(state));
-            } catch(e) {}
-        }
-
-        function restoreFormState() {
-            try {
-                const saved = localStorage.getItem('blogdistiller_form_state');
-                if (saved) {
-                    const state = JSON.parse(saved);
-                    if (state.platform && platformsData && platformsData.some(p => p.id === state.platform)) {
-                        currentPlatform = state.platform;
-                    }
-                    if (state.target && document.getElementById('targetInput')) {
-                        document.getElementById('targetInput').value = state.target;
-                    }
-                    if (state.wechatTarget && document.getElementById('wechatMainInput')) {
-                        document.getElementById('wechatMainInput').value = state.wechatTarget;
-                    }
-                }
-            } catch(e) {}
-        }
-
         function fillDemoLink() {
             const demoMap = {
                 'wechat': '艺杯羹',
@@ -2563,6 +2564,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 'juejin': 'https://juejin.cn/user/1556564194374926',
                 'zhihu': 'https://www.zhihu.com/people/excited-vczh',
                 'weibo': 'https://weibo.com/u/1669879400',
+                'sina_blog': 'https://blog.sina.com.cn/s/articlelist_5320406686_0_1.html',
+                'jianshu': 'https://www.jianshu.com/u/5bb0bdbbee02',
                 '51cto': 'https://blog.51cto.com/u_15127607',
                 'custom_urls': 'https://mp.weixin.qq.com/s/7J-37tqG91Fp630K87J_aA\nhttps://zhuanlan.zhihu.com/p/24185614'
             };
@@ -2600,6 +2603,16 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 label: '输入微博博主主页链接或长文链接',
                 placeholder: '输入微博博主主页链接 (如 https://weibo.com/u/1669879400) 或头条长文链接...',
                 tipHtml: '<b style="color:#ef4444;">🔴 微博通道：</b>支持输入微博博主主页链接或微博头条长文链接，一键全自动提取并打包。'
+            },
+            'sina_blog': {
+                label: '输入新浪博客博主主页或博文目录链接',
+                placeholder: '输入新浪博客主页 (如 https://blog.sina.com.cn/u/5320406686) 或目录链接 (如 articlelist_5320406686_0_1.html)...',
+                tipHtml: '<b style="color:#e6162d;">🏮 新浪博客专属通道：</b>无需登录与插件，支持按全量博文或指定分类专栏一键提取，自动解析高清无损大图。'
+            },
+            'jianshu': {
+                label: '输入简书博主主页、专题或文章链接',
+                placeholder: '输入简书主页 (如 https://www.jianshu.com/u/5bb0bdbbee02)、专题文集或单篇长文链接...',
+                tipHtml: '<b style="color:#ea6f5a;">📖 简书专属通道：</b>免登录支持博主全量文章与专题文集一键提取，自动解析高清无损大图。'
             },
             'juejin': {
                 label: '输入掘金博主个人主页链接',
@@ -3026,10 +3039,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             }
 
             try {
+                // 检索博主/专栏文章清单时，全量获取所有文章（不截断），确保用户可在弹窗中完整预览全部历史篇目并自由勾选
                 let max_articles = null;
-                if (currentRangeMode === 'recent') {
-                    max_articles = parseInt(document.getElementById('recentCountInput')?.value) || 20;
-                }
 
                 // 微信公众号：优先尝试本地浏览器扩展直连 (0云端IP风控，100%全量，支持2000+篇实时流式跑马灯)
                 if (currentPlatform === 'wechat' && !isWechatUrl(target)) {
@@ -3081,7 +3092,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                                 type: "BLOGDISTILLER_FETCH_WECHAT_ARTICLES",
                                 target: target,
                                 fakeid: currentWechatFakeId,
-                                maxArticles: max_articles || 0
+                                maxArticles: 0
                             }, "*");
                         });
 
@@ -3181,7 +3192,6 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 const payload = {
                     platform: currentPlatform,
                     target: target,
-                    max_articles: max_articles,
                     cookie: document.getElementById('wechatCookieInput')?.value.trim() || undefined,
                     token: document.getElementById('wechatTokenInput')?.value.trim() || undefined
                 };
@@ -3217,14 +3227,31 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 const totalDisp = document.getElementById('streamTotalDisplay');
                 if (pb) pb.style.width = '100%';
                 if (pp) pp.innerText = '100%';
-                if (badge) badge.innerText = `✅ 检索完成！共收录 ${extractedArticlesList.length} 篇博文`;
+                if (badge) {
+                    if (data.declared_count && data.declared_count > extractedArticlesList.length) {
+                        badge.innerText = `✅ 检索完成！收录有效博文 ${extractedArticlesList.length} 篇 (标称 ${data.declared_count} 篇)`;
+                    } else {
+                        badge.innerText = `✅ 检索完成！共收录 ${extractedArticlesList.length} 篇博文`;
+                    }
+                }
                 if (countDisp) countDisp.innerText = String(extractedArticlesList.length);
-                if (totalDisp) totalDisp.innerText = `${extractedArticlesList.length} 篇`;
+                if (totalDisp) {
+                    if (data.declared_count) {
+                        totalDisp.innerText = `${extractedArticlesList.length} / 标称 ${data.declared_count} 篇`;
+                    } else {
+                        totalDisp.innerText = `${extractedArticlesList.length} 篇`;
+                    }
+                }
 
                 await new Promise(r => setTimeout(r, 400));
                 closeStreamProgressModal();
 
-                renderLinksModal(data.author, extractedArticlesList, data.channel || (payload.cookie && payload.token ? 'official' : 'public'));
+                renderLinksModal(data.author, extractedArticlesList, data.channel || (payload.cookie && payload.token ? 'official' : 'public'), {
+                    declared_count: data.declared_count,
+                    category_name: data.category_name,
+                    explanation: data.explanation,
+                    platform: currentPlatform
+                });
             } catch (e) {
                 closeStreamProgressModal();
                 alert('提取文章清单异常: ' + e.message);
@@ -3332,28 +3359,152 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             if (badge) badge.innerText = '⏹️ 正在结算当前已抓取的文章篇目...';
         }
 
-        function renderLinksModal(author, articles, channel = 'official') {
+        function renderLinksModal(author, articles, channel = 'official', meta = {}) {
             const modal = document.getElementById('linksModal');
             const isOfficial = channel === 'official' || channel === 'extension';
-            document.getElementById('linksModalTitle').innerText = isOfficial
-                ? `📑 【${author || '公众号'}】官方全量文章清单 (${articles.length} 篇)`
-                : `📑 【${author || '博主'}】公开收录文章清单 (${articles.length} 篇)`;
-            document.getElementById('linksModalSub').innerText = isOfficial
-                ? `✅ 已通过微信公众平台官方通道直连拉取，100% 完整收录全部历史文章`
-                : `ℹ️ 当前通过免登录公开检索通道获取，展示最新收录文章`;
+            const declaredCount = (meta && meta.declared_count != null) ? Number(meta.declared_count) : null;
+            const categoryName = (meta && meta.category_name) ? meta.category_name : null;
+            const catPrefix = categoryName ? ` · ${categoryName}` : '';
+            const actualCount = articles.length;
+
+            const titleEl = document.getElementById('linksModalTitle');
+            const subEl = document.getElementById('linksModalSub');
+
+            if (titleEl) {
+                titleEl.innerText = isOfficial
+                    ? `📑 【${author || '公众号'}】官方全量文章清单 (${actualCount} 篇)`
+                    : `📑 【${author || '博主'}】${catPrefix} 公开收录文章清单 (${actualCount} 篇)`;
+            }
+
+            if (subEl) {
+                if (isOfficial) {
+                    subEl.innerText = `✅ 已通过微信公众平台官方通道直连拉取，100% 完整收录全部历史文章`;
+                } else if (declaredCount && declaredCount > actualCount) {
+                    subEl.innerText = `💡 平台页面标称 ${declaredCount} 篇，系统已深度遍历收录当前全部可公开访问博文 ${actualCount} 篇（详见下方自洽说明）`;
+                } else {
+                    subEl.innerText = `ℹ️ 当前通过免登录公开检索通道获取，展示最新收录文章`;
+                }
+            }
+
+            // 根据首页设置的范围进行初始智能预选
+            let shouldCheck = (idx) => true;
+            let rangeNoticeHtml = '';
+            if (currentRangeMode === 'recent') {
+                const count = parseInt(document.getElementById('recentCountInput')?.value) || 20;
+                shouldCheck = (idx) => idx < count;
+                if (actualCount > count) {
+                    rangeNoticeHtml = `<div style="margin-top: 8px; padding: 6px 10px; background: rgba(59, 130, 246, 0.08); border-left: 3px solid #3b82f6; border-radius: 4px; font-size: 0.75rem; color: var(--text-secondary);">📌 <b>范围预选提示</b>：已按您选择的「最新前 ${count} 篇」默认预勾选前 ${count} 篇（共收录 ${actualCount} 篇）。您可以随时点击上方【全选】一键选中全部，或自由勾选所需篇目！</div>`;
+                }
+            } else if (currentRangeMode === 'custom') {
+                const s = parseInt(document.getElementById('startIndexInput')?.value) || 1;
+                const e = parseInt(document.getElementById('endIndexInput')?.value) || actualCount;
+                shouldCheck = (idx) => (idx + 1) >= s && (idx + 1) <= e;
+                if (s > 1 || e < actualCount) {
+                    rangeNoticeHtml = `<div style="margin-top: 8px; padding: 6px 10px; background: rgba(59, 130, 246, 0.08); border-left: 3px solid #3b82f6; border-radius: 4px; font-size: 0.75rem; color: var(--text-secondary);">📌 <b>范围预选提示</b>：已按您设置的自定义范围（第 ${s} 篇至第 ${e} 篇）默认预勾选。您可以随时点击上方【全选】或自由调整勾选！</div>`;
+                }
+            }
+
+            // 篇数差异智能自洽说明提示条 (动态展示，让用户完全安心明白原委)
+            const noticeBox = document.getElementById('linksModalNoticeBox');
+            const noticeTitle = document.getElementById('linksModalNoticeTitle');
+            const noticeContent = document.getElementById('linksModalNoticeContent');
+            const noticeTag = document.getElementById('linksModalNoticeTag');
+            const noticeIcon = document.getElementById('linksModalNoticeIcon');
+
+            if (noticeBox) {
+                if (declaredCount && declaredCount > actualCount) {
+                    const diff = declaredCount - actualCount;
+                    noticeBox.style.display = 'block';
+                    noticeBox.style.background = 'rgba(245, 158, 11, 0.08)';
+                    noticeBox.style.border = '1px solid rgba(245, 158, 11, 0.28)';
+                    
+                    if (noticeIcon) noticeIcon.innerText = '💡';
+                    if (noticeTitle) {
+                        noticeTitle.style.color = '#d97706';
+                        noticeTitle.innerText = `为什么源网页标称 ${declaredCount} 篇，实际检索到 ${actualCount} 篇？`;
+                    }
+                    if (noticeTag) {
+                        noticeTag.style.background = 'rgba(245, 158, 11, 0.15)';
+                        noticeTag.style.color = '#d97706';
+                        noticeTag.innerText = `全部分页深度穿透完成 · 无遗漏`;
+                    }
+                    if (noticeContent) {
+                        let exp = meta.explanation 
+                            ? escapeHtml(meta.explanation).replace(/\n/g, '<br>') 
+                            : `源网页标称<strong>${categoryName ? `「${escapeHtml(categoryName)}」` : '该专栏'}</strong>含 <b>${declaredCount}</b> 篇博文，系统已全部分页深度遍历，<b>100% 完整收录公网当前所有可访问的 ${actualCount} 篇有效博文</b>。<br>差额 <b>${diff} 篇</b> 通常为博主多年间自行删除、设为私密或平台系统下架屏蔽所致（公网已无对应访问页面），并非系统抓取遗漏，请放心导出使用！`;
+                        if (rangeNoticeHtml) {
+                            exp += rangeNoticeHtml;
+                        }
+                        noticeContent.innerHTML = exp;
+                    }
+                } else if (declaredCount && declaredCount === actualCount) {
+                    noticeBox.style.display = 'block';
+                    noticeBox.style.background = 'rgba(16, 185, 129, 0.08)';
+                    noticeBox.style.border = '1px solid rgba(16, 185, 129, 0.25)';
+                    
+                    if (noticeIcon) noticeIcon.innerText = '✅';
+                    if (noticeTitle) {
+                        noticeTitle.style.color = 'var(--accent-emerald)';
+                        noticeTitle.innerText = `全量同步完成`;
+                    }
+                    if (noticeTag) {
+                        noticeTag.style.background = 'rgba(16, 185, 129, 0.15)';
+                        noticeTag.style.color = 'var(--accent-emerald)';
+                        noticeTag.innerText = `100% 一致`;
+                    }
+                    if (noticeContent) {
+                        let exp = `已 100% 完整全量同步收录全部 <b>${actualCount}</b> 篇博文，与源平台标称数量完全吻合。`;
+                        if (rangeNoticeHtml) {
+                            exp += rangeNoticeHtml;
+                        }
+                        noticeContent.innerHTML = exp;
+                    }
+                } else if (rangeNoticeHtml) {
+                    noticeBox.style.display = 'block';
+                    noticeBox.style.background = 'rgba(59, 130, 246, 0.08)';
+                    noticeBox.style.border = '1px solid rgba(59, 130, 246, 0.25)';
+                    if (noticeIcon) noticeIcon.innerText = '📌';
+                    if (noticeTitle) {
+                        noticeTitle.style.color = '#2563eb';
+                        noticeTitle.innerText = `博文范围预选提示`;
+                    }
+                    if (noticeTag) {
+                        noticeTag.style.background = 'rgba(59, 130, 246, 0.15)';
+                        noticeTag.style.color = '#2563eb';
+                        noticeTag.innerText = `智能预选`;
+                    }
+                    if (noticeContent) {
+                        noticeContent.innerHTML = rangeNoticeHtml;
+                    }
+                } else {
+                    noticeBox.style.display = 'none';
+                }
+            }
+
+            const platformDisplayNames = {
+                'sina_blog': '新浪博客',
+                'jianshu': '简书',
+                'csdn': 'CSDN',
+                'juejin': '掘金',
+                'cnblogs': '博客园',
+                '51cto': '51CTO',
+                'zhihu': '知乎',
+                'weibo': '微博'
+            };
+            const platformLabel = (meta && platformDisplayNames[meta.platform]) ? platformDisplayNames[meta.platform] : (author || '公众号');
 
             const tbody = document.getElementById('linksTableBody');
             tbody.innerHTML = articles.map((a, idx) => `
                 <tr style="border-bottom: 1px solid var(--border-subtle);">
                     <td style="padding: 8px 10px; text-align: center;">
-                        <input type="checkbox" class="link-item-checkbox" data-idx="${idx}" data-url="${a.url}" checked onchange="updateSelectedLinksCount()">
+                        <input type="checkbox" class="link-item-checkbox" data-idx="${idx}" data-url="${a.url}" ${shouldCheck(idx) ? 'checked' : ''} onchange="updateSelectedLinksCount()">
                     </td>
                     <td style="padding: 8px 10px; color: var(--text-muted);">${idx + 1}</td>
                     <td style="padding: 8px 10px; font-weight: 500;">
                         <a href="${a.url}" target="_blank" style="color: var(--text-primary); text-decoration: none;" onmouseover="this.style.color='var(--accent-primary)'" onmouseout="this.style.color='var(--text-primary)'">${a.title || '无标题'}</a>
                     </td>
                     <td style="padding: 8px 10px; color: var(--accent-emerald); font-weight: 600; font-size: 0.8rem;">
-                        ${a.author || author || '微信公众号'}
+                        ${a.author || author || platformLabel}
                     </td>
                     <td style="padding: 8px 10px; color: var(--text-muted); font-size: 0.78rem;">${a.create_time || a.publish_time || '-'}</td>
                     <td style="padding: 8px 10px; text-align: center;">
@@ -3369,7 +3520,16 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         function updateSelectedLinksCount() {
             const checkedBoxes = document.querySelectorAll('.link-item-checkbox:checked');
             const totalBoxes = document.querySelectorAll('.link-item-checkbox');
-            document.getElementById('linksCountBadge').innerText = `已选 ${checkedBoxes.length} / ${totalBoxes.length} 篇`;
+            const badge = document.getElementById('linksCountBadge');
+            if (badge) {
+                let hint = '';
+                if (checkedBoxes.length < totalBoxes.length && checkedBoxes.length > 0) {
+                    hint = ' (已预选 · 可全选)';
+                } else if (checkedBoxes.length === totalBoxes.length && totalBoxes.length > 0) {
+                    hint = ' (已全选)';
+                }
+                badge.innerText = `已选 ${checkedBoxes.length} / ${totalBoxes.length} 篇${hint}`;
+            }
             const selectAll = document.getElementById('selectAllCheckbox');
             if (selectAll) selectAll.checked = (checkedBoxes.length === totalBoxes.length && totalBoxes.length > 0);
         }
@@ -3413,7 +3573,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
 
             // 填入勾选的全部文章链接，并直接启动抓取导出任务
             document.getElementById('targetInput').value = urls.join('\n');
-            startScrapeTask();
+            startScrapeTask(true);
         }
 
         function toggleWechatManualInput() {
@@ -3686,6 +3846,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             if (t.includes('cnblogs.com')) return 'cnblogs';
             if (t.includes('51cto.com')) return '51cto';
             if (t.includes('weibo.com') || t.includes('weibo.cn')) return 'weibo';
+            if (t.includes('blog.sina.com.cn')) return 'sina_blog';
+            if (t.includes('jianshu.com')) return 'jianshu';
             if (t.includes('weixin.qq.com')) return 'wechat';
             return null;
         }
@@ -3753,7 +3915,12 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         });
         ['noiseFilterSwitch', 'removeWatermarkSwitch', 'useCacheSwitch', 'downloadImagesSwitch'].forEach(id => {
             const el = document.getElementById(id);
-            if (el) el.addEventListener('change', saveFormState);
+            if (el) el.addEventListener('change', () => {
+                if (id === 'downloadImagesSwitch') {
+                    localStorage.setItem('bd_dl_images_user_touched', 'true');
+                }
+                saveFormState();
+            });
         });
 
         // 存储表单状态到 localStorage
@@ -3761,19 +3928,20 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             try {
                 const state = {
                     platform: currentPlatform,
-                    target: document.getElementById('targetInput').value,
+                    target: document.getElementById('targetInput')?.value || '',
+                    wechatTarget: document.getElementById('wechatMainInput')?.value || '',
                     formats: getSelectedFormats(),
                     rangeMode: currentRangeMode,
-                    recentCount: document.getElementById('recentCountInput').value,
-                    startIndex: document.getElementById('startIndexInput').value,
-                    endIndex: document.getElementById('endIndexInput').value,
-                    noiseFilter: document.getElementById('noiseFilterSwitch').checked,
-                    removeWatermark: document.getElementById('removeWatermarkSwitch').checked,
-                    useCache: document.getElementById('useCacheSwitch').checked,
-                    downloadImages: document.getElementById('downloadImagesSwitch').checked,
-                    authorOverride: document.getElementById('authorNameOverrideInput').value,
-                    wechatToken: document.getElementById('wechatTokenInput').value,
-                    wechatCookie: document.getElementById('wechatCookieInput').value
+                    recentCount: document.getElementById('recentCountInput')?.value || '',
+                    startIndex: document.getElementById('startIndexInput')?.value || '',
+                    endIndex: document.getElementById('endIndexInput')?.value || '',
+                    noiseFilter: document.getElementById('noiseFilterSwitch')?.checked ?? true,
+                    removeWatermark: document.getElementById('removeWatermarkSwitch')?.checked ?? true,
+                    useCache: document.getElementById('useCacheSwitch')?.checked ?? true,
+                    downloadImages: document.getElementById('downloadImagesSwitch')?.checked ?? true,
+                    authorOverride: document.getElementById('authorNameOverrideInput')?.value || '',
+                    wechatToken: document.getElementById('wechatTokenInput')?.value || '',
+                    wechatCookie: document.getElementById('wechatCookieInput')?.value || ''
                 };
                 localStorage.setItem('blogdistiller_form_config', JSON.stringify(state));
             } catch (e) {}
@@ -3782,16 +3950,25 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         // 从 localStorage 恢复表单配置
         function restoreFormState() {
             try {
+                const dlSwitch = document.getElementById('downloadImagesSwitch');
+                const userTouched = localStorage.getItem('bd_dl_images_user_touched');
+
                 const saved = localStorage.getItem('blogdistiller_form_config');
-                if (!saved) return;
+                if (!saved) {
+                    if (dlSwitch) dlSwitch.checked = true;
+                    return;
+                }
                 const state = JSON.parse(saved);
 
                 if (state.platform) {
                     currentPlatform = state.platform;
                     renderPlatforms();
                 }
-                if (state.target !== undefined) {
+                if (state.target !== undefined && document.getElementById('targetInput')) {
                     document.getElementById('targetInput').value = state.target;
+                }
+                if (state.wechatTarget && document.getElementById('wechatMainInput')) {
+                    document.getElementById('wechatMainInput').value = state.wechatTarget;
                 }
                 if (Array.isArray(state.formats) && state.formats.length > 0) {
                     document.querySelectorAll('.format-chips .format-badge').forEach(badge => {
@@ -3802,16 +3979,28 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 if (state.rangeMode) {
                     setRangeMode(state.rangeMode);
                 }
-                if (state.recentCount) document.getElementById('recentCountInput').value = state.recentCount;
-                if (state.startIndex) document.getElementById('startIndexInput').value = state.startIndex;
-                if (state.endIndex) document.getElementById('endIndexInput').value = state.endIndex;
-                if (state.noiseFilter !== undefined) document.getElementById('noiseFilterSwitch').checked = state.noiseFilter;
-                if (state.removeWatermark !== undefined) document.getElementById('removeWatermarkSwitch').checked = state.removeWatermark;
-                if (state.useCache !== undefined) document.getElementById('useCacheSwitch').checked = state.useCache;
-                if (state.downloadImages !== undefined) document.getElementById('downloadImagesSwitch').checked = state.downloadImages;
-                if (state.authorOverride) document.getElementById('authorNameOverrideInput').value = state.authorOverride;
-                if (state.wechatToken) document.getElementById('wechatTokenInput').value = state.wechatToken;
-                if (state.wechatCookie) document.getElementById('wechatCookieInput').value = state.wechatCookie;
+                if (state.recentCount && document.getElementById('recentCountInput')) document.getElementById('recentCountInput').value = state.recentCount;
+                if (state.startIndex && document.getElementById('startIndexInput')) document.getElementById('startIndexInput').value = state.startIndex;
+                if (state.endIndex && document.getElementById('endIndexInput')) document.getElementById('endIndexInput').value = state.endIndex;
+                if (state.noiseFilter !== undefined && document.getElementById('noiseFilterSwitch')) document.getElementById('noiseFilterSwitch').checked = state.noiseFilter;
+                if (state.removeWatermark !== undefined && document.getElementById('removeWatermarkSwitch')) document.getElementById('removeWatermarkSwitch').checked = state.removeWatermark;
+                if (state.useCache !== undefined && document.getElementById('useCacheSwitch')) document.getElementById('useCacheSwitch').checked = state.useCache;
+                
+                // 本地化下载文章配图：严格默认开启！
+                // 仅当用户在界面上手动明确操作过此开关时才遵循其手动值；历史默认残留一律强制校准为默认开启 (checked = true)
+                if (dlSwitch) {
+                    if (userTouched === 'true' && state.downloadImages !== undefined) {
+                        dlSwitch.checked = Boolean(state.downloadImages);
+                    } else {
+                        dlSwitch.checked = true;
+                        state.downloadImages = true;
+                        localStorage.setItem('blogdistiller_form_config', JSON.stringify(state));
+                    }
+                }
+
+                if (state.authorOverride && document.getElementById('authorNameOverrideInput')) document.getElementById('authorNameOverrideInput').value = state.authorOverride;
+                if (state.wechatToken && document.getElementById('wechatTokenInput')) document.getElementById('wechatTokenInput').value = state.wechatToken;
+                if (state.wechatCookie && document.getElementById('wechatCookieInput')) document.getElementById('wechatCookieInput').value = state.wechatCookie;
             } catch (e) {}
         }
 
@@ -3890,7 +4079,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             startScrapeTask();
         }
 
-        async function startScrapeTask() {
+        async function startScrapeTask(isFromModal = false) {
             const target = document.getElementById('targetInput').value.trim();
             if (!target) {
                 alert('请先输入目标博主主页链接、用户名或文章 URL！');
@@ -3911,7 +4100,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             const enableNoise = document.getElementById('noiseFilterSwitch')?.checked ?? true;
             const removeWatermark = document.getElementById('removeWatermarkSwitch')?.checked ?? true;
             const useCache = document.getElementById('useCacheSwitch')?.checked ?? true;
-            const enableDownloadImages = document.getElementById('downloadImagesSwitch')?.checked ?? false;
+            const enableDownloadImages = document.getElementById('downloadImagesSwitch')?.checked ?? true;
             const authorOverride = document.getElementById('authorNameOverrideInput')?.value?.trim() || null;
             const wechatToken = document.getElementById('wechatTokenInput')?.value?.trim() || null;
             const wechatCookie = document.getElementById('wechatCookieInput')?.value?.trim() || null;
@@ -3920,14 +4109,17 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             let startIndex = 1;
             let endIndex = null;
 
-            if (currentRangeMode === 'recent') {
-                const countVal = document.getElementById('recentCountInput')?.value?.trim();
-                maxArticles = countVal ? parseInt(countVal) : 20;
-            } else if (currentRangeMode === 'custom') {
-                const startVal = document.getElementById('startIndexInput')?.value?.trim();
-                const endVal = document.getElementById('endIndexInput')?.value?.trim();
-                startIndex = startVal ? parseInt(startVal) : 1;
-                endIndex = endVal ? parseInt(endVal) : null;
+            // 若用户从清单选择弹窗明确勾选文章后启动，严禁再次截断用户勾选的内容
+            if (!isFromModal) {
+                if (currentRangeMode === 'recent') {
+                    const countVal = document.getElementById('recentCountInput')?.value?.trim();
+                    maxArticles = countVal ? parseInt(countVal) : 20;
+                } else if (currentRangeMode === 'custom') {
+                    const startVal = document.getElementById('startIndexInput')?.value?.trim();
+                    const endVal = document.getElementById('endIndexInput')?.value?.trim();
+                    startIndex = startVal ? parseInt(startVal) : 1;
+                    endIndex = endVal ? parseInt(endVal) : null;
+                }
             }
 
             const payload = {

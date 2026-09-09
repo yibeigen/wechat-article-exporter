@@ -38,24 +38,41 @@ class MarkdownExporter(BaseExporter):
             md_lines.append(f"- [{idx}. {clean_title}](#{anchor}){date_info}")
         md_lines.append("\n---\n")
         
-        # 3. 逐篇文章内容拼装
+        # 3. 逐篇文章内容拼装 (严格对齐用户标准格式：标题 -> 标签 -> 原文 -> 原文链接 -> 正文)
         for idx, art in enumerate(articles, 1):
             anchor = re.sub(r"[^\w\u4e00-\u9fa5\-]+", "-", f"{idx}-{art.title}").strip("-").lower()
             md_lines.append(f'<a id="{anchor}"></a>\n')
             md_lines.append(f"## {idx}. {art.title}\n")
             
-            # YAML Frontmatter 元数据块 (方便 RAG 和知识库切分)
-            md_lines.append("```yaml")
-            md_lines.append(f"title: {art.title}")
-            md_lines.append(f"author: {art.author or self.author_name}")
-            md_lines.append(f"date: {art.publish_time}")
-            md_lines.append(f"platform: {art.platform or self.platform}")
-            md_lines.append(f"url: {art.url}")
-            md_lines.append(f"curator: 微信公众号【{BRAND_OFFICIAL_ACCOUNT}】")
-            md_lines.append("```\n")
+            # 标准元数据栏 (横向标签 + 原文信息 + 原文链接)
+            if art.tags:
+                tags_str = "   ".join([f"#{t.strip().lstrip('#')}" for t in art.tags if t.strip()])
+                md_lines.append(f"**🏷️ 标签**：{tags_str}\n")
             
-            # 文章正文
-            md_lines.append(art.content_markdown)
+            orig_info = f"{art.platform or self.platform}  ·  {art.author or self.author_name}  ·  {art.publish_time or '未知时间'}"
+            md_lines.append(f"**📰 原文**：{orig_info}\n")
+            
+            if art.url:
+                md_lines.append(f"**🔗 原文链接**：{art.url}\n")
+            
+            md_lines.append("\n---\n")
+            
+            # 正文内容清理 (剔除开篇重复的标题行)
+            raw_body = art.content_markdown or ""
+            body_lines = raw_body.split("\n")
+            b_idx = 0
+            while b_idx < len(body_lines):
+                line_str = body_lines[b_idx].strip()
+                if not line_str:
+                    b_idx += 1
+                    continue
+                no_hash = re.sub(r'^#+\s*', '', line_str).strip()
+                if no_hash.lower() == art.title.strip().lower() or line_str.startswith(art.title):
+                    b_idx += 1
+                    continue
+                break
+            clean_body = "\n".join(body_lines[b_idx:]).strip()
+            md_lines.append(clean_body)
 
             # 互动数据与精选留言
             stats = []

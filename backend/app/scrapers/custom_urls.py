@@ -75,6 +75,14 @@ class CustomURLsScraper(BaseScraper):
                 from app.scrapers.weibo import WeiboScraper
                 scraper = WeiboScraper(url, enable_noise_filter=self.enable_noise_filter, remove_image_watermark=self.remove_image_watermark)
                 return await scraper.scrape_article_detail(article_meta)
+            elif "sina.com.cn" in u_lower or "blog.sina.com.cn" in u_lower:
+                from app.scrapers.sina_blog import SinaBlogScraper
+                scraper = SinaBlogScraper(url, enable_noise_filter=self.enable_noise_filter, remove_image_watermark=self.remove_image_watermark)
+                return await scraper.scrape_article_detail(article_meta)
+            elif "jianshu.com" in u_lower:
+                from app.scrapers.jianshu import JianshuScraper
+                scraper = JianshuScraper(url, enable_noise_filter=self.enable_noise_filter, remove_image_watermark=self.remove_image_watermark)
+                return await scraper.scrape_article_detail(article_meta)
         except Exception:
             pass
 
@@ -88,18 +96,23 @@ class CustomURLsScraper(BaseScraper):
             if resp.status_code == 200:
                 soup = BeautifulSoup(resp.text, "lxml")
                 
+                # 清除明显属于导航、页脚、侧边栏的干扰区域
+                for noise in soup.select("header, footer, nav, aside, .header, .footer, .nav, .sidebar, #header, #footer, #topbar, .topbar"):
+                    noise.decompose()
+
                 # 寻找 h1 标题
                 h1 = soup.find("h1")
                 if h1 and h1.text.strip():
                     title = h1.text.strip()
                 elif soup.title and soup.title.text.strip():
-                    title = soup.title.text.split(" - ")[0].split(" | ")[0].strip()
+                    title = re.sub(r'(_新浪博客|_CSDN博客| - 博客园| - 简书| - 知乎| - 51CTO博客).*$', '', soup.title.text.strip())
+                    title = title.split(" - ")[0].split(" | ")[0].strip()
                     
                 # 寻找主文章区域
                 content_tag = (
                     soup.find("article")
                     or soup.find("main")
-                    or soup.select_one(".post-content, .article-content, #content, .entry-content, .markdown-body")
+                    or soup.select_one(".post-content, .article-content, #content, .entry-content, .markdown-body, #articlebody, .articalContent")
                 )
                 raw_html = str(content_tag) if content_tag else resp.text
                 

@@ -3,8 +3,11 @@ import html
 import base64
 import mimetypes
 import asyncio
+import os
+import shutil
+import subprocess
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 import datetime
 from bs4 import BeautifulSoup
 import httpx
@@ -12,6 +15,26 @@ import httpx
 from app.exporters.base import BaseExporter
 from app.models import ArticleItem
 from app.config import BRAND_OFFICIAL_ACCOUNT, BRAND_FOOTER_NOTE, BRAND_DISCLAIMER
+
+
+def find_system_browser() -> Optional[str]:
+    """智能查找系统中可用的 Chromium 内核浏览器 (优先 Edge, 其次 Chrome)"""
+    candidates = [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        shutil.which("msedge"),
+        shutil.which("chrome"),
+        shutil.which("google-chrome"),
+        shutil.which("chromium"),
+    ]
+    for c in candidates:
+        if c and Path(c).exists():
+            return str(Path(c).resolve())
+    return None
 
 
 def _get_platform_referer(url: str) -> Dict[str, str]:
@@ -77,7 +100,7 @@ class PDFExporter(BaseExporter):
                 except Exception as e:
                     print(f"PDF 下载图片转 Base64 失败 [{u}]: {e}")
 
-        async with httpx.AsyncClient(verify=False) as client:
+        async with httpx.AsyncClient(verify=False, trust_env=False) as client:
             tasks = [fetch_one(client, u) for u in img_urls]
             await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -97,28 +120,44 @@ class PDFExporter(BaseExporter):
             safe_title = html.escape(art.title)
             safe_author = html.escape(art.author or self.author_name)
             safe_time = html.escape(art.publish_time)
+            safe_url = html.escape(art.url or "")
 
-            # 替换正文中的图片 src 为 Base64
+            # 标签横向展示
+            tags_html = ""
+            if art.tags:
+                tag_spans = "".join([f'<span class="tag-badge">#{html.escape(t.strip().lstrip("#"))}</span>' for t in art.tags if t.strip()])
+                tags_html = f'<div class="chapter-tags">{tag_spans}</div>'
+
+            # 替换正文中的图片 src 为 Base64 并剔除开头重复的标题
             content_html = art.content_html
-            if base64_map and content_html:
+            if content_html:
                 soup = BeautifulSoup(content_html, "lxml")
-                for img in soup.find_all("img"):
-                    src = img.get("src")
-                    if src and src in base64_map:
-                        img["src"] = base64_map[src]
-                    elif img.get("data-src") and img.get("data-src") in base64_map:
-                        img["src"] = base64_map[img.get("data-src")]
+                # 剔除正文头部重复的标题
+                for top_h in soup.find_all(["h1", "h2", "h3"]):
+                    if top_h.text.strip().lower() == art.title.strip().lower():
+                        top_h.decompose()
+                        break
+                if base64_map:
+                    for img in soup.find_all("img"):
+                        src = img.get("src")
+                        if src and src in base64_map:
+                            img["src"] = base64_map[src]
+                        elif img.get("data-src") and img.get("data-src") in base64_map:
+                            img["src"] = base64_map[img.get("data-src")]
                 content_html = soup.body.decode_contents() if soup.body else str(soup)
+
+            url_row = f'<div class="chapter-url">🔗 <strong>原文链接：</strong><a href="{safe_url}" style="color: #0284c7; text-decoration: none;">{safe_url}</a></div>' if safe_url else ''
 
             article_htmls.append(f"""
                 <div class="pdf-chapter">
                     <div class="chapter-header">
-                        <div class="badge">第 {idx} 篇 · {art.platform or self.platform}</div>
+                        <div class="badge">第 {idx} 篇 · {html.escape(art.platform or self.platform)}</div>
                         <h1 class="chapter-title">{safe_title}</h1>
+                        {tags_html}
                         <div class="chapter-meta">
-                            <span>作者：{safe_author}</span>
-                            <span>发布时间：{safe_time or '未知'}</span>
+                            <span>📰 <strong>原文：</strong>{html.escape(art.platform or self.platform)} · {safe_author} · {safe_time or '未知时间'}</span>
                         </div>
+                        {url_row}
                     </div>
                     <div class="chapter-body markdown-body">
                         {content_html}
@@ -236,11 +275,34 @@ class PDFExporter(BaseExporter):
             line-height: 1.3;
             margin-bottom: 8px;
         }}
+        .chapter-tags {{
+            margin-top: 4px;
+            margin-bottom: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }}
+        .tag-badge {{
+            display: inline-block;
+            font-size: 9pt;
+            color: #0284c7;
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            padding: 2px 10px;
+            border-radius: 4px;
+            font-weight: 500;
+        }}
         .chapter-meta {{
             font-size: 9pt;
             color: #64748b;
             display: flex;
             gap: 16px;
+        }}
+        .chapter-url {{
+            font-size: 9pt;
+            color: #64748b;
+            margin-top: 6px;
+            word-break: break-all;
         }}
         .markdown-body p {{ margin-bottom: 12px; text-align: justify; }}
         .markdown-body h1, .markdown-body h2 {{ font-size: 14pt; margin-top: 16px; margin-bottom: 8px; color: #1e293b; }}
@@ -318,10 +380,38 @@ class PDFExporter(BaseExporter):
 </body>
 </html>
 """
-        # 保存离线排版 HTML
+        # 保存离线排版 HTML 中间文件
         fallback_html_file.write_text(pdf_html, encoding="utf-8")
 
-        # 使用同步 Playwright 渲染 PDF
+        # 优先使用系统原生 Edge / Chrome 无头打印 (毫秒级极速渲染、无需庞大依赖)
+        browser_path = find_system_browser()
+        if browser_path:
+            def _render_via_cli(b_path: str, src_html: Path, target_pdf: Path) -> bool:
+                try:
+                    cmd = [
+                        b_path,
+                        "--headless",
+                        "--disable-gpu",
+                        "--no-pdf-header-footer",
+                        f"--print-to-pdf={str(target_pdf.resolve())}",
+                        str(src_html.resolve())
+                    ]
+                    res = subprocess.run(cmd, capture_output=True, timeout=90)
+                    return res.returncode == 0 and target_pdf.exists() and target_pdf.stat().st_size > 1000
+                except Exception as e:
+                    print(f"原生浏览器打印 PDF 异常: {e}")
+                    return False
+
+            cli_success = await asyncio.to_thread(_render_via_cli, browser_path, fallback_html_file, output_file)
+            if cli_success and output_file.exists() and output_file.stat().st_size > 1000:
+                # 成功生成 PDF，清理临时 HTML 文件，杜绝重复 HTML 残留
+                try:
+                    fallback_html_file.unlink()
+                except Exception:
+                    pass
+                return output_file
+
+        # 次选：同步 Playwright 渲染 (如果环境中有安装 playwright)
         def _render_pdf_sync(html_text: str, target_pdf: Path) -> bool:
             try:
                 from playwright.sync_api import sync_playwright
@@ -350,6 +440,10 @@ class PDFExporter(BaseExporter):
 
         success = await asyncio.to_thread(_render_pdf_sync, pdf_html, output_file)
         if success and output_file.exists() and output_file.stat().st_size > 1000:
+            try:
+                fallback_html_file.unlink()
+            except Exception:
+                pass
             return output_file
 
         return fallback_html_file

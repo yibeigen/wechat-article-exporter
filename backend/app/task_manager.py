@@ -15,6 +15,8 @@ from app.scrapers.cto51 import CTO51Scraper
 from app.scrapers.zhihu import ZhihuScraper
 from app.scrapers.weibo import WeiboScraper
 from app.scrapers.wechat import WeChatScraper
+from app.scrapers.sina_blog import SinaBlogScraper
+from app.scrapers.jianshu import JianshuScraper
 from app.scrapers.custom_urls import CustomURLsScraper
 
 from app.exporters.md_exporter import MarkdownExporter
@@ -121,6 +123,10 @@ class TaskManager:
             return PlatformEnum.CTO51
         elif "weibo.com" in t or "weibo.cn" in t:
             return PlatformEnum.WEIBO
+        elif "blog.sina.com.cn" in t:
+            return PlatformEnum.SINA_BLOG
+        elif "jianshu.com" in t:
+            return PlatformEnum.JIANSHU
         elif "weixin.qq.com" in t:
             return PlatformEnum.WECHAT
         return fallback
@@ -139,6 +145,10 @@ class TaskManager:
             return ZhihuScraper(request.target, request.enable_noise_filter, request.max_articles, remove_image_watermark=request.remove_image_watermark)
         elif platform == PlatformEnum.WEIBO:
             return WeiboScraper(request.target, request.enable_noise_filter, request.max_articles, remove_image_watermark=request.remove_image_watermark)
+        elif platform == PlatformEnum.SINA_BLOG:
+            return SinaBlogScraper(request.target, request.enable_noise_filter, request.max_articles, remove_image_watermark=request.remove_image_watermark)
+        elif platform == PlatformEnum.JIANSHU:
+            return JianshuScraper(request.target, request.enable_noise_filter, request.max_articles, remove_image_watermark=request.remove_image_watermark)
         elif platform == PlatformEnum.WECHAT:
             return WeChatScraper(
                 request.target,
@@ -199,6 +209,13 @@ class TaskManager:
 
             article_list = await scraper.get_article_list(list_progress_cb)
             
+            if hasattr(scraper, "declared_count") and scraper.declared_count is not None:
+                task.declared_count = scraper.declared_count
+            if hasattr(scraper, "category_name") and scraper.category_name:
+                task.category_name = scraper.category_name
+            if hasattr(scraper, "explanation") and scraper.explanation:
+                task.explanation = scraper.explanation
+
             if task.is_cancelled:
                 task.status = TaskStatusEnum.CANCELLED
                 await self._broadcast(task_id)

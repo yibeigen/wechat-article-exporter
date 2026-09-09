@@ -21,7 +21,7 @@ def clean_html_content(raw_html: str, enable_noise_filter: bool = True, remove_w
     for tag in soup(["script", "style", "iframe", "noscript", "svg", "button", "input", "form"]):
         tag.decompose()
 
-    # 移除常见的广告和分享容器选择器 (对齐公号三刀逆向去噪规则库)
+    # 移除常见的广告、分享、页眉页脚与博客组件容器选择器
     ad_selectors = [
         ".article-banner", ".advertisement", ".ad-container", ".reward-box",
         ".share-box", ".like-box", ".qr-code", ".wx-qrcode", ".copyright-box",
@@ -30,7 +30,12 @@ def clean_html_content(raw_html: str, enable_noise_filter: bool = True, remove_w
         ".qr_code_pc_outer", "#js_pc_qr_code", "#js_bottom_share_area",
         ".reward_area", ".rich_media_area_extra", "#js_sponsor_ad_area",
         ".rich_media_tool", "#js_toobar3", ".share_dialog", "#js_profile_qrcode",
-        ".like_comment_wording", "#js_like_btn", "#js_view_source"
+        ".like_comment_wording", "#js_like_btn", "#js_view_source",
+        ".shareUp", ".articalfrontback", ".allComm", "#comment_area", ".blog_vote",
+        ".turnBoxHide", ".SG_j_linedot1", ".articalTag", ".blog_tag", ".tag_box",
+        "#comp_901", "#comp_902", "#comp_903", "#comp_904", ".sinablogtoolbar",
+        "#sinablogtoolbar", ".blognav", ".topbar", ".bloghead", ".sinablogfooter",
+        ".feed_footer", ".post-footer", ".article-footer", ".share-group", ".social-share"
     ]
     for selector in ad_selectors:
         for tag in soup.select(selector):
@@ -40,16 +45,18 @@ def clean_html_content(raw_html: str, enable_noise_filter: bool = True, remove_w
     for img in soup.find_all("img"):
         src = (img.get("src", "") or img.get("data-src", "") or "").lower()
         img_class = " ".join(img.get("class", [])) if isinstance(img.get("class"), list) else (img.get("class") or "")
-        if "url-icon" in img_class or "h5.sinaimg.cn" in src or "timeline_card" in src or "small_super" in src or "sinaimg.cn/upload" in src:
-            img.decompose()
+        if "url-icon" in img_class or "sg_icon" in img_class.lower() or "h5.sinaimg.cn" in src or "timeline_card" in src or "small_super" in src or "sinaimg.cn/upload" in src or "sg_trans.gif" in src:
+            if not img.get("real_src"):
+                img.decompose()
 
     # 2. 修复懒加载图片与智能水印溯源
     image_urls = []
     for img in soup.find_all("img"):
         if remove_watermark:
-            # 智能去水印模式：优先提取平台无水印原始高清母图 (data-original / data-actualsrc 等)
+            # 智能去水印模式：优先提取平台无水印原始高清母图 (data-original / data-actualsrc / real_src 等)
             src = (
-                img.get("data-original")
+                img.get("real_src")
+                or img.get("data-original")
                 or img.get("data-original-src")
                 or img.get("data-actualsrc")
                 or img.get("data-src")

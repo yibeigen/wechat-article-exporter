@@ -31,6 +31,8 @@ data/albums/
 *.cookie
 cookies.json
 tokens.json
+cache.db
+*.db
 
 # ----------------------------------------------
 # 4. 本地下载输出与临时缓存
@@ -41,6 +43,8 @@ output/
 output/*
 scratch/
 scratch/*
+tools/**/cached_articles_*.json
+tools/**/*.json
 *.log
 logs/
 

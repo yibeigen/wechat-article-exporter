@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }} - 新浪博客电脑端原版离线知识库</title>
+  <style>
+    /* ========================================================
+       新浪博客经典 Theme 30_1 像素级复刻样式表 (Authentic 1:1)
+       ======================================================== */
+    :root {
+      --article-font-size: 16px;
+      --article-font-weight: normal;
+      --article-font-family: "Microsoft YaHei", simsun, "宋体", Arial, sans-serif;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #BCD3E5;
+      font-family: simsun, "宋体", "Microsoft YaHei", Arial, sans-serif;
+      color: #464646;
+      font-size: 12px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    a {
+      color: #3E73A0;
+      text-decoration: none;
+    }
+    a:hover {
+      color: #cc0000;
+      text-decoration: underline;
+    }
+
+    /* 顶部新浪标准条 (Sina Top Nav) */
+    .sinabloghead_top {
+      height: 28px;
+      line-height: 28px;
+      background: #333333;
+      color: #999999;
+      font-size: 12px;
+      padding: 0 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .sinabloghead_top a {
+      color: #cccccc;
+      margin-right: 12px;
+    }
+    .sinabloghead_top a:hover {
+      color: #ffffff;
+      text-decoration: none;
+    }
+    .top-offline-badge {
+      background: #0284c7;
+      color: #ffffff;
+      padding: 2px 8px;
+      border-radius: 2px;
+      font-size: 11px;
+    }
+
+    /* 新浪博客大框架 (950px 居中标准版心) */
+    .sinablogb {
+      width: 950px;
+      margin: 0 auto 30px;
+      position: relative;
+    }
+
+    /* 经典头图 Banner (Theme 30_1: 蓝天白云原版头图, 高度 265px) */
+    .sinabloghead {
+      height: 265px;
+      position: relative;
+      background-image: url('{{ banner_b64 }}');
+      background-repeat: no-repeat;
+      background-position: center top;
+      background-color: #BCD3E5;
+    }
+    .blogtoparea {
+      position: absolute;
+      top: 43%;
+      left: 120px;
+    }
+    .blogtitle {
+      font-family: "Microsoft YaHei", simsun, "宋体", sans-serif;
+      font-size: 26px;
+      font-weight: bold;
+      color: #ffffff;
+      text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.4);
+      margin-bottom: 4px;
+    }
+    .blogtitle a {
+      color: #ffffff;
+    }
+    .blogtitle a:hover {
+      color: #ffffff;
+      text-decoration: none;
+    }
+    .bloglink {
+      font-size: 12px;
+      color: #ffffff;
+      opacity: 0.9;
+    }
+    .bloglink a {
+      color: #ffffff;
+    }
+
+    /* 经典导航条 (位置在头图 75.5%, 宽 238px, 高 34px) */
+    .blognav {
+      position: absolute;
+      top: 75.5%;
+      left: 120px;
+      width: 238px;
+      height: 34px;
+      background-image: url('{{ navbg_b64 }}');
+      background-repeat: no-repeat;
+    }
+    .blognavInfo {
+      position: absolute;
+      top: 9px;
+      left: 3px;
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+    .blognav-item {
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: bold;
+      color: #4b7290;
+      cursor: pointer;
+      display: inline-block;
+      user-select: none;
+      text-decoration: none;
+    }
+    .blognav-item:hover {
+      color: #2c597c;
+      text-decoration: underline;
+    }
+    .blognav-item.on {
+      color: #2c597c;
+      font-weight: bold;
+    }
+    .blognav-sep {
+      color: #a4c2db;
+      font-size: 11px;
+    }
+
+    /* 主体双栏容器 (950px: 左 210px + 右 730px + 间距 10px) */
+    .sinablogbody {
+      width: 950px;
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    /* ========================================================
+       左侧栏 (#column_1: 210px 标准新浪博客侧栏 .SG_colW21)
+       ======================================================== */
+    #column_1 {
+      width: 210px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* 经典组件框架 (.SG_conn) */
+    .SG_conn {
+      background: #ffffff;
+      border: 1px solid #A9BDCE;
+      margin-bottom: 0;
+    }
+    .SG_colW21 .SG_connHead {
+      background-image: url('{{ modelhead_b64 }}');
+      background-position: 210px 0;
+      height: 26px;
+      line-height: 26px;
+      padding: 0 10px;
+      overflow: hidden;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .SG_colW73 .SG_connHead {
+      background-image: url('{{ modelhead_b64 }}');
+      background-position: 1450px 0;
+      height: 26px;
+      line-height: 26px;
+      padding: 0 10px;
+      overflow: hidden;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .SG_colW21 .SG_connFoot {
+      background-image: url('{{ modelfoot_b64 }}');
+      background-position: 210px 0;
+      height: 1px;
+      overflow: hidden;
+    }
+    .SG_colW73 .SG_connFoot {
+      background-image: url('{{ modelfoot_b64 }}');
+      background-position: 1450px 0;
+      height: 1px;
+      overflow: hidden;
+    }
+    .SG_connHead .title {
+      font-size: 12px;
+      font-weight: bold;
+      color: #49687F;
+    }
+    .SG_connHead .fontSize {
+      font-size: 12px;
+      color: #747474;
+    }
+    .SG_connHead .fontSize a {
+      color: #3E73A0;
+      margin-left: 2px;
+      text-decoration: none;
+    }
+    .SG_connHead .fontSize a:hover {
+      text-decoration: underline;
+    }
+    .SG_connHead .fontSize strong {
+      color: #cc0000;
+      font-weight: bold;
+      margin-left: 2px;
+    }
+
+    /* 个人资料模块 (module_901) */
+    .info {
+      padding: 12px 10px;
+      text-align: center;
+    }
+    .info_img {
+      margin-bottom: 8px;
+    }
+    .info_img img {
+      width: 170px;
+      height: 170px;
+      border: 1px solid #C8D8E5;
+      padding: 2px;
+      background: #ffffff;
+      object-fit: cover;
+      display: block;
+      margin: 0 auto;
+    }
+    .info_nm {
+      font-weight: bold;
+      font-size: 14px;
+      color: #3E73A0;
+      margin: 6px 0;
+    }
+    .info_btn_row {
+      margin: 8px 0;
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn_sina {
+      display: inline-block;
+      padding: 2px 10px;
+      border: 1px solid #A9BDCE;
+      background: #EEF4FB;
+      color: #333333;
+      font-size: 12px;
+      border-radius: 2px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .btn_sina:hover {
+      background: #DCEAF6;
+      color: #cc0000;
+      text-decoration: none;
+    }
+    .info_stats {
+      font-size: 12px;
+      color: #747474;
+      line-height: 1.6;
+      border-top: 1px dotted #A9BDCE;
+      padding-top: 6px;
+      margin-top: 6px;
+      text-align: left;
+    }
+
+    /* 即时搜索框与快速选篇列表 */
+    .sidebar-search-box {
+      padding: 8px 10px;
+      background: #F8FAFD;
+      border-bottom: 1px solid #E1EAF2;
+    }
+    .search-input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .search-input-wrap input {
+      width: 100%;
+      height: 24px;
+      padding: 2px 20px 2px 6px;
+      border: 1px solid #A9BDCE;
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+    }
+    .search-input-wrap input:focus {
+      border-color: #3E73A0;
+    }
+    .search-clear {
+      position: absolute;
+      right: 5px;
+      background: transparent;
+      border: none;
+      color: #999;
+      cursor: pointer;
+      font-size: 12px;
+      display: none;
+    }
+    .search-meta-row {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #747474;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .sidebar-article-list {
+      list-style: none;
+      max-height: 520px;
+      overflow-y: auto;
+    }
+    .sidebar-article-list::-webkit-scrollbar {
+      width: 5px;
+    }
+    .sidebar-article-list::-webkit-scrollbar-thumb {
+      background: #A9BDCE;
+      border-radius: 2px;
+    }
+    .sidebar-article-item {
+      padding: 6px 10px;
+      border-bottom: 1px dotted #DCE6F0;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1.4;
+      background-image: url('{{ dot_b64 }}');
+      background-repeat: no-repeat;
+      background-position: 8px 10px;
+      padding-left: 20px;
+    }
+    .sidebar-article-item:hover {
+      background-color: #F0F6FC;
+      color: #cc0000;
+    }
+    .sidebar-article-item.active {
+      background-color: #E4EFF8;
+      border-left: 3px solid #3E73A0;
+      color: #2C597C;
+      font-weight: bold;
+      padding-left: 17px;
+    }
+    .sidebar-article-item .item-txt {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .sidebar-article-item .item-time {
+      font-size: 11px;
+      color: #999999;
+      font-weight: normal;
+    }
+    .hl-keyword {
+      background: #FEF08A;
+      color: #854D0E;
+      padding: 0 1px;
+      font-weight: bold;
+    }
+
+    /* 分类专栏模块 (module_7) */
+    .cat-menu-list {
+      padding: 8px 10px;
+      list-style: none;
+      font-size: 12px;
+    }
+    .cat-menu-item {
+      padding: 5px 0;
+      border-bottom: 1px dotted #E8EFF6;
+      display: flex;
+      justify-content: space-between;
+      background-image: url('{{ dot_b64 }}');
+      background-repeat: no-repeat;
+      background-position: left center;
+      padding-left: 12px;
+    }
+
+    /* ========================================================
+       右侧栏 (#column_2: 730px 标准新浪博客主内容区 .SG_colW73)
+       ======================================================== */
+    #column_2 {
+      width: 730px;
+      flex-grow: 1;
+    }
+
+    /* ----------------------------------------------------
+       视图 A: 【具体文章页】 (1:1 还原 blog_xxx.html)
+       ---------------------------------------------------- */
+    #articleViewContainer {
+      display: block;
+    }
+    .artical {
+      background: #ffffff;
+      padding-bottom: 25px;
+    }
+    .articalTitle {
+      clear: both;
+      padding: 16px 20px 8px;
+      line-height: 22px;
+    }
+    .articalTitle .titName {
+      font-family: "Microsoft YaHei", simsun, "宋体", sans-serif;
+      font-size: 18px;
+      font-weight: 300;
+      color: #3E73A0;
+      display: inline;
+      line-height: 26px;
+    }
+    .articalTitle .time {
+      color: #747474;
+      font-size: 12px;
+      margin-left: 8px;
+      font-weight: normal;
+      white-space: nowrap;
+    }
+
+    /* 标签与分类行 (1:1 还原新浪博客经典两端表格) */
+    .articalTag {
+      margin: 8px 20px 15px;
+      padding: 5px 0;
+      border-top: 1px dotted #ccc;
+      border-bottom: 1px dotted #ccc;
+      font-size: 12px;
+      color: #464646;
+      line-height: 20px;
+    }
+    .articalTag table {
+      width: 100%;
+      border-collapse: collapse;
+      border: none;
+    }
+    .articalTag td {
+      border: none;
+      padding: 0;
+      font-size: 12px;
+      vertical-align: middle;
+    }
+    .articalTag .blog_tag {
+      text-align: left;
+    }
+    .articalTag .blog_tag h3 {
+      display: inline;
+      font-size: 12px;
+      font-weight: normal;
+      margin-right: 8px;
+    }
+    .articalTag .blog_tag h3 a {
+      color: #3E73A0;
+    }
+    .articalTag .blog_class {
+      text-align: right;
+      white-space: nowrap;
+    }
+    .articalTag .blog_class a {
+      color: #3E73A0;
+    }
+
+    /* 正文主体排版与可控字号/粗细/字体族 */
+    .articalContent,
+    .articalContentInner {
+      width: 690px;
+      margin: 0 auto;
+      padding: 15px 0 30px;
+      color: #333333;
+      word-break: break-word;
+      min-height: 450px;
+    }
+    .articalContent,
+    .articalContent *,
+    .articalContentInner,
+    .articalContentInner * {
+      font-size: var(--article-font-size) !important;
+      line-height: 180% !important;
+      font-weight: var(--article-font-weight) !important;
+      font-family: var(--article-font-family) !important;
+    }
+    .articalContent b,
+    .articalContent strong,
+    .articalContent b *,
+    .articalContent strong *,
+    .articalContentInner b,
+    .articalContentInner strong,
+    .articalContentInner b *,
+    .articalContentInner strong * {
+      font-weight: 900 !important;
+      color: #000000 !important;
+    }
+    .articalContent p {
+      margin-bottom: 1.1em;
+      text-indent: 2em;
+    }
+    .articalContent img {
+      display: block;
+      margin: 15px auto;
+      max-width: 670px;
+      border: 1px solid #dcdcdc;
+      padding: 3px;
+      background: #ffffff;
+    }
+
+    /* 经典喜欢/点赞组件 */
+    .shareUp {
+      margin: 15px 20px;
+      text-align: center;
+    }
+    .upBox {
+      display: inline-block;
+      background: #fbfbfb;
+      border: 1px solid #e0e0e0;
+      padding: 6px 18px;
+      border-radius: 20px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .upBox:hover {
+      background: #f2f2f2;
+      border-color: #d0d0d0;
+    }
+    .up_txt {
+      color: #e11d48;
+      font-weight: bold;
+      margin-right: 4px;
+    }
+    .up_num {
+      color: #747474;
+      font-size: 12px;
+    }
+
+    /* 上一篇/下一篇翻页 (虚线分割) */
+    .articalfrontback {
+      margin: 15px 20px 0;
+      padding-top: 12px;
+      background-image: url('{{ linedot_b64 }}');
+      background-repeat: repeat-x;
+      background-position: left top;
+      font-size: 12px;
+      color: #464646;
+      line-height: 22px;
+    }
+    .articalfrontback a {
+      color: #3E73A0;
+    }
+
+    /* ----------------------------------------------------
+       视图 B: 【博文目录清单页】 (1:1 还原 articlelist_xxx.html)
+       ---------------------------------------------------- */
+    #listViewContainer {
+      display: none;
+    }
+    .article_blk {
+      padding: 10px 15px 25px;
+      background: #ffffff;
+    }
+    .list-filter-bar {
+      padding: 6px 10px;
+      background: #F8FAFD;
+      border-bottom: 1px solid #E1EAF2;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #747474;
+      margin-bottom: 10px;
+    }
+    .list-filter-bar .return-read-btn {
+      color: #3E73A0;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .list-filter-bar .return-read-btn:hover {
+      color: #cc0000;
+      text-decoration: underline;
+    }
+    .articleList {
+      list-style: none;
+    }
+    .articleCell {
+      background-image: url('{{ linedot_b64 }}');
+      background-repeat: repeat-x;
+      background-position: left bottom;
+      height: 28px;
+      padding-top: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+    }
+    .articleCell:hover {
+      background-color: #F4F8FC;
+    }
+    .atc_main {
+      background-image: url('{{ dot_b64 }}');
+      background-repeat: no-repeat;
+      background-position: left 7px;
+      padding-left: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+    .atc_title a {
+      color: #3E73A0;
+      font-size: 14px;
+      font-family: simsun, "宋体";
+      text-decoration: none;
+    }
+    .atc_title a:hover {
+      color: #cc0000;
+      text-decoration: underline;
+    }
+    .atc_tm {
+      color: #747474;
+      font-size: 12px;
+      flex-shrink: 0;
+      margin-left: 20px;
+    }
+
+    /* 底部版权说明 */
+    .sinablogfooter {
+      width: 950px;
+      margin: 20px auto 0;
+      padding: 15px 0;
+      border-top: 1px solid #A9BDCE;
+      text-align: center;
+      font-size: 12px;
+      color: #5D86A7;
+      line-height: 1.8;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 顶部新浪标准条 -->
+  <div class="sinabloghead_top">
+    <div>
+      <a href="javascript:void(0)" style="font-weight:bold; color:#fff;">新浪博客</a>
+      <a href="javascript:switchView('article')">博文正文</a>
+      <a href="javascript:switchView('list')">博文目录 ({{ total_articles }}篇)</a>
+    </div>
+    <div>
+      <span class="top-offline-badge">100% 离线原版排版</span>
+    </div>
+  </div>
+
+  <!-- 新浪博客版心容器 (950px) -->
+  <div class="sinablogb">
+
+    <!-- 新浪博客经典 Theme 30_1 蓝天白云头图 (265px) -->
+    <header class="sinabloghead" id="sinablogHead">
+      <div class="blogtoparea">
+        <h1 class="blogtitle"><a href="javascript:void(0)">{{ author_name }} 的博客</a></h1>
+        <div class="bloglink"><a href="javascript:void(0)">http://blog.sina.com.cn/u/5320406686</a></div>
+      </div>
+
+      <!-- 经典导航条 (首页 | 博文目录 | 关于我) -->
+      <nav class="blognav">
+        <div class="blognavInfo">
+          <span><a class="blognav-item on" id="navArticleBtn" href="javascript:switchView('article')">首页</a></span>
+          <span class="blognav-sep">|</span>
+          <span><a class="blognav-item" id="navListBtn" href="javascript:switchView('list')">博文目录</a></span>
+          <span class="blognav-sep">|</span>
+          <span><a class="blognav-item" href="javascript:showAboutModal()">关于我</a></span>
+        </div>
+      </nav>
+    </header>
+
+    <!-- 主体双栏布局 -->
+    <div class="sinablogbody">
+
+      <!-- ==============================================
+           左侧栏 (#column_1: 210px .SG_colW21)
+           ============================================== -->
+      <aside id="column_1" class="SG_colW21 SG_colFirst">
+
+        <!-- 个人资料模块 (module_901) -->
+        <div class="SG_conn" id="module_901">
+          <div class="SG_connHead">
+            <span class="title">个人资料</span>
+          </div>
+          <div class="SG_connBody">
+            <div class="info">
+              <div class="info_img">
+                {% if author_avatar %}
+                <img src="{{ author_avatar }}" alt="{{ author_name }}" title="{{ author_name }}">
+                {% else %}
+                <div style="width:170px;height:170px;line-height:170px;background:#eef4fb;color:#747474;border:1px solid #ccc;font-size:36px;margin:0 auto;">✍️</div>
+                {% endif %}
+              </div>
+              <div class="info_nm">
+                <strong>{{ author_name }}</strong>
+              </div>
+              <div class="info_btn_row">
+                <a href="javascript:void(0)" class="btn_sina" onclick="alert('已离线归档，关注功能仅在线有效')">+加关注</a>
+                <a href="javascript:void(0)" class="btn_sina" onclick="alert('已离线归档，发私信功能仅在线有效')">发私信</a>
+              </div>
+              <div class="info_stats">
+                分类：<b>{{ category_name or '全部博文' }}</b><br>
+                篇数：<b>{{ total_articles }}</b> 篇<br>
+                排版：新浪电脑端原版 (Theme 30_1)
+              </div>
+            </div>
+          </div>
+          <div class="SG_connFoot"></div>
+        </div>
+
+        <!-- 核心即时搜索与快速选篇组件 -->
+        <div class="SG_conn" id="module_search_nav" style="flex:1;">
+          <div class="SG_connHead">
+            <span class="title">博文搜索与切篇</span>
+            <span style="font-size:11px; color:#747474;" id="sidebarCountBadge">{{ total_articles }}篇</span>
+          </div>
+          <div class="SG_connBody">
+            <div class="sidebar-search-box">
+              <div class="search-input-wrap">
+                <input type="text" id="searchInput" placeholder="🔍 搜索标题关键词..." autocomplete="off">
+                <button class="search-clear" id="searchClearBtn" title="清空">✕</button>
+              </div>
+              <div class="search-meta-row">
+                <span>匹配：<b id="visibleCount" style="color:#2C597C;">{{ total_articles }}</b> 篇</span>
+                <span>即时过滤</span>
+              </div>
+            </div>
+            <ul class="sidebar-article-list" id="sidebarArticleList">
+              <!-- 动态渲染 -->
+            </ul>
+          </div>
+          <div class="SG_connFoot"></div>
+        </div>
+
+        <!-- 分类专栏模块 (module_7) -->
+        <div class="SG_conn" id="module_7">
+          <div class="SG_connHead">
+            <span class="title">分类专栏</span>
+          </div>
+          <div class="SG_connBody">
+            <ul class="cat-menu-list">
+              <li class="cat-menu-item">
+                <a href="javascript:switchView('list')">{{ category_name or '全部博文' }}</a>
+                <span style="color:#747474;">({{ total_articles }})</span>
+              </li>
+            </ul>
+          </div>
+          <div class="SG_connFoot"></div>
+        </div>
+
+      </aside>
+
+      <!-- ==============================================
+           右侧栏 (#column_2: 730px .SG_colW73)
+           ============================================== -->
+      <main id="column_2" class="SG_colW73">
+
+        <!-- --------------------------------------------
+             视图 A: 【具体文章详情页】 (1:1 还原 blog_xxx.html)
+             -------------------------------------------- -->
+        <div id="articleViewContainer">
+          <div class="SG_conn" id="module_920">
+            <div class="SG_connHead">
+              <span class="title">正文</span>
+              <span class="fontSize">
+                字号：
+                <a href="javascript:;" onclick="setFontSize(18)" id="font_b" style="padding:0 2px;">大</a>
+                <a href="javascript:;" onclick="setFontSize(16)" id="font_m" style="padding:0 2px;"><strong style="color:#cc0000;">中</strong></a>
+                <a href="javascript:;" onclick="setFontSize(14)" id="font_s" style="padding:0 2px;">小</a>
+                &nbsp;|&nbsp;
+                <a href="javascript:;" onclick="toggleFontWeight()" id="btn_font_bold" title="点击切换正文字体加粗/正常状态" style="color:#3E73A0;">加粗：关</a>
+                &nbsp;|&nbsp;
+                <a href="javascript:;" onclick="toggleFontFamily()" id="btn_font_family" title="点击切换正文字体" style="color:#3E73A0;">字体：微软雅黑</a>
+                &nbsp;|&nbsp;
+                <a href="javascript:switchView('list')" style="color:#cc0000; font-weight:bold;">[查看博文目录]</a>
+              </span>
+            </div>
+            <div class="SG_connBody">
+              <div class="artical" id="articlebody">
+                <!-- 标题与时间 (1:1 titName + time) -->
+                <div class="articalTitle">
+                  <h2 class="titName SG_txta" id="articleTitle">加载中...</h2>
+                  <span class="time SG_txtc" id="articleTime">--</span>
+                </div>
+
+                <!-- 标签与分类条 (经典两端表格) -->
+                <div class="articalTag" id="sina_keyword_ad_area">
+                  <table>
+                    <tr>
+                      <td class="blog_tag" id="articleTagsCell">
+                        <span class="SG_txtb">标签：</span><span id="articleTagsContent">新浪博客</span>
+                      </td>
+                      <td class="blog_class">
+                        <span class="SG_txtb">分类：</span>
+                        <a href="javascript:switchView('list')" id="articleCatLink">{{ category_name or '西游正解' }}</a>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+
+                <!-- 正文内容 (1:1 SimSun 14px 180%行距) -->
+                <div class="articalContent newfont_family" id="articleContent">
+                  正文加载中...
+                </div>
+
+                <!-- 点赞组件 -->
+                <div class="shareUp">
+                  <div class="upBox" onclick="toggleLike()">
+                    <span class="up_txt">👍 喜欢</span>
+                    <span class="up_num" id="likeCount">0</span>
+                  </div>
+                </div>
+
+                <!-- 上一篇 / 下一篇翻页 -->
+                <div class="articalfrontback SG_j_linedot1 clearfix">
+                  <div id="prevArticleLink"><span class="SG_txtb">前一篇：</span>无</div>
+                  <div id="nextArticleLink"><span class="SG_txtb">后一篇：</span>无</div>
+                </div>
+              </div>
+            </div>
+            <div class="SG_connFoot"></div>
+          </div>
+        </div>
+
+        <!-- --------------------------------------------
+             视图 B: 【专栏博文目录清单页】 (1:1 还原 articlelist_xxx.html)
+             -------------------------------------------- -->
+        <div id="listViewContainer">
+          <div class="SG_conn" id="module_928">
+            <div class="SG_connHead">
+              <span class="title">【{{ category_name or '全部博文' }}】目录列表 <em>({{ total_articles }})</em></span>
+              <span class="fontSize">
+                <a href="javascript:switchView('article')" style="color:#2C597C; font-weight:bold;">[返回正文阅读]</a>
+              </span>
+            </div>
+            <div class="SG_connBody">
+              <div class="article_blk">
+                <div class="list-filter-bar">
+                  <span>共收录 <b>{{ total_articles }}</b> 篇博文 · 点击任意一篇直接进入正文阅读</span>
+                  <span class="return-read-btn" onclick="switchView('article')">📖 返回正文阅读 &gt;&gt;</span>
+                </div>
+
+                <div class="articleList" id="bigArticleList">
+                  <!-- 动态渲染 156 篇原版列表 -->
+                </div>
+              </div>
+            </div>
+            <div class="SG_connFoot"></div>
+          </div>
+        </div>
+
+      </main>
+
+    </div>
+
+    <!-- 底部版权说明 -->
+    <footer class="sinablogfooter">
+      📖 本离线知识库由【微信公众号：艺杯羹】整理排版 · 1:1 像素级还原新浪博客原版电脑端视觉排版<br>
+      仅供个人离线学习、学术研究与知识归档使用，所有图文知识产权归原作者所有。
+    </footer>
+
+  </div>
+
+  <!-- 内嵌全量结构化文章数据 -->
+  <script id="articlesData" type="application/json">
+{{ articles_json | safe }}
+  </script>
+
+  <script>
+    // ========================================================
+    // 纯前端极速搜索、文章切换与双视图联动逻辑
+    // ========================================================
+    let articles = [];
+    try {
+      articles = JSON.parse(document.getElementById('articlesData').textContent);
+    } catch (e) {
+      console.error('Failed to parse articles data', e);
+    }
+
+    let currentIndex = 0;
+    // 单主题模式：默认直接打开具体文章页，无需多余目录过渡
+    let currentView = 'article'; 
+    let filteredIndices = articles.map((_, i) => i);
+    let currentFontSize = 16;
+    let isBold = false;
+    let isYaHei = true;
+    let likeCounts = {};
+
+    const searchInput = document.getElementById('searchInput');
+    const searchClearBtn = document.getElementById('searchClearBtn');
+    const visibleCount = document.getElementById('visibleCount');
+    const sidebarArticleList = document.getElementById('sidebarArticleList');
+    const bigArticleList = document.getElementById('bigArticleList');
+    const articleViewContainer = document.getElementById('articleViewContainer');
+    const listViewContainer = document.getElementById('listViewContainer');
+    const navArticleBtn = document.getElementById('navArticleBtn');
+    const navListBtn = document.getElementById('navListBtn');
+
+    // 视图切换（正文视图 vs 目录大清单视图）
+    function switchView(viewName) {
+      currentView = viewName;
+      if (viewName === 'article') {
+        articleViewContainer.style.display = 'block';
+        listViewContainer.style.display = 'none';
+        navArticleBtn.classList.add('on');
+        navListBtn.classList.remove('on');
+      } else {
+        articleViewContainer.style.display = 'none';
+        listViewContainer.style.display = 'block';
+        navArticleBtn.classList.remove('on');
+        navListBtn.classList.add('on');
+        renderBigList();
+      }
+      window.scrollTo({ top: 200, behavior: 'smooth' });
+    }
+
+    // 渲染左侧搜索目录
+    function renderSidebarList(keyword = '') {
+      sidebarArticleList.innerHTML = '';
+      const kw = keyword.trim().toLowerCase();
+      filteredIndices = [];
+
+      articles.forEach((art, idx) => {
+        const title = art.title || '';
+        if (!kw || title.toLowerCase().includes(kw)) {
+          filteredIndices.push(idx);
+        }
+      });
+
+      visibleCount.textContent = filteredIndices.length;
+
+      if (filteredIndices.length === 0) {
+        sidebarArticleList.innerHTML = '<li style="padding:15px;text-align:center;color:#999;">未找到匹配博文</li>';
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      filteredIndices.forEach(artIdx => {
+        const art = articles[artIdx];
+        const li = document.createElement('li');
+        li.className = `sidebar-article-item ${artIdx === currentIndex ? 'active' : ''}`;
+        li.dataset.index = artIdx;
+
+        let titleDisplay = escapeHtml(art.title || '无标题');
+        if (kw) {
+          const reg = new RegExp(`(${escapeRegExp(kw)})`, 'gi');
+          titleDisplay = titleDisplay.replace(reg, '<span class="hl-keyword">$1</span>');
+        }
+
+        li.innerHTML = `
+          <div class="item-txt">${artIdx + 1}. ${titleDisplay}</div>
+          <div class="item-time">${art.publish_time ? art.publish_time.slice(0, 10) : ''}</div>
+        `;
+
+        li.addEventListener('click', () => {
+          if (currentView !== 'article') {
+            switchView('article');
+          }
+          loadArticle(artIdx);
+        });
+
+        fragment.appendChild(li);
+      });
+
+      sidebarArticleList.appendChild(fragment);
+    }
+
+    // 渲染右侧完整目录清单 (1:1 还原 articlelist_xxx.html)
+    function renderBigList() {
+      bigArticleList.innerHTML = '';
+      const fragment = document.createDocumentFragment();
+
+      articles.forEach((art, idx) => {
+        const div = document.createElement('div');
+        div.className = 'articleCell SG_j_linedot1';
+        div.innerHTML = `
+          <p class="atc_main SG_dot">
+            <span class="atc_title">
+              <a href="javascript:void(0)" onclick="openArticle(${idx})">${idx + 1}. ${escapeHtml(art.title)}</a>
+            </span>
+          </p>
+          <p class="atc_info">
+            <span class="atc_tm SG_txtc">${art.publish_time || ''}</span>
+          </p>
+        `;
+
+        fragment.appendChild(div);
+      });
+
+      bigArticleList.appendChild(fragment);
+    }
+
+    // 目录中点击打开文章
+    function openArticle(idx) {
+      switchView('article');
+      loadArticle(idx);
+    }
+
+    // 加载指定文章正文
+    function loadArticle(index) {
+      if (index < 0 || index >= articles.length) return;
+      currentIndex = index;
+
+      const art = articles[index];
+
+      // 标题与时间
+      document.getElementById('articleTitle').textContent = art.title || '无标题';
+      document.getElementById('articleTime').textContent = art.publish_time ? `(${art.publish_time})` : '';
+
+      // 标签渲染
+      const tagsCell = document.getElementById('articleTagsCell');
+      const tags = art.tags || ['新浪博客'];
+      let tagsHtml = '<span class="SG_txtb">标签：</span>';
+      tags.forEach(t => {
+        tagsHtml += `<h3><a href="javascript:void(0)" onclick="filterByTag('${escapeHtml(t)}')">${escapeHtml(t)}</a></h3>`;
+      });
+      tagsCell.innerHTML = tagsHtml;
+
+      // 分类
+      document.getElementById('articleCatLink').textContent = art.category || '全部博文';
+
+      // 正文内容 (清理硬编码的 font-size 行内样式，确保控制器 100% 顺畅生效)
+      const contentEl = document.getElementById('articleContent');
+      contentEl.innerHTML = sanitizeContent(art.content_html) || '<p>博文暂无内容</p>';
+      applyFontStylesToContent(contentEl);
+
+      // 点赞数模拟
+      document.getElementById('likeCount').textContent = likeCounts[index] || 0;
+
+      // 上一篇 / 下一篇
+      const prevDiv = document.getElementById('prevArticleLink');
+      const nextDiv = document.getElementById('nextArticleLink');
+
+      if (index > 0) {
+        const prevArt = articles[index - 1];
+        prevDiv.innerHTML = `<span class="SG_txtb">前一篇：</span><a href="javascript:void(0)" onclick="loadArticle(${index - 1})">${escapeHtml(prevArt.title)}</a>`;
+      } else {
+        prevDiv.innerHTML = '<span class="SG_txtb">前一篇：</span>已经是第一篇';
+      }
+
+      if (index < articles.length - 1) {
+        const nextArt = articles[index + 1];
+        nextDiv.innerHTML = `<span class="SG_txtb">后一篇：</span><a href="javascript:void(0)" onclick="loadArticle(${index + 1})">${escapeHtml(nextArt.title)}</a>`;
+      } else {
+        nextDiv.innerHTML = '<span class="SG_txtb">后一篇：</span>已经是最后一篇';
+      }
+
+      // 更新左侧列表激活项
+      updateSidebarActive(index);
+
+      // 滚动至顶部阅读区
+      window.scrollTo({ top: 220, behavior: 'smooth' });
+    }
+
+    function toggleLike() {
+      likeCounts[currentIndex] = (likeCounts[currentIndex] || 0) + 1;
+      document.getElementById('likeCount').textContent = likeCounts[currentIndex];
+    }
+
+    function filterByTag(tagName) {
+      searchInput.value = tagName;
+      searchClearBtn.style.display = 'block';
+      renderSidebarList(tagName);
+    }
+
+    // 清理文章正文中硬编码的类名与行内样式，让控制器 100% 绝对掌控
+    function sanitizeContent(html) {
+      if (!html) return '';
+      let cleaned = html;
+      // 1. 消除内部可能导致 CSS 变量重置的 articalContent 重复类名
+      cleaned = cleaned.replace(/class=["'][^"']*articalContent[^"']*["']/gi, 'class="articalContentInner"');
+      // 2. 清除所有硬编码的 font-size 行内样式
+      cleaned = cleaned.replace(/font-size\s*:\s*[^;'"]+;?/gi, '');
+      // 3. 清除所有硬编码的 font-family 行内样式
+      cleaned = cleaned.replace(/font-family\s*:\s*[^;'"]+;?/gi, '');
+      return cleaned;
+    }
+
+    // 应用当前字号、粗细与字体族到全局与正文
+    function applyFontStylesToContent(el) {
+      const sizeStr = currentFontSize + 'px';
+      const weightStr = isBold ? 'bold' : 'normal';
+      const familyStr = isYaHei 
+        ? '"Microsoft YaHei", simsun, "宋体", Arial, sans-serif'
+        : 'simsun, "宋体", "Microsoft YaHei", Arial, sans-serif';
+
+      // 1. 设置到 :root 全局 CSS 变量
+      document.documentElement.style.setProperty('--article-font-size', sizeStr);
+      document.documentElement.style.setProperty('--article-font-weight', weightStr);
+      document.documentElement.style.setProperty('--article-font-family', familyStr);
+
+      // 2. 直达正文 DOM 元素及其所有子节点，双重强制生效
+      if (el) {
+        el.style.fontSize = sizeStr;
+        el.style.fontWeight = weightStr;
+        el.style.fontFamily = familyStr;
+        const children = el.querySelectorAll('div, p, font, span, a');
+        children.forEach(c => {
+          c.style.fontSize = sizeStr;
+          c.style.fontWeight = weightStr;
+          c.style.fontFamily = familyStr;
+        });
+      }
+    }
+
+    // 字体大小调节 (大: 18px, 中: 16px, 小: 14px)
+    function setFontSize(size) {
+      currentFontSize = size;
+      const contentEl = document.getElementById('articleContent');
+      applyFontStylesToContent(contentEl);
+
+      const fb = document.getElementById('font_b');
+      const fm = document.getElementById('font_m');
+      const fs = document.getElementById('font_s');
+      if (fb) fb.innerHTML = size === 18 ? '<strong style="color:#cc0000;font-size:13px;">大</strong>' : '大';
+      if (fm) fm.innerHTML = size === 16 ? '<strong style="color:#cc0000;font-size:13px;">中</strong>' : '中';
+      if (fs) fs.innerHTML = size === 14 ? '<strong style="color:#cc0000;font-size:13px;">小</strong>' : '小';
+
+      try {
+        localStorage.setItem('sina_user_font_size', size);
+      } catch (e) {}
+    }
+
+    // 切换字体加粗 / 正常状态
+    function toggleFontWeight() {
+      setFontWeight(!isBold);
+    }
+
+    function setFontWeight(bold) {
+      isBold = !!bold;
+      const contentEl = document.getElementById('articleContent');
+      applyFontStylesToContent(contentEl);
+
+      const boldBtn = document.getElementById('btn_font_bold');
+      if (boldBtn) {
+        boldBtn.innerHTML = isBold 
+          ? '<strong style="color:#cc0000;">加粗：开</strong>' 
+          : '加粗：关';
+      }
+
+      try {
+        localStorage.setItem('sina_user_font_bold', isBold ? '1' : '0');
+      } catch (e) {}
+    }
+
+    // 切换字体族 (微软雅黑 / 原版宋体)
+    function toggleFontFamily() {
+      setFontFamily(!isYaHei);
+    }
+
+    function setFontFamily(yahei) {
+      isYaHei = !!yahei;
+      const contentEl = document.getElementById('articleContent');
+      applyFontStylesToContent(contentEl);
+
+      const familyBtn = document.getElementById('btn_font_family');
+      if (familyBtn) {
+        familyBtn.textContent = isYaHei ? '字体：微软雅黑' : '字体：宋体';
+      }
+
+      try {
+        localStorage.setItem('sina_user_font_family', isYaHei ? 'yahei' : 'simsun');
+      } catch (e) {}
+    }
+
+    // 初始化字体、加粗与字号配置 (支持网址 URL 参数、本地持久化记忆)
+    function initFontSettings() {
+      const urlParams = new URLSearchParams(window.location.search);
+
+      // 1. 网址 URL 中参数优先：?bold=1 或 ?bold=true 开启加粗
+      if (urlParams.get('bold') === '1' || urlParams.get('bold') === 'true') {
+        isBold = true;
+      } else if (urlParams.get('bold') === '0' || urlParams.get('bold') === 'false') {
+        isBold = false;
+      } else {
+        try {
+          const savedBold = localStorage.getItem('sina_user_font_bold');
+          if (savedBold !== null) isBold = savedBold === '1';
+        } catch (e) {}
+      }
+
+      // 2. 网址 URL 中字号参数：?size=18 / ?size=16 / ?size=14
+      const sizeParam = parseInt(urlParams.get('size'), 10);
+      if ([14, 16, 18].includes(sizeParam)) {
+        currentFontSize = sizeParam;
+      } else {
+        try {
+          const savedSize = parseInt(localStorage.getItem('sina_user_font_size'), 10);
+          if ([14, 16, 18].includes(savedSize)) currentFontSize = savedSize;
+        } catch (e) {}
+      }
+
+      // 3. 网址 URL 中字体参数：?font=yahei / ?font=simsun
+      const fontParam = urlParams.get('font');
+      if (fontParam === 'simsun' || fontParam === 'songti') {
+        isYaHei = false;
+      } else if (fontParam === 'yahei') {
+        isYaHei = true;
+      } else {
+        try {
+          const savedFamily = localStorage.getItem('sina_user_font_family');
+          if (savedFamily === 'simsun') isYaHei = false;
+        } catch (e) {}
+      }
+
+      setFontSize(currentFontSize);
+      setFontWeight(isBold);
+      setFontFamily(isYaHei);
+    }
+
+    // 更新左侧高亮状态并平滑居中滚动
+    function updateSidebarActive(index) {
+      const items = sidebarArticleList.querySelectorAll('.sidebar-article-item');
+      items.forEach(item => {
+        const itemIdx = parseInt(item.dataset.index, 10);
+        if (itemIdx === index) {
+          item.classList.add('active');
+          item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        } else {
+          item.classList.remove('active');
+        }
+      });
+    }
+
+    // 搜索输入防抖
+    let debounceTimer = null;
+    searchInput.addEventListener('input', (e) => {
+      const val = e.target.value;
+      searchClearBtn.style.display = val ? 'block' : 'none';
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        renderSidebarList(val);
+      }, 150);
+    });
+
+    searchClearBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      searchClearBtn.style.display = 'none';
+      renderSidebarList('');
+      searchInput.focus();
+    });
+
+    // 快捷键支持：键盘左右键直接切篇
+    window.addEventListener('keydown', (e) => {
+      if (document.activeElement === searchInput) return;
+      if (currentView !== 'article') return;
+      if (e.key === 'ArrowLeft') {
+        if (currentIndex > 0) loadArticle(currentIndex - 1);
+      } else if (e.key === 'ArrowRight') {
+        if (currentIndex < articles.length - 1) loadArticle(currentIndex + 1);
+      }
+    });
+
+    function showAboutModal() {
+      alert('【欧洋 的新浪博客离线知识合集】\n\n本文件为新浪博客电脑端 1:1 原版排版离线版，断网亦可顺畅浏览与检索。');
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function escapeRegExp(string) {
+      return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    // 初始化运行
+    window.addEventListener('DOMContentLoaded', () => {
+      initFontSettings();
+      renderSidebarList();
+      if (articles.length > 0) {
+        // 单主题默认直达正文第一篇
+        switchView('article');
+        loadArticle(0);
+      }
+    });
+  </script>
+</body>
+</html>

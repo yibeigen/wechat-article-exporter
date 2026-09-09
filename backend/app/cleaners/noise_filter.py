@@ -15,9 +15,44 @@ NOISE_PATTERNS = [
     r"(?i)商务合作请联系.*?",
     r"(?i)未经作者授权.*?禁止转载.*?",
     r"(?i)加入技术交流群.*?加微信.*?",
+    # 新浪博客与通用博客尾部/边栏干扰模式
+    r"^分享：$",
+    r"^喜欢\s*\d*$",
+    r"^赠金笔$",
+    r"^阅读[┊|].*",
+    r"^收藏\s*\(javascript:;?\)",
+    r"^.*┊打印.*",
+    r"^.*举报/Report.*",
+    r"^加载中，请稍候.*",
+    r"^前一篇：.*",
+    r"^后一篇：.*",
+    r"^新浪BLOG意见反馈留言板.*",
+    r"^新浪简介.*Copyright.*",
+    r"^Copyright © .* SINA Corporation.*",
+    r"^新浪公司\s*版权所有.*",
+    r"^字体大小：.*[大中小].*",
+    r"^顶\(\d+\)\s*踩\(\d+\)",
+    r"^•\s*博客等级：",
+    r"^•\s*博客积分：",
+    r"^•\s*博客访问：",
+    r"^•\s*获赠金笔：",
+    r"^•\s*赠出金笔：",
+    r"^•\s*荣誉徽章：",
+    r"^加好友\s*\(javascript:.*\)",
+    r"^发纸条\s*\(javascript:.*\)",
+    r"^写留言\s*\(.*#write\)"
 ]
 
 COMPILED_NOISE_REGEX = [re.compile(p) for p in NOISE_PATTERNS]
+
+# 强阻断信号：一旦遇到这些文末垃圾行，后续全部截断
+TRUNCATION_PATTERNS = [
+    r"^前一篇：",
+    r"^新浪BLOG意见反馈",
+    r"^Copyright © \d{4} - \d{4} SINA Corporation",
+    r"^新浪公司\s*版权所有",
+]
+COMPILED_TRUNCATION_REGEX = [re.compile(p) for p in TRUNCATION_PATTERNS]
 
 def filter_noise_text(text: str) -> str:
     """
@@ -36,6 +71,15 @@ def filter_noise_text(text: str) -> str:
             cleaned_lines.append(line)
             continue
         
+        # 检查是否遇到强阻断信号（文末彻底结束，如博客前一篇/版权栏）
+        is_truncate = False
+        for pattern in COMPILED_TRUNCATION_REGEX:
+            if pattern.search(stripped):
+                is_truncate = True
+                break
+        if is_truncate:
+            break
+
         # 检查单行是否匹配任何噪音特征
         is_noise = False
         for pattern in COMPILED_NOISE_REGEX:

@@ -9,6 +9,8 @@ class PlatformEnum(str, Enum):
     CTO51 = "51cto"
     ZHIHU = "zhihu"
     WEIBO = "weibo"
+    SINA_BLOG = "sina_blog"
+    JIANSHU = "jianshu"
     WECHAT = "wechat"
     CUSTOM_URLS = "custom_urls"
 
@@ -31,6 +33,7 @@ class ArticleItem(BaseModel):
     content_markdown: str = ""
     images: List[str] = Field(default_factory=list)
     tags: List[str] = Field(default_factory=list)
+    category: Optional[str] = None
     read_num: Optional[int] = 0
     like_count: Optional[int] = 0
     old_like_count: Optional[int] = 0
@@ -57,7 +60,7 @@ class TaskCreateRequest(BaseModel):
     enable_noise_filter: bool = Field(True, description="是否开启智能去噪（剔除广告、求赞、关注引流语）")
     remove_image_watermark: bool = Field(True, description="是否智能去除平台水印与溯源高清原图 (关闭则保留平台原样水印图)")
     use_cache: bool = Field(True, description="是否开启断点续爬与本地持久化缓存")
-    download_images: bool = Field(False, description="是否将文章配图下载到本地并转为相对路径打包进 ZIP")
+    download_images: bool = Field(True, description="是否将文章配图下载到本地并转为相对路径打包进 ZIP")
     max_articles: Optional[int] = Field(None, description="最大抓取篇数，None 表示抓取全部")
     start_index: Optional[int] = Field(1, description="起始文章序号，从 1 开始")
     end_index: Optional[int] = Field(None, description="结束文章序号，留空表示抓取到最后")
@@ -102,3 +105,6 @@ class TaskProgress(BaseModel):
     success_articles: List[Dict[str, Any]] = Field(default_factory=list)
     error_message: Optional[str] = None
     is_cancelled: bool = False
+    explanation: Optional[str] = None
+    declared_count: Optional[int] = None
+    category_name: Optional[str] = None

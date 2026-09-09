@@ -1,7 +1,7 @@
 @echo off
-title BlogDistiller ×ÀÃæ¿Í»§¶Ë
+title BlogDistiller æ¡Œé¢ç«¯
 echo ========================================================
-echo   ÕıÔÚÆô¶¯ BlogDistiller Î¢ĞÅÎÄÕÂµ¼³öÖúÊÖ (×ÀÃæ¶ÀÁ¢°æ)...
+echo   æ­£åœ¨å¯åŠ¨ BlogDistiller æ¡Œé¢ç«¯ï¼ˆéœ€è¦åå°è¿è¡Œï¼‰...
 echo ========================================================
-cd /d "%~dp0desktop"
-npx electron .
+cd /d "%~dp0"
+npx electron .\desktop

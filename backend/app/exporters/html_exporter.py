@@ -2,6 +2,7 @@ import html
 from pathlib import Path
 from typing import List
 import datetime
+from bs4 import BeautifulSoup
 from app.exporters.base import BaseExporter
 from app.models import ArticleItem
 from app.config import BRAND_OFFICIAL_ACCOUNT, BRAND_FOOTER_NOTE, BRAND_DISCLAIMER
@@ -13,6 +14,21 @@ class HTMLExporter(BaseExporter):
         output_file = self.output_dir / f"{filename_prefix}.html"
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        # 解析真实平台友好展示名称与标签 (避免出现 custom_urls 等内部代码名)
+        platform_name = self.get_effective_platform_name(articles)
+        if platform_name == "微信公众号" or "公众号" in platform_name:
+            if "公众号" in self.author_name:
+                cover_title = f"【{html.escape(self.author_name)}文章合集】"
+            else:
+                cover_title = f"【{html.escape(self.author_name)}公众号合集】"
+            cover_sub = f"共 {len(articles)} 篇文章 · 微信公众号"
+        elif platform_name == "新浪博客":
+            cover_title = f"【{html.escape(self.author_name)}】新浪博客文章合集"
+            cover_sub = f"共 {len(articles)} 篇博文 · 新浪博客"
+        else:
+            cover_title = f"【{html.escape(self.author_name)}】文章知识合集"
+            cover_sub = f"共 {len(articles)} 篇文章 · {platform_name}"
+
         # 构建目录项与文章正文
         toc_items = []
         article_sections = []
@@ -22,6 +38,7 @@ class HTMLExporter(BaseExporter):
             safe_author = html.escape(art.author or self.author_name)
             safe_time = html.escape(art.publish_time)
             safe_url = html.escape(art.url)
+            safe_art_platform = html.escape(self.get_platform_display_name(art.platform or self.platform))
             art_id = f"art-{idx}"
 
             toc_items.append(f"""
@@ -31,36 +48,40 @@ class HTMLExporter(BaseExporter):
                 </a>
             """)
 
+            tags_html = ""
+            if art.tags:
+                tag_spans = "".join([f'<span class="article-meta-badge" style="background:var(--accent-subtle); color:var(--accent); font-weight:normal; margin-right:6px;">#{html.escape(t.strip().lstrip("#"))}</span>' for t in art.tags if t.strip()])
+                tags_html = f'<div style="margin-top:6px; margin-bottom:8px; display:flex; flex-wrap:wrap; gap:6px;">{tag_spans}</div>'
+
+            # 剔除正文头部重复的标题
+            content_html = art.content_html or ""
+            if content_html:
+                soup = BeautifulSoup(content_html, "lxml")
+                for top_h in soup.find_all(["h1", "h2", "h3"]):
+                    if top_h.text.strip().lower() == art.title.strip().lower():
+                        top_h.decompose()
+                        break
+                content_html = soup.body.decode_contents() if soup.body else str(soup)
+
             article_sections.append(f"""
                 <article id="{art_id}" class="article-card">
                     <header class="article-header">
-                        <div class="article-meta-badge">{html.escape(art.platform or self.platform)} · 第 {idx} 篇</div>
+                        <div class="article-meta-badge">{safe_art_platform} · 第 {idx} 篇</div>
                         <h2 class="article-title">{safe_title}</h2>
+                        {tags_html}
                         <div class="article-meta">
-                            <span>👤 {safe_author}</span>
-                            <span>🕒 {safe_time or '未知时间'}</span>
-                            {f'<span>🔗 <a href="{safe_url}" target="_blank" rel="noopener">查看原文</a></span>' if safe_url else ''}
+                            <span>📰 <strong>原文：</strong>{safe_art_platform} · {safe_author} · {safe_time or '未知时间'}</span>
+                            {f'<span>🔗 <strong>原文链接：</strong><a href="{safe_url}" target="_blank" rel="noopener">{safe_url}</a></span>' if safe_url else ''}
                         </div>
                     </header>
                     <div class="article-content markdown-body">
-                        {art.content_html}
+                        {content_html}
                     </div>
                     <div class="article-footer-watermark">
                         <span>{html.escape(BRAND_FOOTER_NOTE)}</span>
                     </div>
                 </article>
             """)
-
-        # 构建符合平台特点的清晰大标题与副标题
-        if self.platform in ["微信公众号", "wechat"] or "公众号" in self.platform:
-            if "公众号" in self.author_name:
-                cover_title = f"【{html.escape(self.author_name)}文章合集】"
-            else:
-                cover_title = f"【{html.escape(self.author_name)}公众号合集】"
-            cover_sub = f"共 {len(articles)} 篇文章 · 微信公众号"
-        else:
-            cover_title = f"【{html.escape(self.author_name)}】文章知识合集"
-            cover_sub = f"共 {len(articles)} 篇文章 · {html.escape(self.platform)}"
 
         html_template = f"""<!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">

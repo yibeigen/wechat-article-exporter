@@ -8,9 +8,11 @@ import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 import httpx
+from bs4 import BeautifulSoup
 from app.exporters.base import BaseExporter
 from app.models import ArticleItem
 from app.config import BRAND_OFFICIAL_ACCOUNT, BRAND_FOOTER_NOTE, BRAND_DISCLAIMER
+from app.exporters.pdf_exporter import find_system_browser
 
 class ZipExporter(BaseExporter):
     """ZIP 全量打包导出器 (支持单文件合集 + 分篇独立文章 + 图片本地化离线下载 + 目录索引清单)"""
@@ -61,7 +63,7 @@ class ZipExporter(BaseExporter):
         if not all_img_urls:
             return image_bytes_map, url_to_filename_map
 
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, verify=False, trust_env=False) as client:
             semaphore = asyncio.Semaphore(10) # 限制最大 10 并发，保护网络稳定
 
             async def fetch_one(img_url: str, idx: int):
@@ -99,6 +101,21 @@ class ZipExporter(BaseExporter):
         safe_platform = html.escape(art.platform or self.platform)
         safe_time = html.escape(art.publish_time or "未知")
         safe_url = html.escape(art.url)
+
+        # 标签横向展示
+        tags_html = ""
+        if art.tags:
+            tag_spans = "".join([f'<span class="badge" style="background:#e0f2fe; color:#0284c7; margin-right:6px; font-weight:500;">#{html.escape(t.strip().lstrip("#"))}</span>' for t in art.tags if t.strip()])
+            tags_html = f'<div style="margin-bottom: 12px; display:flex; flex-wrap:wrap; gap:6px;">{tag_spans}</div>'
+
+        # 剔除正文头部重复的标题
+        if html_content:
+            soup = BeautifulSoup(html_content, "lxml")
+            for top_h in soup.find_all(["h1", "h2", "h3"]):
+                if top_h.text.strip().lower() == art.title.strip().lower():
+                    top_h.decompose()
+                    break
+            html_content = soup.body.decode_contents() if soup.body else str(soup)
 
         return f"""<!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">
@@ -241,10 +258,10 @@ class ZipExporter(BaseExporter):
             <button class="theme-btn" onclick="toggleTheme()"><span id="themeText">🌙 暗黑</span></button>
         </div>
         <h1 class="title">{safe_title}</h1>
+        {tags_html}
         <div class="meta-bar">
-            <span>👤 作者：{safe_author}</span>
-            <span>📅 时间：{safe_time}</span>
-            {f'<span>🔗 <a href="{safe_url}" target="_blank" rel="noopener">查看原文</a></span>' if safe_url else ''}
+            <span>📰 <strong>原文：</strong>{safe_platform} · {safe_author} · {safe_time}</span>
+            {f'<span>🔗 <strong>原文链接：</strong><a href="{safe_url}" target="_blank" rel="noopener">{safe_url}</a></span>' if safe_url else ''}
         </div>
         <div class="markdown-body">
             {html_content}
@@ -279,6 +296,21 @@ class ZipExporter(BaseExporter):
         safe_platform = html.escape(art.platform or self.platform)
         safe_time = html.escape(art.publish_time or "未知")
         safe_url = html.escape(art.url)
+
+        # 标签横向展示
+        tags_html = ""
+        if art.tags:
+            tag_spans = "".join([f'<span class="badge" style="background:#e0f2fe; color:#0284c7; margin-right:6px; font-weight:500;">#{html.escape(t.strip().lstrip("#"))}</span>' for t in art.tags if t.strip()])
+            tags_html = f'<div style="margin-top:4px; margin-bottom: 8px; display:flex; flex-wrap:wrap; gap:6px;">{tag_spans}</div>'
+
+        # 剔除正文头部重复的标题
+        if html_body:
+            soup = BeautifulSoup(html_body, "lxml")
+            for top_h in soup.find_all(["h1", "h2", "h3"]):
+                if top_h.text.strip().lower() == art.title.strip().lower():
+                    top_h.decompose()
+                    break
+            html_body = soup.body.decode_contents() if soup.body else str(soup)
 
         return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -366,10 +398,10 @@ class ZipExporter(BaseExporter):
     <div class="header">
         <div class="badge">第 {idx} 篇 · {safe_platform}</div>
         <h1>{safe_title}</h1>
+        {tags_html}
         <div class="meta">
-            <span>👤 作者：{safe_author}</span>
-            <span>📅 时间：{safe_time}</span>
-            {f'<span>🔗 原文：{safe_url}</span>' if safe_url else ''}
+            <span>📰 <strong>原文：</strong>{safe_platform} · {safe_author} · {safe_time}</span>
+            {f'<span>🔗 <strong>原文链接：</strong><a href="{safe_url}" style="color:#0284c7;">{safe_url}</a></span>' if safe_url else ''}
         </div>
     </div>
     <div class="markdown-body">
@@ -399,7 +431,7 @@ class ZipExporter(BaseExporter):
         articles: List[ArticleItem],
         filename_prefix: str,
         generated_files: Optional[Dict[str, Path]] = None,
-        download_images: bool = False
+        download_images: bool = True
     ) -> Path:
         zip_output_file = self.output_dir / f"{filename_prefix}_知识归档包.zip"
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -437,20 +469,19 @@ class ZipExporter(BaseExporter):
                     zf.write(str(file_path), arcname=arcname)
 
             # 4. 生成并写入单篇独立文章 (根据用户选定格式精准提供相应独立文件)
-            # A. Markdown 独立篇章 (始终默认提供便携式 Markdown)
+            # A. Markdown 独立篇章 (始终默认提供便携式 Markdown，严格对齐用户标准格式：标题 -> 标签 -> 原文 -> 原文链接 -> 正文)
             for idx, art in enumerate(articles, 1):
                 clean_title = re.sub(r'[\\/:*?"<>|]', '_', art.title).strip() or f"文章_{idx}"
                 single_md_filename = f"单篇独立文章_Markdown/{idx:02d}_{clean_title[:45]}.md"
 
-                yaml_header = (
-                    f"---\n"
-                    f"title: \"{art.title}\"\n"
-                    f"author: \"{art.author or self.author_name}\"\n"
-                    f"platform: \"{art.platform or self.platform}\"\n"
-                    f"publish_time: \"{art.publish_time}\"\n"
-                    f"url: \"{art.url}\"\n"
-                    f"curator: \"微信公众号【{BRAND_OFFICIAL_ACCOUNT}】\"\n"
-                    f"archived_at: \"{now_str}\"\n"
+                tags_str = "   ".join([f"#{t.strip().lstrip('#')}" for t in art.tags if t.strip()]) if art.tags else ""
+                tag_line = f"**标签**：{tags_str}\n\n" if tags_str else ""
+                url_line = f"**原文链接**：{art.url}\n\n" if art.url else ""
+                clean_header = (
+                    f"# {art.title}\n\n"
+                    f"{tag_line}"
+                    f"**原文**：{art.platform or self.platform}  ·  {art.author or self.author_name}  ·  {art.publish_time or '未知时间'}\n\n"
+                    f"{url_line}"
                     f"---\n\n"
                 )
                 
@@ -460,7 +491,22 @@ class ZipExporter(BaseExporter):
                     for online_url, local_img_name in url_to_filename.items():
                         md_body = md_body.replace(online_url, f"../images/{local_img_name}")
 
-                single_md_content = yaml_header + f"# {art.title}\n\n" + md_body + f"\n\n> *{BRAND_FOOTER_NOTE}*\n"
+                # 剔除正文头部重复的标题行
+                md_body_lines = md_body.split("\n")
+                b_idx = 0
+                while b_idx < len(md_body_lines):
+                    l_str = md_body_lines[b_idx].strip()
+                    if not l_str:
+                        b_idx += 1
+                        continue
+                    l_no_hash = re.sub(r'^#+\s*', '', l_str).strip()
+                    if l_no_hash.lower() == art.title.strip().lower() or l_str.startswith(art.title):
+                        b_idx += 1
+                        continue
+                    break
+                md_body_clean = "\n".join(md_body_lines[b_idx:]).strip()
+
+                single_md_content = clean_header + md_body_clean + f"\n\n> *{BRAND_FOOTER_NOTE}*\n"
                 zf.writestr(single_md_filename, single_md_content.encode("utf-8"))
 
             # B. HTML 独立篇章（如果勾选了 HTML，生成高颜值独立单篇 HTML 文件）
@@ -491,6 +537,34 @@ class ZipExporter(BaseExporter):
 
                 def _render_single_pdfs_batch_sync(tasks: List[Tuple[str, str]]) -> Dict[str, bytes]:
                     res = {}
+                    # 1. 优先使用系统 Edge / Chrome 无头打印
+                    browser_path = find_system_browser()
+                    if browser_path:
+                        import tempfile, subprocess
+                        with tempfile.TemporaryDirectory() as temp_dir:
+                            temp_dir_p = Path(temp_dir)
+                            for t_idx, (arcname, html_text) in enumerate(tasks):
+                                try:
+                                    temp_html = temp_dir_p / f"temp_{t_idx}.html"
+                                    temp_pdf = temp_dir_p / f"temp_{t_idx}.pdf"
+                                    temp_html.write_text(html_text, encoding="utf-8")
+                                    cmd = [
+                                        browser_path,
+                                        "--headless",
+                                        "--disable-gpu",
+                                        "--no-pdf-header-footer",
+                                        f"--print-to-pdf={str(temp_pdf.resolve())}",
+                                        str(temp_html.resolve())
+                                    ]
+                                    subprocess.run(cmd, capture_output=True, timeout=25)
+                                    if temp_pdf.exists() and temp_pdf.stat().st_size > 1000:
+                                        res[arcname] = temp_pdf.read_bytes()
+                                except Exception:
+                                    pass
+                        if res:
+                            return res
+
+                    # 2. 次选 Playwright 同步渲染
                     try:
                         from playwright.sync_api import sync_playwright
                         with sync_playwright() as p:

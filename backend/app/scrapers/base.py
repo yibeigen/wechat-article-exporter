@@ -16,11 +16,15 @@ class BaseScraper(ABC):
         self.enable_noise_filter = enable_noise_filter
         self.max_articles = max_articles
         self.remove_image_watermark = remove_image_watermark
+        self.declared_count: Optional[int] = None
+        self.category_name: Optional[str] = None
+        self.explanation: Optional[str] = None
         self.client = httpx.AsyncClient(
             headers=DEFAULT_HEADERS,
             timeout=DEFAULT_TIMEOUT,
             follow_redirects=True,
-            verify=False
+            verify=False,
+            trust_env=False
         )
 
     async def close(self):
