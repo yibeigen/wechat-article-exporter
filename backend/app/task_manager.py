@@ -24,6 +24,7 @@ from app.exporters.html_exporter import HTMLExporter
 from app.exporters.txt_exporter import TxtExporter
 from app.exporters.docx_exporter import DocxExporter
 from app.exporters.pdf_exporter import PDFExporter
+from app.exporters.original_html_exporter import OriginalHTMLExporter
 from app.exporters.zip_exporter import ZipExporter
 from app.core.cache import get_cached_article, save_cached_article
 
@@ -485,6 +486,12 @@ class TaskManager:
                         out_path = await exporter.export(scraped_articles, filename_prefix)
                         export_files["html"] = f"/api/download/{out_path.name}"
                         generated_paths["html"] = out_path
+
+                    elif fmt == ExportFormatEnum.ORIGINAL_HTML:
+                        exporter = OriginalHTMLExporter(author_name, platform_str, OUTPUT_DIR)
+                        out_path = await exporter.export(scraped_articles, filename_prefix)
+                        export_files["original_html"] = f"/api/download/{out_path.name}"
+                        generated_paths["original_html"] = out_path
 
                     elif fmt == ExportFormatEnum.TXT:
                         exporter = TxtExporter(author_name, platform_str, OUTPUT_DIR)

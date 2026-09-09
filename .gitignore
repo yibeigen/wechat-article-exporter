@@ -78,6 +78,7 @@ package-lock.json
 # ----------------------------------------------
 .idea/
 .vscode/
+.workbuddy/
 *.swp
 *.swo
 *~

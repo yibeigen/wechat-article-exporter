@@ -1220,6 +1220,12 @@
                 <span>📜 历史记录</span>
                 <span id="historyNavBadge" style="display:none; background: var(--accent-primary); color: #fff; font-size: 0.68rem; font-weight: 800; padding: 1px 6px; border-radius: 999px; margin-left: 2px;">0</span>
             </button>
+            <!-- 平台支持矩阵与版本更新日志入口 -->
+            <button type="button" class="nav-btn" onclick="openChangelogModal()" style="font-weight: 700; color: #6366f1; border-color: rgba(99, 102, 241, 0.35); background: rgba(99, 102, 241, 0.08);" title="查看 9 大平台支持矩阵与最新版本更新日志">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                <span>📢 更新日志</span>
+                <span style="background: #e11d48; color: #fff; font-size: 0.64rem; font-weight: 800; padding: 1px 5px; border-radius: 999px; margin-left: 2px;">NEW</span>
+            </button>
             <!-- 桌面离线客户端 (100%本地运算) -->
             <button type="button" class="nav-btn" onclick="openDesktopModal()" style="font-weight: 700; color: var(--accent-gold); border-color: rgba(245, 158, 11, 0.35); background: var(--accent-gold-subtle);" title="下载 Windows 本地桌面版客户端，零服务器消耗">
                 <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
@@ -1295,8 +1301,9 @@
                 <span>🎉 <b>重磅升级：</b>平台矩阵正式升级为 <b>9 大主流创作社区</b>！现已上线 <b>【新浪博客】</b> 与 <b>【简书】</b> 专属通道，支持全量博文/专题文集免登录穿透提取与高清排版打包！</span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
-                <button type="button" class="btn-secondary" style="padding: 5px 12px; font-size: 0.78rem; font-weight: 600; border-color: rgba(230, 22, 45, 0.4); color: #e6162d;" onclick="selectPlatform('sina_blog'); fillDemoLink();">🏮 体验新浪博客</button>
+                <button type="button" class="btn-secondary" style="padding: 5px 12px; font-size: 0.78rem; font-weight: 600; border-color: rgba(230, 22, 45, 0.4); color: #e6162d;" onclick="selectPlatform('sina_blog'); fillDemoLink();">🏮 体验新浪博客(含原版)</button>
                 <button type="button" class="btn-secondary" style="padding: 5px 12px; font-size: 0.78rem; font-weight: 600; border-color: rgba(234, 111, 90, 0.4); color: #ea6f5a;" onclick="selectPlatform('jianshu'); fillDemoLink();">📖 体验简书</button>
+                <button type="button" class="btn-secondary" style="padding: 5px 12px; font-size: 0.78rem; font-weight: 700; border-color: rgba(99, 102, 241, 0.45); color: #6366f1; background: rgba(99, 102, 241, 0.08);" onclick="openChangelogModal()">📢 更新与支持日志</button>
             </div>
         </div>
 
@@ -1427,9 +1434,17 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
 
             <!-- 3. 导出格式多选 -->
             <div class="section-block">
-                <div class="section-title">
-                    <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="14" y1="2" x2="14" y2="8" x2="20" y2="8"></line><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                    <span>3. 选择导出格式 (支持多选，一键并行打包)</span>
+                <div class="section-title" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="14" y1="2" x2="14" y2="8" x2="20" y2="8"></line><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        <span>3. 选择导出格式 (支持多选，一键并行打包)</span>
+                        <span id="originalHtmlExclusiveTip" style="display: none; align-items: center; gap: 4px; font-size: 0.76rem; color: #d97706; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 2px 8px;">
+                            <span>🏮 新浪博客专属：已为您启用 1:1 电脑端原版经典排版</span>
+                        </span>
+                    </div>
+                    <button type="button" onclick="openChangelogModal()" style="background: none; border: none; font-size: 0.74rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 4px; text-decoration: underline;" title="查看各平台原版 HTML 支持现状与排期">
+                        <span>📋 平台支持与更新日志 ↗</span>
+                    </button>
                 </div>
                 <div class="format-chips" id="formatChipsContainer">
                     <div class="format-badge active" data-format="pdf">
@@ -1443,6 +1458,11 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     <div class="format-badge active" data-format="html">
                         <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg>
                         <span>单文件离线网页</span>
+                    </div>
+                    <div class="format-badge active" data-format="original_html" id="originalHtmlFormatBadge" style="display: none;" title="1:1 像素级复刻电脑端官网经典真实排版，内置毫秒级离线即时搜索">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                        <span>网站原版HTML</span>
+                        <span style="font-size: 0.65rem; padding: 1px 4px; border-radius: 4px; background: rgba(245, 158, 11, 0.2); color: #d97706; font-weight: 700; margin-left: 2px;">1:1原版</span>
                     </div>
                     <div class="format-badge active" data-format="docx">
                         <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
@@ -2201,6 +2221,204 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         </div>
     </div>
 
+    <!-- 平台支持矩阵与版本更新日志弹窗 -->
+    <div id="changelogModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card" style="max-width: 800px;">
+            <div class="modal-header">
+                <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+                    <svg class="icon" viewBox="0 0 24 24" style="color: #6366f1;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    <span>BlogDistiller 平台支持矩阵与版本更新日志</span>
+                    <span style="font-size: 0.68rem; padding: 2px 8px; border-radius: 9999px; background: rgba(99, 102, 241, 0.12); color: #6366f1; font-weight: 800; font-family: monospace;">v2.3.0</span>
+                </div>
+                <button class="modal-close-btn" onclick="closeChangelogModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px 24px; max-height: 80vh; overflow-y: auto;">
+                <!-- 顶部引导与原版规则说明 -->
+                <div style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(245, 158, 11, 0.08)); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-size: 0.82rem; color: var(--text-primary); line-height: 1.6;">
+                    💡 <b>关于「网站原版HTML」支持说明：</b>本系统采用双轨制输出，通用现代响应式 HTML 覆盖全平台；而针对“1:1 像素级复刻当年电脑端真实排版”，目前已率先在<b>【新浪博客】</b>独家上线（包含蓝天白云原版头图、标志性折角图标、博主名片栏与毫秒级离线即时搜索）。为了避免误导用户，<b>在前端切换为新浪博客时方会自动点亮该选项</b>；其他各大主流平台的专属原版模板正在紧锣密鼓开发中！
+                </div>
+
+                <!-- 1. 平台支持矩阵全景表 -->
+                <div style="margin-bottom: 22px;">
+                    <div style="font-size: 0.92rem; font-weight: 800; color: var(--text-primary); margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                        <span>🌟 9 大主流平台支持现状与原版进度</span>
+                    </div>
+                    <div style="border: 1px solid var(--border-main); border-radius: 8px; overflow-x: auto; font-size: 0.8rem;">
+                        <table style="width: 100%; min-width: 620px; border-collapse: collapse; text-align: left;">
+                            <thead>
+                                <tr style="background: var(--bg-subtle); border-bottom: 1px solid var(--border-main); color: var(--text-secondary); font-size: 0.76rem;">
+                                    <th style="padding: 10px 12px; font-weight: 700;">平台名称</th>
+                                    <th style="padding: 10px 12px; font-weight: 700;">内容抓取与提取支持</th>
+                                    <th style="padding: 10px 12px; font-weight: 700;">1:1 网站原版HTML 状态</th>
+                                    <th style="padding: 10px 12px; font-weight: 700;">通用格式支持</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr style="border-bottom: 1px solid var(--border-subtle); background: rgba(245, 158, 11, 0.05);">
+                                    <td style="padding: 10px 12px; font-weight: 700; color: var(--text-primary);">
+                                        <span>🏮 新浪博客</span>
+                                        <span style="font-size: 0.65rem; background: #e6162d; color: #fff; padding: 1px 5px; border-radius: 4px; font-weight: 800; margin-left: 4px;">独家上线</span>
+                                    </td>
+                                    <td style="padding: 10px 12px; color: var(--text-secondary);">全量博文 / 分类专栏免登录提取</td>
+                                    <td style="padding: 10px 12px;">
+                                        <span style="display: inline-flex; align-items: center; gap: 4px; color: #16a34a; font-weight: 700; background: rgba(22, 163, 74, 0.1); padding: 2px 8px; border-radius: 4px;">
+                                            ✅ 已上线 (1:1 PC经典双栏+毫秒搜索)
+                                        </span>
+                                    </td>
+                                    <td style="padding: 10px 12px; color: var(--text-muted);">MD / PDF / HTML / DOCX / TXT / ZIP</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid var(--border-subtle);">
+                                    <td style="padding: 10px 12px; font-weight: 700; color: var(--text-primary);">📖 简书</td>
+                                    <td style="padding: 10px 12px; color: var(--text-secondary);">个人主页 / 专题文集免登录提取</td>
+                                    <td style="padding: 10px 12px;">
+                                        <span style="color: #ea6f5a; font-weight: 600; background: rgba(234, 111, 90, 0.1); padding: 2px 8px; border-radius: 4px;">
+                                            ⏳ 原版排版紧密开发中
+                                        </span>
+                                    </td>
+                                    <td style="padding: 10px 12px; color: var(--text-muted);">MD / PDF / HTML / DOCX / TXT / ZIP</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid var(--border-subtle);">
+                                    <td style="padding: 10px 12px; font-weight: 700; color: var(--text-primary);">🔴 知乎</td>
+                                    <td style="padding: 10px 12px; color: var(--text-secondary);">专栏文章 / 历史回答全量溯源</td>
+                                    <td style="padding: 10px 12px;">
+                                        <span style="color: var(--text-muted); background: var(--bg-subtle); padding: 2px 8px; border-radius: 4px;">
+                                            📅 问答流原版排期中
+                                        </span>
+                                    </td>
+                                    <td style="padding: 10px 12px; color: var(--text-muted);">MD / PDF / HTML / DOCX / TXT / ZIP</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid var(--border-subtle);">
+                                    <td style="padding: 10px 12px; font-weight: 700; color: var(--text-primary);">🟢 微信公众号</td>
+                                    <td style="padding: 10px 12px; color: var(--text-secondary);">免登录名称反查 / 浏览器扩展全量嗅探</td>
+                                    <td style="padding: 10px 12px;">
+                                        <span style="color: var(--text-muted); background: var(--bg-subtle); padding: 2px 8px; border-radius: 4px;">
+                                            📅 原生排版规划中
+                                        </span>
+                                    </td>
+                                    <td style="padding: 10px 12px; color: var(--text-muted);">MD / PDF / HTML / DOCX / TXT / ZIP</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid var(--border-subtle);">
+                                    <td style="padding: 10px 12px; font-weight: 700; color: var(--text-primary);">🅱️ 微博</td>
+                                    <td style="padding: 10px 12px; color: var(--text-secondary);">头条长文章 / 原创博文展开提取</td>
+                                    <td style="padding: 10px 12px;">
+                                        <span style="color: var(--text-muted); background: var(--bg-subtle); padding: 2px 8px; border-radius: 4px;">
+                                            📅 微博长文流排期中
+                                        </span>
+                                    </td>
+                                    <td style="padding: 10px 12px; color: var(--text-muted);">MD / PDF / HTML / DOCX / TXT / ZIP</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid var(--border-subtle);">
+                                    <td style="padding: 10px 12px; font-weight: 700; color: var(--text-primary);">📑 CSDN</td>
+                                    <td style="padding: 10px 12px; color: var(--text-secondary);">博主全量博文分页抓取与去噪</td>
+                                    <td style="padding: 10px 12px;">
+                                        <span style="color: var(--text-muted); background: var(--bg-subtle); padding: 2px 8px; border-radius: 4px;">
+                                            📅 技术双栏排版排期中
+                                        </span>
+                                    </td>
+                                    <td style="padding: 10px 12px; color: var(--text-muted);">MD / PDF / HTML / DOCX / TXT / ZIP</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid var(--border-subtle);">
+                                    <td style="padding: 10px 12px; font-weight: 700; color: var(--text-primary);">💎 掘金</td>
+                                    <td style="padding: 10px 12px; color: var(--text-secondary);">专栏与文章原生高质量 Markdown 提取</td>
+                                    <td style="padding: 10px 12px;">
+                                        <span style="color: var(--text-muted); background: var(--bg-subtle); padding: 2px 8px; border-radius: 4px;">
+                                            📅 规划中
+                                        </span>
+                                    </td>
+                                    <td style="padding: 10px 12px; color: var(--text-muted);">MD / PDF / HTML / DOCX / TXT / ZIP</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid var(--border-subtle);">
+                                    <td style="padding: 10px 12px; font-weight: 700; color: var(--text-primary);">🌸 博客园</td>
+                                    <td style="padding: 10px 12px; color: var(--text-secondary);">全量文章爬取与代码语法高亮</td>
+                                    <td style="padding: 10px 12px;">
+                                        <span style="color: var(--text-muted); background: var(--bg-subtle); padding: 2px 8px; border-radius: 4px;">
+                                            📅 规划中
+                                        </span>
+                                    </td>
+                                    <td style="padding: 10px 12px; color: var(--text-muted);">MD / PDF / HTML / DOCX / TXT / ZIP</td>
+                                </tr>
+                                <tr>
+                                    <td style="padding: 10px 12px; font-weight: 700; color: var(--text-primary);">🐧 51CTO</td>
+                                    <td style="padding: 10px 12px; color: var(--text-secondary);">博主历史发表的技术博文与专栏</td>
+                                    <td style="padding: 10px 12px;">
+                                        <span style="color: var(--text-muted); background: var(--bg-subtle); padding: 2px 8px; border-radius: 4px;">
+                                            📅 规划中
+                                        </span>
+                                    </td>
+                                    <td style="padding: 10px 12px; color: var(--text-muted);">MD / PDF / HTML / DOCX / TXT / ZIP</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 2. 版本更新日志 (Changelog 时间线) -->
+                <div>
+                    <div style="font-size: 0.92rem; font-weight: 800; color: var(--text-primary); margin-bottom: 14px; display: flex; align-items: center; gap: 6px;">
+                        <span>📜 版本迭代历程 (Changelog)</span>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 14px;">
+                        <!-- v2.3.0 -->
+                        <div style="background: var(--bg-surface); border: 1px solid rgba(99, 102, 241, 0.3); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow-sm);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="background: #6366f1; color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; font-family: monospace;">v2.3.0</span>
+                                    <span style="font-weight: 800; font-size: 0.9rem; color: var(--text-primary);">新浪博客电脑端原版上线 & 智能格式联动</span>
+                                </div>
+                                <span style="font-size: 0.74rem; color: var(--text-muted);">2026-09-09</span>
+                            </div>
+                            <ul style="margin: 0; padding-left: 18px; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.7;">
+                                <li><b>🏛️ 新浪博客 1:1 电脑端经典原版 HTML 重磅上线</b>：100% 像素级复刻 Theme 30_1 蓝白天际头图、博主名片组件、折角图标与宋体字阶，内置前端毫秒级即时搜索与键盘左右键快捷切篇；</li>
+                                <li><b>🎯 智能感知格式联动机制</b>：【网站原版HTML】仅在选择新浪博客时自动激活展示，其他平台动态隐藏并不予勾选，彻底杜绝概念混淆；</li>
+                                <li><b>📦 全量 ZIP 归档升级</b>：勾选原版 HTML 导出时，ZIP 归档包内自动收纳《【网站原版】XXX_电脑端经典原版.html》；</li>
+                                <li><b>📢 上线更新与支持日志系统</b>：透明公开 9 大平台抓取支持现状与各平台原版排期进度。</li>
+                            </ul>
+                        </div>
+
+                        <!-- v2.2.0 -->
+                        <div style="background: var(--bg-subtle); border: 1px solid var(--border-main); border-radius: 10px; padding: 14px 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="background: var(--text-muted); color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; font-family: monospace;">v2.2.0</span>
+                                    <span style="font-weight: 700; font-size: 0.88rem; color: var(--text-primary);">平台扩充至 9 大社区 & 100% 离线 Base64 图片支持</span>
+                                </div>
+                                <span style="font-size: 0.74rem; color: var(--text-muted);">2026-09-09</span>
+                            </div>
+                            <ul style="margin: 0; padding-left: 18px; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.7;">
+                                <li><b>🌐 平台矩阵扩充</b>：新增【新浪博客】与【简书】两大平台，实现主流 9 大平台全覆盖；</li>
+                                <li><b>🖼️ 离线防盗链穿透</b>：正文插图全量自动转为 Base64 内联存储在 HTML 中，杜绝 403 裂图问题；</li>
+                                <li><b>📄 PDF 渲染多通道强化</b>：集成搜狗代理 CDN 多节点穿透机制，大幅提升配图抓取容错率。</li>
+                            </ul>
+                        </div>
+
+                        <!-- v2.1.0 -->
+                        <div style="background: var(--bg-subtle); border: 1px solid var(--border-main); border-radius: 10px; padding: 14px 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="background: var(--text-muted); color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; font-family: monospace;">v2.1.0</span>
+                                    <span style="font-weight: 700; font-size: 0.88rem; color: var(--text-primary);">智能广告噪音清洗 & 桌面客户端</span>
+                                </div>
+                                <span style="font-size: 0.74rem; color: var(--text-muted);">2026-09-08</span>
+                            </div>
+                            <ul style="margin: 0; padding-left: 18px; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.7;">
+                                <li><b>🛡️ 智能去噪引擎</b>：规则与 DOM 混合过滤，精准剔除求赞、关注引流语与平台横幅广告；</li>
+                                <li><b>💻 Windows 桌面端上线</b>：提供基于 Electron 的离线独立桌面版；</li>
+                                <li><b>🧩 Chrome/Edge 浏览器扩展</b>：提供一键凭证嗅探与公众号无感同步。</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 24px; border-top: 1px solid var(--border-main); display: flex; justify-content: space-between; align-items: center; background: var(--bg-subtle);">
+                <div style="font-size: 0.76rem; color: var(--text-muted);">
+                    更多新平台或原版排版需求？欢迎在交流群向作者提出！
+                </div>
+                <button class="nav-btn" onclick="closeChangelogModal()" style="padding: 6px 16px; font-weight: 700; background: var(--accent-primary); color: var(--bg-base); border: none;">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 3. 官方社群与公众号关注交流通知弹窗 (每日频控自动弹出 1 次) -->
     <div id="communityModal" class="modal-overlay" style="display: none;">
         <div class="modal-card" style="max-width: 480px; text-align: center;">
@@ -2523,6 +2741,26 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 </div>
             `).join('');
             updatePlatformTips();
+            updatePlatformFormatOptions();
+        }
+
+        function updatePlatformFormatOptions() {
+            const origBadge = document.getElementById('originalHtmlFormatBadge');
+            const origTip = document.getElementById('originalHtmlExclusiveTip');
+            if (!origBadge) return;
+
+            // 目前仅新浪博客 (sina_blog) 支持 1:1 原版电脑端 HTML
+            if (currentPlatform === 'sina_blog') {
+                origBadge.style.display = 'flex';
+                // 切换到新浪博客时自动勾选原版，提供极佳新浪原版体验
+                origBadge.classList.add('active');
+                if (origTip) origTip.style.display = 'inline-flex';
+            } else {
+                // 其他平台尚未实现原版排版模板，为了避免误导用户，自动隐藏该选项并不予勾选
+                origBadge.style.display = 'none';
+                origBadge.classList.remove('active');
+                if (origTip) origTip.style.display = 'none';
+            }
         }
 
         function selectPlatform(pid) {
@@ -2553,6 +2791,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             renderPlatforms();
             updateZhihuAuthUI();
             checkZhihuSmartHint();
+            updatePlatformFormatOptions();
             saveFormState();
         }
 
@@ -4001,6 +4240,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 if (state.authorOverride && document.getElementById('authorNameOverrideInput')) document.getElementById('authorNameOverrideInput').value = state.authorOverride;
                 if (state.wechatToken && document.getElementById('wechatTokenInput')) document.getElementById('wechatTokenInput').value = state.wechatToken;
                 if (state.wechatCookie && document.getElementById('wechatCookieInput')) document.getElementById('wechatCookieInput').value = state.wechatCookie;
+                updatePlatformFormatOptions();
             } catch (e) {}
         }
 
@@ -4433,6 +4673,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     const formatLabels = {
                         'md': 'Markdown (.md)',
                         'html': '离线网页 (.html)',
+                        'original_html': '网站原版 (.html)',
                         'pdf': '排版文档 (.pdf)',
                         'docx': 'Word (.docx)',
                         'txt': '纯文本 (.txt)'
@@ -4442,6 +4683,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         'pdf': '📕',
                         'docx': '📘',
                         'html': '🌐',
+                        'original_html': '🏛️',
                         'txt': '📄'
                     };
 
@@ -4630,6 +4872,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 'pdf': '📕 PDF 电子书',
                 'docx': '📘 Word 文档',
                 'html': '🌐 离线网页',
+                'original_html': '🏛️ 网站原版',
                 'txt': '📄 纯文本'
             };
 
@@ -4914,6 +5157,16 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             if (modal) modal.style.display = 'none';
         }
 
+        function openChangelogModal() {
+            const modal = document.getElementById('changelogModal');
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function closeChangelogModal() {
+            const modal = document.getElementById('changelogModal');
+            if (modal) modal.style.display = 'none';
+        }
+
         // 微信公众平台智能诊断与排查引导弹窗
         function showDiagnosisModal(data) {
             const modal = document.getElementById('diagnosisModal');
@@ -5019,6 +5272,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 closeActivationModal();
                 closeAuthorModal();
                 closeCommunityModal();
+                closeChangelogModal();
                 closeConfirmModal();
                 closeWechatAuthModal();
                 closeDiagnosisModal();

@@ -487,6 +487,7 @@ class ZipExporter(BaseExporter):
             format_names = {
                 "md": f"合并总文档/【合并合集】{safe_author}_{self.platform}_文章合集.md",
                 "html": f"合并总文档/【合并合集】{safe_author}_{self.platform}_离线网页电子书.html",
+                "original_html": f"合并总文档/【网站原版】{safe_author}_{self.platform}_电脑端经典原版.html",
                 "pdf": f"合并总文档/【合并合集】{safe_author}_{self.platform}_排版打印.pdf",
                 "docx": f"合并总文档/【合并合集】{safe_author}_{self.platform}_Word文档.docx",
                 "txt": f"合并总文档/【合并合集】{safe_author}_{self.platform}_纯文本语料.txt"

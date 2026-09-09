@@ -18,6 +18,7 @@ class ExportFormatEnum(str, Enum):
     MARKDOWN = "md"
     PDF = "pdf"
     HTML = "html"
+    ORIGINAL_HTML = "original_html"
     WORD = "docx"
     TXT = "txt"
 
