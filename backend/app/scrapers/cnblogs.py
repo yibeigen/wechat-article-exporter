@@ -99,8 +99,17 @@ class CNBlogsScraper(BaseScraper):
             while True:
                 page_url = f"{base_pat}{page}" if page > 1 else (f"https://www.cnblogs.com/{blog_id}/" if "default.html" in base_pat else f"https://www.cnblogs.com/{blog_id}/p/")
                 try:
-                    resp = await self.client.get(page_url)
-                    if resp.status_code != 200:
+                    resp = None
+                    for retry_i in range(3):
+                        try:
+                            resp = await self.client.get(page_url, timeout=12.0)
+                            if resp.status_code == 200:
+                                break
+                        except Exception:
+                            pass
+                        await asyncio.sleep(0.4 * (retry_i + 1))
+
+                    if not resp or resp.status_code != 200:
                         break
                     
                     soup = BeautifulSoup(resp.text, "lxml")

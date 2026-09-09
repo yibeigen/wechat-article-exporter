@@ -223,8 +223,17 @@ class JianshuScraper(BaseScraper):
                     progress_callback(f"正在扫描专题第 {page} 页博文...", len(articles), len(articles))
 
                 try:
-                    resp = await self.client.get(page_url, headers=self.DESKTOP_AJAX_HEADERS)
-                    if resp.status_code != 200 or (page > 1 and "/page=1" in str(resp.url)):
+                    resp = None
+                    for retry_i in range(3):
+                        try:
+                            resp = await self.client.get(page_url, headers=self.DESKTOP_AJAX_HEADERS, timeout=12.0)
+                            if resp.status_code == 200:
+                                break
+                        except Exception:
+                            pass
+                        await asyncio.sleep(0.4 * (retry_i + 1))
+
+                    if not resp or resp.status_code != 200 or (page > 1 and "/page=1" in str(resp.url)):
                         break
 
                     soup = BeautifulSoup(resp.text, "lxml")
@@ -293,8 +302,17 @@ class JianshuScraper(BaseScraper):
                 progress_callback(f"正在扫描博主时间线第 {step} 批文章...", len(articles), self.declared_count or len(articles))
 
             try:
-                resp = await self.client.get(timeline_url, headers=self.DESKTOP_AJAX_HEADERS)
-                if resp.status_code != 200:
+                resp = None
+                for retry_i in range(3):
+                    try:
+                        resp = await self.client.get(timeline_url, headers=self.DESKTOP_AJAX_HEADERS, timeout=12.0)
+                        if resp.status_code == 200:
+                            break
+                    except Exception:
+                        pass
+                    await asyncio.sleep(0.4 * (retry_i + 1))
+
+                if not resp or resp.status_code != 200:
                     break
 
                 soup = BeautifulSoup(resp.text, "lxml")

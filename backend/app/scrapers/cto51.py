@@ -55,8 +55,18 @@ def _fetch_51cto_via_bot_sync(user_id: str, max_articles: Optional[int] = None) 
         for page in range(1, 50):
             url = f"https://blog.51cto.com/{user_id}/p{page}" if page > 1 else f"https://blog.51cto.com/{user_id}"
             try:
-                resp = client.get(url, headers=headers)
-                if resp.status_code != 200 or len(resp.text) < 1000:
+                resp = None
+                for retry_i in range(3):
+                    try:
+                        resp = client.get(url, headers=headers, timeout=12.0)
+                        if resp.status_code == 200 and len(resp.text) >= 1000:
+                            break
+                    except Exception:
+                        pass
+                    import time
+                    time.sleep(0.4 * (retry_i + 1))
+
+                if not resp or resp.status_code != 200 or len(resp.text) < 1000:
                     break
 
                 soup = BeautifulSoup(resp.text, "lxml")
