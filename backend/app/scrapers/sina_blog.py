@@ -400,12 +400,20 @@ class SinaBlogScraper(BaseScraper):
                         if m_time:
                             publish_time = m_time.group(0)
 
-                # 4. 提取标签 (横向展示在元数据栏)
+                # 4. 提取标签与专栏分类
+                cat_name = self.category_name
+                cat_tag = soup.select_one("td.blog_class a, .blog_class a, #articlebody .blog_class a")
+                if cat_tag and cat_tag.text.strip():
+                    cat_name = cat_tag.text.strip()
+
                 tags = []
                 for a in soup.select(".articalTag a, td.blog_tag a, .blog_tag a, #articlebody .blog_tag a"):
                     t_text = a.text.strip()
                     if t_text and t_text not in ["标签：", "分类："] and t_text not in tags:
                         tags.append(t_text)
+
+                if not cat_name and tags:
+                    cat_name = tags[0]
 
                 # 5. 正文区域 (优先选择精确正文容器，避免包含外部广告与装饰图标)
                 content_tag = soup.select_one("#sina_keyword_ad_area2") or soup.select_one(".articalContent")
@@ -448,7 +456,8 @@ class SinaBlogScraper(BaseScraper):
                     content_html=cleaned_html,
                     content_markdown=md_content,
                     images=images,
-                    tags=tags
+                    tags=tags,
+                    category=cat_name or "未分类"
                 )
             except Exception:
                 pass

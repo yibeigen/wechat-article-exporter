@@ -380,21 +380,50 @@
       font-weight: bold;
     }
 
-    /* 分类专栏模块 (module_7) */
+    /* 分类专栏模块 (module_7) 1:1 复刻新浪博客电脑端左侧分类列表 */
     .cat-menu-list {
-      padding: 8px 10px;
+      padding: 4px 6px;
       list-style: none;
       font-size: 12px;
+      margin: 0;
     }
     .cat-menu-item {
-      padding: 5px 0;
+      padding: 5px 8px 5px 18px;
       border-bottom: 1px dotted #E8EFF6;
       display: flex;
+      align-items: center;
       justify-content: space-between;
       background-image: url('{{ dot_b64 }}');
       background-repeat: no-repeat;
-      background-position: left center;
-      padding-left: 12px;
+      background-position: 6px center;
+      cursor: pointer;
+      line-height: 20px;
+    }
+    .cat-menu-item:hover {
+      background-color: #f2f7fc;
+    }
+    .cat-menu-item.current {
+      background-color: #e5f1fb;
+      font-weight: bold;
+    }
+    .cat-menu-item.current a {
+      color: #03487F !important;
+      font-weight: bold;
+    }
+    .cat-menu-item a {
+      color: #3E73A0;
+      text-decoration: none;
+      flex-grow: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .cat-menu-item em {
+      font-style: normal;
+      color: #747474;
+      font-size: 11px;
+      margin-left: 6px;
+      flex-shrink: 0;
     }
 
     /* ========================================================
@@ -749,18 +778,17 @@
           <div class="SG_connFoot"></div>
         </div>
 
-        <!-- 分类专栏模块 (module_7) -->
+        <!-- 分类专栏模块 (module_7) 1:1 复刻新浪博客原版左侧分类专栏 -->
         <div class="SG_conn" id="module_7">
           <div class="SG_connHead">
-            <span class="title">分类专栏</span>
+            <span class="title">博文分类</span>
           </div>
           <div class="SG_connBody">
-            <ul class="cat-menu-list">
-              <li class="cat-menu-item">
-                <a href="javascript:switchView('list')">{{ category_name or '全部博文' }}</a>
-                <span style="color:#747474;">({{ total_articles }})</span>
-              </li>
-            </ul>
+            <div class="menuList blog_classList" style="max-height: 480px; overflow-y: auto;">
+              <ul class="cat-menu-list" id="categoryMenuList">
+                <!-- 由 JavaScript 动态渲染全部分类及对应文章篇数 -->
+              </ul>
+            </div>
           </div>
           <div class="SG_connFoot"></div>
         </div>
@@ -809,7 +837,7 @@
                       </td>
                       <td class="blog_class">
                         <span class="SG_txtb">分类：</span>
-                        <a href="javascript:switchView('list')" id="articleCatLink">{{ category_name or '西游正解' }}</a>
+                        <a href="javascript:void(0)" id="articleCatLink">{{ category_name or '全部博文' }}</a>
                       </td>
                     </tr>
                   </table>
@@ -901,6 +929,7 @@
     let currentIndex = 0;
     // 单主题模式：默认直接打开具体文章页，无需多余目录过渡
     let currentView = 'article'; 
+    let currentCategory = ''; // 当前选中的分类，空字符串表示“全部博文”
     let filteredIndices = articles.map((_, i) => i);
     let currentFontSize = 16;
     let isBold = false;
@@ -916,6 +945,87 @@
     const listViewContainer = document.getElementById('listViewContainer');
     const navArticleBtn = document.getElementById('navArticleBtn');
     const navListBtn = document.getElementById('navListBtn');
+
+    // 规整所有文章分类（优先从标签首项提取真实分类，确保 100% 数据完备）
+    function normalizeCategories() {
+      articles.forEach(art => {
+        if (!art.category || art.category === '默认分类' || art.category === '未分类' || art.category === '全部博文' || art.category === '新浪博文' || art.category === '其它') {
+          if (art.tags && art.tags.length > 0 && art.tags[0] && art.tags[0] !== '新浪博客') {
+            art.category = art.tags[0];
+          } else {
+            art.category = '其它博文';
+          }
+        }
+      });
+    }
+
+    // 渲染左侧分类菜单 (1:1 像素级复刻新浪博客原版分类专栏)
+    function renderCategoryMenu() {
+      const menuList = document.getElementById('categoryMenuList');
+      if (!menuList) return;
+
+      const catCounts = {};
+      articles.forEach(art => {
+        const cat = art.category || '其它博文';
+        catCounts[cat] = (catCounts[cat] || 0) + 1;
+      });
+
+      // 提取所有分类并保持文章中首次出现的自然序列
+      const catsInOrder = [];
+      articles.forEach(art => {
+        const cat = art.category || '其它博文';
+        if (!catsInOrder.includes(cat)) {
+          catsInOrder.push(cat);
+        }
+      });
+
+      let html = '';
+      // 顶部条目：全部博文
+      const allActive = !currentCategory ? 'current' : '';
+      html += `
+        <li class="cat-menu-item ${allActive}" data-cat="">
+          <a href="javascript:void(0)" onclick="selectCategory('')">全部博文</a>
+          <em>(${articles.length})</em>
+        </li>
+      `;
+
+      catsInOrder.forEach(cat => {
+        const isActive = currentCategory === cat ? 'current' : '';
+        html += `
+          <li class="cat-menu-item ${isActive}" data-cat="${escapeHtml(cat)}">
+            <a href="javascript:void(0)" onclick="selectCategory('${escapeHtml(cat)}')">${escapeHtml(cat)}</a>
+            <em>(${catCounts[cat] || 0})</em>
+          </li>
+        `;
+      });
+
+      menuList.innerHTML = html;
+    }
+
+    // 切换分类
+    function selectCategory(catName) {
+      currentCategory = catName || '';
+
+      // 更新分类菜单高亮样式
+      const menuItems = document.querySelectorAll('#categoryMenuList .cat-menu-item');
+      menuItems.forEach(item => {
+        const cat = item.getAttribute('data-cat') || '';
+        if (cat === currentCategory) {
+          item.classList.add('current');
+        } else {
+          item.classList.remove('current');
+        }
+      });
+
+      // 刷新左侧文章列表（遵循当前选中的分类）
+      renderSidebarList(searchInput ? searchInput.value : '');
+
+      // 刷新右侧目录清单
+      renderBigList();
+
+      // 切换至目录清单视图展示该分类全部博文
+      switchView('list');
+    }
 
     // 视图切换（正文视图 vs 目录大清单视图）
     function switchView(viewName) {
@@ -943,7 +1053,9 @@
 
       articles.forEach((art, idx) => {
         const title = art.title || '';
-        if (!kw || title.toLowerCase().includes(kw)) {
+        const matchKw = !kw || title.toLowerCase().includes(kw);
+        const matchCat = !currentCategory || art.category === currentCategory;
+        if (matchKw && matchCat) {
           filteredIndices.push(idx);
         }
       });
@@ -989,15 +1101,40 @@
     // 渲染右侧完整目录清单 (1:1 还原 articlelist_xxx.html)
     function renderBigList() {
       bigArticleList.innerHTML = '';
+
+      const titleEl = document.querySelector('#module_928 .title');
+      const summaryEl = document.querySelector('#listViewContainer .list-filter-bar span:first-child');
+      const catTitle = currentCategory ? `【${currentCategory}】` : '【全部博文】';
+
+      const listIndices = [];
+      articles.forEach((art, idx) => {
+        if (!currentCategory || art.category === currentCategory) {
+          listIndices.push(idx);
+        }
+      });
+
+      if (titleEl) {
+        titleEl.innerHTML = `${escapeHtml(catTitle)}目录列表 <em>(${listIndices.length})</em>`;
+      }
+      if (summaryEl) {
+        summaryEl.innerHTML = `共收录 <b>${listIndices.length}</b> 篇博文 · 点击任意一篇直接进入正文阅读`;
+      }
+
+      if (listIndices.length === 0) {
+        bigArticleList.innerHTML = '<div style="padding:30px;text-align:center;color:#999;">该分类下暂无博文</div>';
+        return;
+      }
+
       const fragment = document.createDocumentFragment();
 
-      articles.forEach((art, idx) => {
+      listIndices.forEach((idx, seq) => {
+        const art = articles[idx];
         const div = document.createElement('div');
         div.className = 'articleCell SG_j_linedot1';
         div.innerHTML = `
           <p class="atc_main SG_dot">
             <span class="atc_title">
-              <a href="javascript:void(0)" onclick="openArticle(${idx})">${idx + 1}. ${escapeHtml(art.title)}</a>
+              <a href="javascript:void(0)" onclick="openArticle(${idx})">${seq + 1}. ${escapeHtml(art.title)}</a>
             </span>
           </p>
           <p class="atc_info">
@@ -1038,7 +1175,12 @@
       tagsCell.innerHTML = tagsHtml;
 
       // 分类
-      document.getElementById('articleCatLink').textContent = art.category || '全部博文';
+      const catLink = document.getElementById('articleCatLink');
+      if (catLink) {
+        const catName = art.category || '全部博文';
+        catLink.textContent = catName;
+        catLink.onclick = () => selectCategory(catName === '全部博文' ? '' : catName);
+      }
 
       // 正文内容 (清理硬编码的 font-size 行内样式，确保控制器 100% 顺畅生效)
       const contentEl = document.getElementById('articleContent');
@@ -1304,6 +1446,8 @@
 
     // 初始化运行
     window.addEventListener('DOMContentLoaded', () => {
+      normalizeCategories();
+      renderCategoryMenu();
       initFontSettings();
       renderSidebarList();
       if (articles.length > 0) {

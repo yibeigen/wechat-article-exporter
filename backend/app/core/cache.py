@@ -49,6 +49,7 @@ def get_cached_article(url: str) -> Optional[ArticleItem]:
             if row:
                 images = json.loads(row["images_json"]) if row["images_json"] else []
                 tags = json.loads(row["tags_json"]) if row["tags_json"] else []
+                category = tags[0] if (tags and len(tags) > 0) else None
                 return ArticleItem(
                     id=row["article_id"] or row["url"],
                     title=row["title"] or "",
@@ -60,7 +61,8 @@ def get_cached_article(url: str) -> Optional[ArticleItem]:
                     content_html=row["content_html"] or "",
                     content_markdown=row["content_markdown"] or "",
                     images=images,
-                    tags=tags
+                    tags=tags,
+                    category=category
                 )
     except Exception as e:
         print(f"读取缓存异常: {e}")

@@ -57,22 +57,29 @@ class OriginalHTMLExporter(BaseExporter):
         # 提取分类或专栏名称
         category_name = None
         for a in articles:
-            if a.category and a.category.strip():
+            if a.category and a.category.strip() and a.category.strip() not in ["新浪博文", "全部博文", "未分类"]:
                 category_name = a.category.strip()
                 break
 
-        title = category_name or f"{self.author_name} 的新浪博客"
+        title = f"{self.author_name} 的新浪博客"
 
         # 构建给前端模版使用的结构化文章列表
         articles_data = []
         for idx, art in enumerate(articles, 1):
+            cat = art.category
+            if not cat or cat in ["新浪博文", "全部博文", "未分类"]:
+                if art.tags and len(art.tags) > 0 and art.tags[0] != "新浪博客":
+                    cat = art.tags[0]
+                else:
+                    cat = "其它"
+
             articles_data.append({
                 "id": art.id or str(idx),
                 "title": art.title,
                 "author": art.author or self.author_name,
                 "publish_time": art.publish_time,
                 "url": art.url,
-                "category": art.category or category_name or "新浪博文",
+                "category": cat,
                 "tags": art.tags or ["新浪博客"],
                 "content_html": art.content_html
             })
