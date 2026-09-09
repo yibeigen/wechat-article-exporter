@@ -15,6 +15,7 @@ import httpx
 from app.exporters.base import BaseExporter
 from app.models import ArticleItem
 from app.config import BRAND_OFFICIAL_ACCOUNT, BRAND_FOOTER_NOTE, BRAND_DISCLAIMER
+from app.core.image_helper import embed_articles_images_as_base64
 
 
 def find_system_browser() -> Optional[str]:
@@ -30,6 +31,7 @@ def find_system_browser() -> Optional[str]:
         shutil.which("chrome"),
         shutil.which("google-chrome"),
         shutil.which("chromium"),
+        shutil.which("chromium-browser"),
     ]
     for c in candidates:
         if c and Path(c).exists():
@@ -37,86 +39,8 @@ def find_system_browser() -> Optional[str]:
     return None
 
 
-def _get_platform_referer(url: str) -> Dict[str, str]:
-    """获取各平台防盗链 Referer 请求头"""
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
-    }
-    u = url.lower()
-    if "csdn" in u:
-        headers["Referer"] = "https://blog.csdn.net/"
-    elif "qpic.cn" in u or "weixin" in u:
-        headers["Referer"] = "https://mp.weixin.qq.com/"
-    elif "zhihu" in u or "zhimg" in u:
-        headers["Referer"] = "https://www.zhihu.com/"
-    elif "sinaimg" in u or "weibo" in u or "sina" in u:
-        headers["Referer"] = "https://weibo.com/"
-    elif "juejin" in u:
-        headers["Referer"] = "https://juejin.cn/"
-    elif "cnblogs" in u:
-        headers["Referer"] = "https://www.cnblogs.com/"
-    elif "51cto" in u:
-        headers["Referer"] = "https://blog.51cto.com/"
-    elif "jianshu" in u:
-        headers["Referer"] = "https://www.jianshu.com/"
-    return headers
-
-
 class PDFExporter(BaseExporter):
     """PDF 单文件排版导出器 (内嵌高清离线 Base64 图片，100% 免疫防盗链与脱机渲染)"""
-
-    async def _embed_images_as_base64(self, articles: List[ArticleItem]) -> Dict[str, str]:
-        """并发抓取所有文章的插图并转换为 Base64 Data URI"""
-        img_urls = set()
-        for art in articles:
-            if art.images:
-                for u in art.images:
-                    if u and u.startswith("http"):
-                        img_urls.add(u)
-            if art.content_html:
-                soup = BeautifulSoup(art.content_html, "lxml")
-                for img in soup.find_all("img"):
-                    src = img.get("src") or img.get("data-src")
-                    if src and src.startswith("http"):
-                        img_urls.add(src)
-
-        url_to_base64 = {}
-        if not img_urls:
-            return url_to_base64
-
-        sem = asyncio.Semaphore(10)
-
-        async def fetch_one(client: httpx.AsyncClient, u: str):
-            async with sem:
-                headers = _get_platform_referer(u)
-                fetch_urls = [u]
-                if "upload-images.jianshu.io" in u or "jianshu.io" in u:
-                    fetch_urls = [
-                        u,
-                        f"https://img01.sogoucdn.com/net/a/04/link?appid=100520029&url={u}"
-                    ]
-                resp = None
-                for target_url in fetch_urls:
-                    try:
-                        resp = await client.get(target_url, headers=headers, timeout=12.0, follow_redirects=True)
-                        if resp.status_code == 200 and len(resp.content) > 100:
-                            break
-                    except Exception:
-                        continue
-                if resp and resp.status_code == 200 and len(resp.content) > 100:
-                    content_type = resp.headers.get("content-type", "")
-                    mime = content_type.split(";")[0].strip() if content_type else "image/png"
-                    if not mime.startswith("image/"):
-                        mime = "image/png"
-                    b64_str = base64.b64encode(resp.content).decode("utf-8")
-                    url_to_base64[u] = f"data:{mime};base64,{b64_str}"
-
-        async with httpx.AsyncClient(verify=False, trust_env=False) as client:
-            tasks = [fetch_one(client, u) for u in img_urls]
-            await asyncio.gather(*tasks, return_exceptions=True)
-
-        return url_to_base64
 
     async def export(self, articles: List[ArticleItem], filename_prefix: str) -> Path:
         output_file = self.output_dir / f"{filename_prefix}.pdf"
@@ -124,7 +48,7 @@ class PDFExporter(BaseExporter):
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # 1. 预先将所有外部图片转换为 Base64，确保在 PDF 引擎中无损离线渲染
-        base64_map = await self._embed_images_as_base64(articles)
+        base64_map = await embed_articles_images_as_base64(articles)
 
         # 2. 生成适合 PDF 打印的高清优雅排版 HTML
         article_htmls = []

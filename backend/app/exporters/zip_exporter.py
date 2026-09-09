@@ -13,6 +13,7 @@ from app.exporters.base import BaseExporter
 from app.models import ArticleItem
 from app.config import BRAND_OFFICIAL_ACCOUNT, BRAND_FOOTER_NOTE, BRAND_DISCLAIMER
 from app.exporters.pdf_exporter import find_system_browser
+from app.core.image_helper import download_image_bytes
 
 class ZipExporter(BaseExporter):
     """ZIP 全量打包导出器 (支持单文件合集 + 分篇独立文章 + 图片本地化离线下载 + 目录索引清单)"""
@@ -71,26 +72,10 @@ class ZipExporter(BaseExporter):
             async def fetch_one(img_url: str, idx: int):
                 async with semaphore:
                     try:
-                        headers = self._get_platform_referer(img_url)
-                        fetch_urls = [img_url]
-                        # 针对简书图片防盗链或海外节点 DNS 劫持，搜狗图片 CDN 兜底
-                        if "upload-images.jianshu.io" in img_url or "jianshu.io" in img_url:
-                            fetch_urls = [
-                                img_url,
-                                f"https://img01.sogoucdn.com/net/a/04/link?appid=100520029&url={img_url}"
-                            ]
-                        resp = None
-                        for u_fetch in fetch_urls:
-                            try:
-                                resp = await client.get(u_fetch, headers=headers)
-                                if resp.status_code == 200 and resp.content and len(resp.content) > 100:
-                                    break
-                            except Exception:
-                                continue
-                        if resp and resp.status_code == 200 and resp.content:
-                            # 识别文件后缀
-                            content_type = resp.headers.get("content-type", "").split(";")[0].strip()
-                            ext = mimetypes.guess_extension(content_type) or ".png"
+                        res = await download_image_bytes(client, img_url)
+                        if res:
+                            img_bytes, mime = res
+                            ext = mimetypes.guess_extension(mime) or ".png"
                             if ext in [".jpe", ".jpeg"]:
                                 ext = ".jpg"
                             if not ext.startswith("."):
@@ -100,7 +85,7 @@ class ZipExporter(BaseExporter):
                             url_hash = hashlib.md5(img_url.encode("utf-8")).hexdigest()[:8]
                             clean_filename = f"img_{idx:03d}_{url_hash}{ext}"
                             
-                            image_bytes_map[clean_filename] = resp.content
+                            image_bytes_map[clean_filename] = img_bytes
                             url_to_filename_map[img_url] = clean_filename
                     except Exception:
                         pass # 下载失败则保持原链接

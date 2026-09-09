@@ -6,13 +6,17 @@ from bs4 import BeautifulSoup
 from app.exporters.base import BaseExporter
 from app.models import ArticleItem
 from app.config import BRAND_OFFICIAL_ACCOUNT, BRAND_FOOTER_NOTE, BRAND_DISCLAIMER
+from app.core.image_helper import embed_articles_images_as_base64
 
 class HTMLExporter(BaseExporter):
-    """HTML 响应式离线电子书导出器 (默认优雅浅色阅读排版，支持一键切换暗黑模式)"""
+    """HTML 响应式离线电子书导出器 (默认优雅浅色阅读排版，支持一键切换暗黑模式，全量内嵌离线 Base64 图片)"""
 
     async def export(self, articles: List[ArticleItem], filename_prefix: str) -> Path:
         output_file = self.output_dir / f"{filename_prefix}.html"
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # 核心保障：将所有文章中的外链图片抓取并转换为 Base64 嵌入，确保导出的单一 HTML 文件为 100% 独立离线备份
+        await embed_articles_images_as_base64(articles)
 
         # 解析真实平台友好展示名称与标签 (避免出现 custom_urls 等内部代码名)
         platform_name = self.get_effective_platform_name(articles)
