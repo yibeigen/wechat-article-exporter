@@ -185,19 +185,21 @@ async def extract_links_endpoint(request: ExtractLinksRequest):
         )
         detected = task_manager._detect_platform(request.target, p_enum)
         scraper = task_manager._get_scraper(dummy_req, detected)
-        
-        author_info = await scraper.get_author_info()
-        articles = await scraper.get_article_list()
-        return {
-            "success": True,
-            "platform": request.platform,
-            "author": author_info.get("name", "未知博主"),
-            "total": len(articles),
-            "articles": articles,
-            "declared_count": getattr(scraper, "declared_count", None),
-            "category_name": getattr(scraper, "category_name", None),
-            "explanation": getattr(scraper, "explanation", None)
-        }
+        try:
+            author_info = await scraper.get_author_info()
+            articles = await scraper.get_article_list()
+            return {
+                "success": True,
+                "platform": request.platform,
+                "author": author_info.get("name", "未知博主"),
+                "total": len(articles),
+                "articles": articles,
+                "declared_count": getattr(scraper, "declared_count", None),
+                "category_name": getattr(scraper, "category_name", None),
+                "explanation": getattr(scraper, "explanation", None)
+            }
+        finally:
+            await scraper.close()
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -230,6 +232,30 @@ async def cancel_task_endpoint(task_id: str):
     if not success:
         raise HTTPException(status_code=404, detail="任务不存在或已结束")
     return {"success": True, "message": "任务已终止"}
+
+@app.post("/api/tasks/{task_id}/pause")
+async def pause_task_endpoint(task_id: str):
+    """暂停正在执行的抓取任务"""
+    success = task_manager.pause_task(task_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="任务不存在或当前状态无法暂停")
+    return {"success": True, "message": "任务已暂停"}
+
+@app.post("/api/tasks/{task_id}/resume")
+async def resume_task_endpoint(task_id: str):
+    """恢复已暂停的抓取任务"""
+    success = task_manager.resume_task(task_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="任务不存在或当前未处于暂停状态")
+    return {"success": True, "message": "任务已恢复运行"}
+
+@app.post("/api/tasks/{task_id}/stop-and-export")
+async def stop_and_export_endpoint(task_id: str):
+    """截断抓取并立即将已成功抓取的文章送入排版导出"""
+    success = task_manager.stop_and_export(task_id)
+    if not success:
+        raise HTTPException(status_code=400, detail="任务不存在或当前状态无法截断导出")
+    return {"success": True, "message": "已截断抓取，正在打包已成功获取的篇目"}
 
 class TaskDecisionRequest(BaseModel):
     action: str # "skip_and_export" | "retry_failed" | "cancel"

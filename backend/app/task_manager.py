@@ -33,6 +33,7 @@ class TaskManager:
         self.tasks: Dict[str, TaskProgress] = {}
         self.subscribers: Dict[str, List[asyncio.Queue]] = {}
         self.decision_events: Dict[str, asyncio.Event] = {}
+        self.pause_events: Dict[str, asyncio.Event] = {}
         self.user_decisions: Dict[str, str] = {}
 
     def get_task(self, task_id: str) -> Optional[TaskProgress]:
@@ -69,8 +70,51 @@ class TaskManager:
         if not task:
             return False
         task.is_cancelled = True
+        task.is_paused = False
         task.status = TaskStatusEnum.CANCELLED
         task.message = "🛑 任务已由用户手动终止"
+        if task_id in self.decision_events:
+            self.decision_events[task_id].set()
+        if task_id in self.pause_events:
+            self.pause_events[task_id].set()
+        asyncio.create_task(self._broadcast(task_id))
+        return True
+
+    def pause_task(self, task_id: str) -> bool:
+        task = self.tasks.get(task_id)
+        if not task or task.is_cancelled:
+            return False
+        if task.status not in [TaskStatusEnum.SCRAPING_ARTICLES, TaskStatusEnum.FETCHING_LIST]:
+            return False
+        task.is_paused = True
+        task.status = TaskStatusEnum.PAUSED
+        task.message = f"⏸️ 任务已暂停 (当前第 {task.current_article_index}/{task.total_articles} 篇)，点击「继续运行」可随时恢复"
+        if task_id in self.pause_events:
+            self.pause_events[task_id].clear()
+        asyncio.create_task(self._broadcast(task_id))
+        return True
+
+    def resume_task(self, task_id: str) -> bool:
+        task = self.tasks.get(task_id)
+        if not task or not task.is_paused:
+            return False
+        task.is_paused = False
+        task.status = TaskStatusEnum.SCRAPING_ARTICLES
+        task.message = f"▶️ 任务已恢复运行，继续推进抓取 ({task.current_article_index}/{task.total_articles})..."
+        if task_id in self.pause_events:
+            self.pause_events[task_id].set()
+        asyncio.create_task(self._broadcast(task_id))
+        return True
+
+    def stop_and_export(self, task_id: str) -> bool:
+        task = self.tasks.get(task_id)
+        if not task or task.is_cancelled or task.status in [TaskStatusEnum.COMPLETED, TaskStatusEnum.FAILED, TaskStatusEnum.EXPORTING]:
+            return False
+        task.is_interrupted_to_export = True
+        task.is_paused = False
+        task.message = "⚡ 用户指令提前截断，正在整理已抓取的博文并直接开始合并排版导出..."
+        if task_id in self.pause_events:
+            self.pause_events[task_id].set()
         if task_id in self.decision_events:
             self.decision_events[task_id].set()
         asyncio.create_task(self._broadcast(task_id))
@@ -174,6 +218,10 @@ class TaskManager:
         detected_platform = self._detect_platform(request.target, request.platform)
         task.platform = detected_platform.value
         scraper = self._get_scraper(request, detected_platform)
+
+        pause_event = asyncio.Event()
+        pause_event.set()
+        self.pause_events[task_id] = pause_event
         
         try:
             if task.is_cancelled:
@@ -263,6 +311,25 @@ class TaskManager:
                     await scraper.close()
                     return
 
+                # 检查是否要求立即截断并导出已抓取内容
+                if task.is_interrupted_to_export:
+                    task.message = f"⚡ 用户指令截断抓取，共成功获取 {len([a for a in scraped_articles if not a.is_failed])} 篇，正在立即启动排版导出..."
+                    await self._broadcast(task_id)
+                    break
+
+                # 检查是否处于暂停状态，若暂停则挂起等待恢复或终止
+                if task.is_paused:
+                    await pause_event.wait()
+                    if task.is_cancelled:
+                        task.status = TaskStatusEnum.CANCELLED
+                        await self._broadcast(task_id)
+                        await scraper.close()
+                        return
+                    if task.is_interrupted_to_export:
+                        task.message = f"⚡ 用户指令截断抓取，共成功获取 {len([a for a in scraped_articles if not a.is_failed])} 篇，正在立即启动排版导出..."
+                        await self._broadcast(task_id)
+                        break
+
                 task.current_article_index = idx
                 task.current_article_title = meta.get("title", f"第 {idx} 篇")
                 task.progress_percent = round((idx / len(article_list)) * 75.0, 1) # 抓取占 75%
@@ -347,6 +414,10 @@ class TaskManager:
                 await self._broadcast(task_id)
                 return
 
+            # 如果用户截断导出，更新篇数统计
+            if task.is_interrupted_to_export:
+                task.total_articles = len(scraped_articles)
+
             # 4. 统计与失败篇目交互校验
             success_items = [a for a in scraped_articles if not a.is_failed and "抓取失败" not in a.content_markdown]
             failed_items = [a for a in scraped_articles if a.is_failed or "抓取失败" in a.content_markdown]
@@ -358,8 +429,11 @@ class TaskManager:
                 {"title": a.title, "url": a.url, "error_reason": a.error_reason or "未能解析出有效正文"} for a in failed_items
             ]
 
+            # 若用户提前要求截断导出，直接取全部成功文章进行排版，不弹窗打扰
+            if task.is_interrupted_to_export and len(success_items) > 0:
+                scraped_articles = success_items
             # 如果存在失败篇目且有部分成功篇目，进入确认等待状态
-            if len(failed_items) > 0 and len(success_items) > 0:
+            elif len(failed_items) > 0 and len(success_items) > 0:
                 task.status = TaskStatusEnum.WAITING_CONFIRMATION
                 task.progress_percent = 78.0
                 task.message = f"抓取阶段完成：{len(success_items)} 篇成功，{len(failed_items)} 篇失败。等待用户确认..."
@@ -547,5 +621,8 @@ class TaskManager:
                 await scraper.close()
             except Exception:
                 pass
+        finally:
+            self.pause_events.pop(task_id, None)
+            self.decision_events.pop(task_id, None)
 
 task_manager = TaskManager()

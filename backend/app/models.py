@@ -81,6 +81,7 @@ class TaskStatusEnum(str, Enum):
     FETCHING_LIST = "fetching_list"
     SCRAPING_ARTICLES = "scraping_articles"
     WAITING_CONFIRMATION = "waiting_confirmation"
+    PAUSED = "paused"
     CLEANING = "cleaning"
     EXPORTING = "exporting"
     COMPLETED = "completed"
@@ -106,6 +107,8 @@ class TaskProgress(BaseModel):
     success_articles: List[Dict[str, Any]] = Field(default_factory=list)
     error_message: Optional[str] = None
     is_cancelled: bool = False
+    is_paused: bool = False
+    is_interrupted_to_export: bool = False
     explanation: Optional[str] = None
     declared_count: Optional[int] = None
     category_name: Optional[str] = None

@@ -153,84 +153,78 @@ class SinaBlogScraper(BaseScraper):
             }]
 
         # ==========================================================
-        # 2. 列表页分页遍历
+        # 2. 列表页分页遍历 (含防假空页退避重试与精准边界判定)
         # ==========================================================
         uid = meta.get("uid")
         cat_id = meta.get("cat_id", "0")
         current_page = 1
         total_pages = 1
+        consecutive_empty = 0
 
         while True:
             list_url = f"https://blog.sina.com.cn/s/articlelist_{uid}_{cat_id}_{current_page}.html"
-            resp = None
-            for retry in range(3):
+            cells = []
+            soup = None
+            page_success = False
+
+            # 每页最多重试 4 次 (专门击破新浪反爬随机返回 15KB "暂无博文" 伪空骨架页的抖动)
+            for retry_attempt in range(4):
                 try:
-                    resp = await self.client.get(list_url, timeout=20.0)
+                    resp = await self.client.get(list_url, timeout=15.0)
+                    if resp.status_code in [301, 302] and "Location" in resp.headers:
+                        resp = await self.client.get(resp.headers["Location"], timeout=15.0)
+
                     if resp.status_code == 200:
-                        break
-                    elif resp.status_code in [301, 302] and "Location" in resp.headers:
-                        resp = await self.client.get(resp.headers["Location"], timeout=20.0)
-                        if resp.status_code == 200:
+                        temp_soup = BeautifulSoup(resp.text, "lxml")
+
+                        # 首页提取总页数与标称专栏分类篇数
+                        if current_page == 1:
+                            m_pages = re.search(r"共\s*(\d+)\s*页", resp.text)
+                            if m_pages:
+                                total_pages = int(m_pages.group(1))
+                                self.total_pages = total_pages
+
+                            for span in temp_soup.select(".SG_connHead span.title"):
+                                stext = span.text.strip()
+                                m_decl = re.search(r"^([^\(（\n]+?)\s*[\(（](\d+)[\)）]", stext)
+                                if m_decl:
+                                    self.category_name = m_decl.group(1).strip()
+                                    self.declared_count = int(m_decl.group(2))
+                                    break
+
+                            if not self.declared_count:
+                                selector = f"a[href*='_{cat_id}_']" if cat_id != "0" else "a[href*='_0_']"
+                                for a in temp_soup.select(selector):
+                                    atext = a.text.strip()
+                                    m_a = re.search(r"^([^\(（\n]+?)\s*[\(（](\d+)[\)）]", atext)
+                                    if m_a:
+                                        self.category_name = m_a.group(1).strip()
+                                        self.declared_count = int(m_a.group(2))
+                                        break
+
+                        # 查找博文列表容器
+                        cur_cells = temp_soup.select(".articleCell")
+                        if not cur_cells:
+                            cur_cells = temp_soup.select(".atc_main")
+
+                        if cur_cells:
+                            cells = cur_cells
+                            soup = temp_soup
+                            page_success = True
                             break
-                except Exception:
-                    if retry < 2:
-                        await asyncio.sleep(0.5 * (retry + 1))
-                        # 备选：尝试 http 协议
-                        list_url = list_url.replace("https://", "http://")
+                        else:
+                            # 如果返回 200 但没有单元格 (新浪返回 15KB 假空页)，进行指数退避重试
+                            if retry_attempt < 3:
+                                await asyncio.sleep(0.3 * (retry_attempt + 1))
                     else:
-                        resp = None
+                        if retry_attempt < 3:
+                            await asyncio.sleep(0.4 * (retry_attempt + 1))
+                except Exception:
+                    if retry_attempt < 3:
+                        await asyncio.sleep(0.5 * (retry_attempt + 1))
 
-            if not resp or resp.status_code != 200:
-                if current_page < total_pages:
-                    # 如果已知还有后续页，跳过当前故障页继续尝试下一页
-                    current_page += 1
-                    continue
-                else:
-                    break
-
-            try:
-                soup = BeautifulSoup(resp.text, "lxml")
-                
-                # 检查总页数与标称专栏分类篇数
-                if current_page == 1:
-                    m_pages = re.search(r"共\s*(\d+)\s*页", resp.text)
-                    if m_pages:
-                        total_pages = int(m_pages.group(1))
-                        self.total_pages = total_pages
-
-                    # 提取标称分类名称与标称文章总数 (例如: 西游正解(194) 或 全部博文(2676))
-                    for span in soup.select(".SG_connHead span.title"):
-                        stext = span.text.strip()
-                        m_decl = re.search(r"^([^\(（\n]+?)\s*[\(（](\d+)[\)）]", stext)
-                        if m_decl:
-                            self.category_name = m_decl.group(1).strip()
-                            self.declared_count = int(m_decl.group(2))
-                            break
-
-                    if not self.declared_count:
-                        selector = f"a[href*='_{cat_id}_']" if cat_id != "0" else "a[href*='_0_']"
-                        for a in soup.select(selector):
-                            atext = a.text.strip()
-                            m_a = re.search(r"^([^\(（\n]+?)\s*[\(（](\d+)[\)）]", atext)
-                            if m_a:
-                                self.category_name = m_a.group(1).strip()
-                                self.declared_count = int(m_a.group(2))
-                                break
-
-                # 提取博文单元：优先精确容器，避免父子标签重复匹配
-                cells = soup.select(".articleCell")
-                if not cells:
-                    cells = soup.select(".atc_main")
-                if not cells:
-                    cells = soup.select(".articleList p, .articleList li")
-
-                if not cells:
-                    if current_page < total_pages:
-                        current_page += 1
-                        continue
-                    break
-
-                new_count_in_page = 0
+            if page_success and cells:
+                consecutive_empty = 0
                 for cell in cells:
                     a_tag = cell.select_one(".atc_title a, a[href*='/blog_']")
                     if not a_tag or not a_tag.get("href"):
@@ -264,7 +258,6 @@ class SinaBlogScraper(BaseScraper):
                         "title": title,
                         "publish_time": pub_time
                     })
-                    new_count_in_page += 1
 
                     if progress_callback:
                         progress_callback(
@@ -277,23 +270,30 @@ class SinaBlogScraper(BaseScraper):
                         self._build_explanation(len(articles))
                         return articles
 
-                # 翻页判断：检查是否存在“下一页”或已达最大页
+                # 翻页判断：检查是否存在有效“下一页”
                 has_next = False
-                next_btn = soup.select_one(".SG_pgnext a, a[title*='下一页']")
-                if next_btn and "disabled" not in next_btn.get("class", []):
-                    has_next = True
+                if soup:
+                    next_btn = soup.select_one(".SG_pgnext a, a[title*='下一页']")
+                    if next_btn and "disabled" not in next_btn.get("class", []):
+                        has_next = True
 
                 if current_page >= total_pages and not has_next:
                     break
 
                 current_page += 1
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(0.08)
+            else:
+                # 重试 4 次后依然为空，增加连续空页计数
+                consecutive_empty += 1
+                # 只有连续 2 页均无博文，才确认到达物理末尾，绝不中途错漏
+                if consecutive_empty >= 2:
+                    break
 
-            except Exception:
                 if current_page < total_pages:
                     current_page += 1
                     continue
-                break
+                else:
+                    break
 
         self._build_explanation(len(articles))
         return articles
@@ -328,9 +328,13 @@ class SinaBlogScraper(BaseScraper):
         publish_time = article_meta.get("publish_time", "")
         author = "新浪博主"
 
-        try:
-            resp = await self.client.get(url)
-            if resp.status_code == 200:
+        # 严格设定 12 秒单篇超时熔断与 2 次快速重试，严禁单篇网络挂起卡死整体任务
+        for attempt in range(2):
+            try:
+                resp = await self.client.get(url, timeout=12.0)
+                if resp.status_code != 200:
+                    continue
+
                 content_bytes = resp.content
                 meta_charset = re.search(rb'charset=["\']?([a-zA-Z0-9_-]+)', content_bytes[:1024])
                 charset = meta_charset.group(1).decode("latin1", errors="ignore").lower() if meta_charset else resp.encoding or "utf-8"
@@ -419,8 +423,8 @@ class SinaBlogScraper(BaseScraper):
                     images=images,
                     tags=tags
                 )
-        except Exception:
-            pass
+            except Exception:
+                pass
 
         return ArticleItem(
             id=url,

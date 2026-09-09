@@ -1615,9 +1615,11 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                             <div class="spinner" id="taskSpinner"></div>
                             <span id="taskStatusText" style="font-weight: 700; color: var(--text-primary);">正在连接服务器准备抓取...</span>
                         </div>
-                        <div style="display: flex; gap: 10px; align-items: center;">
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                             <span style="font-size: 0.78rem; font-family: monospace; background: var(--bg-subtle); padding: 4px 8px; border-radius: 4px; color: var(--text-secondary);" id="taskTimerDisplay">⏱️ 00:00</span>
                             <span style="font-size: 0.78rem; color: var(--text-muted);" id="taskSpeedBadge"></span>
+                            <button type="button" class="nav-btn" id="pauseResumeTaskBtn" onclick="togglePauseCurrentTask()" style="display: none; color: #f59e0b; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08); font-size: 0.78rem; font-weight: 700; height: 30px; padding: 0 10px; cursor: pointer;">⏸️ 暂停抓取</button>
+                            <button type="button" class="nav-btn" id="stopAndExportBtn" onclick="stopAndExportCurrentTask()" style="display: none; color: #10b981; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08); font-size: 0.78rem; font-weight: 700; height: 30px; padding: 0 10px; cursor: pointer;" title="立即截断后续抓取，直接将目前已成功抓取的文章送入排版并生成下载">⚡ 截断并导出已有篇目</button>
                             <button type="button" class="nav-btn" id="cancelTaskBtn" onclick="cancelCurrentTask()" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.08); font-size: 0.78rem; font-weight: 700; height: 30px; padding: 0 10px; cursor: pointer;">🛑 终止任务</button>
                         </div>
                     </div>
@@ -3388,6 +3390,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     '51cto': '51CTO 技术栈',
                     'zhihu': '知乎专栏/问答',
                     'weibo': '新浪微博',
+                    'sina_blog': '新浪博客',
+                    'jianshu': '简书',
                     'juejin': '稀土掘金',
                     'cnblogs': '博客园',
                     'custom_urls': '自定义网址'
@@ -4473,6 +4477,38 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             }
         }
 
+        async function togglePauseCurrentTask() {
+            if (!currentRunningTaskId) return;
+            const btn = document.getElementById('pauseResumeTaskBtn');
+            const isPaused = btn && btn.getAttribute('data-paused') === 'true';
+            const action = isPaused ? 'resume' : 'pause';
+            try {
+                const res = await fetch(`/api/tasks/${currentRunningTaskId}/${action}`, { method: 'POST' });
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert(`操作失败: ${err.detail || '未知错误'}`);
+                }
+            } catch (e) {
+                alert(`网络异常: ${e.message}`);
+            }
+        }
+
+        async function stopAndExportCurrentTask() {
+            if (!currentRunningTaskId) return;
+            if (!confirm('确定要提前截断后续抓取，直接将目前已成功抓取的文章送入排版并生成下载吗？')) {
+                return;
+            }
+            try {
+                const res = await fetch(`/api/tasks/${currentRunningTaskId}/stop-and-export`, { method: 'POST' });
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert(`截断导出失败: ${err.detail || '未知错误'}`);
+                }
+            } catch (e) {
+                alert(`网络异常: ${e.message}`);
+            }
+        }
+
         async function cancelCurrentTask() {
             if (!currentRunningTaskId) {
                 alert('当前暂无正在执行的任务');
@@ -4489,6 +4525,10 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     if (statusText) statusText.innerText = '🛑 任务已手动终止';
                     const spinner = document.getElementById('taskSpinner');
                     if (spinner) spinner.style.display = 'none';
+                    const pBtn = document.getElementById('pauseResumeTaskBtn');
+                    const sBtn = document.getElementById('stopAndExportBtn');
+                    if (pBtn) pBtn.style.display = 'none';
+                    if (sBtn) sBtn.style.display = 'none';
                     stopTaskTimer();
                     if (activeEventSource) {
                         activeEventSource.close();
@@ -4572,6 +4612,38 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
 
                 updateTaskStageSteps(task.status, pct);
 
+                // 更新暂停/恢复与截断导出按钮状态
+                const pauseResumeBtn = document.getElementById('pauseResumeTaskBtn');
+                const stopAndExportBtn = document.getElementById('stopAndExportBtn');
+                if (pauseResumeBtn && stopAndExportBtn) {
+                    if (task.status === 'paused' || task.is_paused) {
+                        pauseResumeBtn.style.display = 'inline-flex';
+                        pauseResumeBtn.innerText = '▶️ 继续抓取';
+                        pauseResumeBtn.style.color = '#10b981';
+                        pauseResumeBtn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+                        pauseResumeBtn.style.background = 'rgba(16, 185, 129, 0.08)';
+                        pauseResumeBtn.setAttribute('data-paused', 'true');
+                        stopAndExportBtn.style.display = 'inline-flex';
+                    } else if (task.status === 'scraping_articles' || task.status === 'fetching_list') {
+                        pauseResumeBtn.style.display = 'inline-flex';
+                        pauseResumeBtn.innerText = '⏸️ 暂停抓取';
+                        pauseResumeBtn.style.color = '#f59e0b';
+                        pauseResumeBtn.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+                        pauseResumeBtn.style.background = 'rgba(245, 158, 11, 0.08)';
+                        pauseResumeBtn.setAttribute('data-paused', 'false');
+                        const succCount = (task.articles_meta || []).filter(a => a.status === 'success').length;
+                        if (succCount > 0) {
+                            stopAndExportBtn.style.display = 'inline-flex';
+                            stopAndExportBtn.innerText = `⚡ 截断并导出已有篇目 (${succCount}篇)`;
+                        } else {
+                            stopAndExportBtn.style.display = 'none';
+                        }
+                    } else {
+                        pauseResumeBtn.style.display = 'none';
+                        stopAndExportBtn.style.display = 'none';
+                    }
+                }
+
                 if (pBar) pBar.style.width = pct + '%';
                 if (pPercent) pPercent.innerText = pct + '%';
                 if (pMsg) pMsg.innerText = task.message;
@@ -4651,6 +4723,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 }
 
                 if (task.status === 'completed') {
+                    if (pauseResumeBtn) pauseResumeBtn.style.display = 'none';
+                    if (stopAndExportBtn) stopAndExportBtn.style.display = 'none';
                     activeEventSource.close();
                     stopTaskTimer();
                     if (startBtn) {
@@ -4714,6 +4788,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     saveTaskToLocalHistory(task);
                     loadHistory();
                 } else if (task.status === 'cancelled') {
+                    if (pauseResumeBtn) pauseResumeBtn.style.display = 'none';
+                    if (stopAndExportBtn) stopAndExportBtn.style.display = 'none';
                     activeEventSource.close();
                     stopTaskTimer();
                     if (startBtn) {
@@ -4732,6 +4808,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     const spinner = document.getElementById('taskSpinner');
                     if (spinner) spinner.style.display = 'none';
                 } else if (task.status === 'failed') {
+                    if (pauseResumeBtn) pauseResumeBtn.style.display = 'none';
+                    if (stopAndExportBtn) stopAndExportBtn.style.display = 'none';
                     activeEventSource.close();
                     stopTaskTimer();
                     if (startBtn) {
