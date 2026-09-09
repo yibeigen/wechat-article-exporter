@@ -38,6 +38,8 @@ class ZipExporter(BaseExporter):
             headers["Referer"] = "https://www.cnblogs.com/"
         elif "51cto" in u:
             headers["Referer"] = "https://blog.51cto.com/"
+        elif "jianshu" in u:
+            headers["Referer"] = "https://www.jianshu.com/"
         return headers
 
     async def _download_images_task(
@@ -70,8 +72,22 @@ class ZipExporter(BaseExporter):
                 async with semaphore:
                     try:
                         headers = self._get_platform_referer(img_url)
-                        resp = await client.get(img_url, headers=headers)
-                        if resp.status_code == 200 and resp.content:
+                        fetch_urls = [img_url]
+                        # 针对简书图片防盗链或海外节点 DNS 劫持，搜狗图片 CDN 兜底
+                        if "upload-images.jianshu.io" in img_url or "jianshu.io" in img_url:
+                            fetch_urls = [
+                                img_url,
+                                f"https://img01.sogoucdn.com/net/a/04/link?appid=100520029&url={img_url}"
+                            ]
+                        resp = None
+                        for u_fetch in fetch_urls:
+                            try:
+                                resp = await client.get(u_fetch, headers=headers)
+                                if resp.status_code == 200 and resp.content and len(resp.content) > 100:
+                                    break
+                            except Exception:
+                                continue
+                        if resp and resp.status_code == 200 and resp.content:
                             # 识别文件后缀
                             content_type = resp.headers.get("content-type", "").split(";")[0].strip()
                             ext = mimetypes.guess_extension(content_type) or ".png"
@@ -122,6 +138,7 @@ class ZipExporter(BaseExporter):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
     <title>{safe_title} - {safe_author}</title>
     <style>
         :root[data-theme="light"] {{
@@ -233,6 +250,11 @@ class ZipExporter(BaseExporter):
         }}
         .markdown-body pre code {{ background: none; padding: 0; color: var(--text-primary); border: none; }}
         .markdown-body img {{ max-width: 100%; height: auto; border-radius: 8px; margin: 16px auto; display: block; }}
+        .markdown-body figure, .markdown-body .image-package {{ margin: 16px auto; text-align: center; max-width: 100%; }}
+        .markdown-body figcaption, .markdown-body .image-caption {{ font-size: 0.85rem; color: var(--text-muted); margin-top: 6px; text-align: center; }}
+        .markdown-body .image-container {{ max-width: 100% !important; max-height: none !important; height: auto !important; }}
+        .markdown-body .image-container-fill {{ display: none !important; }}
+        .markdown-body .image-view {{ position: static !important; width: 100% !important; height: auto !important; }}
         .markdown-body blockquote {{
             border-left: 4px solid var(--accent-color);
             padding: 8px 16px;
@@ -316,6 +338,7 @@ class ZipExporter(BaseExporter):
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="referrer" content="no-referrer">
     <title>{safe_title}</title>
     <style>
         @page {{
@@ -376,6 +399,30 @@ class ZipExporter(BaseExporter):
             display: block;
             margin: 12px auto;
             border-radius: 4px;
+        }}
+        .markdown-body figure, .markdown-body .image-package {{
+            margin: 14px auto;
+            text-align: center;
+            max-width: 100%;
+        }}
+        .markdown-body figcaption, .markdown-body .image-caption {{
+            font-size: 8.5pt;
+            color: #64748b;
+            margin-top: 4px;
+            text-align: center;
+        }}
+        .markdown-body .image-container {{
+            max-width: 100% !important;
+            max-height: none !important;
+            height: auto !important;
+        }}
+        .markdown-body .image-container-fill {{
+            display: none !important;
+        }}
+        .markdown-body .image-view {{
+            position: static !important;
+            width: 100% !important;
+            height: auto !important;
         }}
         .markdown-body blockquote {{
             border-left: 3px solid #0284c7;

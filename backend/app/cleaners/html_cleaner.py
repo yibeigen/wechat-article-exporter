@@ -98,6 +98,30 @@ def clean_html_content(raw_html: str, enable_noise_filter: bool = True, remove_w
         else:
             img.decompose()
 
+    # 2.5 规范化并清洗各平台专有图片嵌套结构 (尤其简书 .image-package, .image-container 等，防止 aspect-ratio 占位 div 导致文字重叠)
+    # 彻底清除任何残留的占位空白 div (如简书 .image-container-fill 的 padding-bottom 占位导致下文溢出重叠)
+    for fill in soup.find_all(class_="image-container-fill"):
+        fill.decompose()
+
+    for pkg in soup.find_all(class_="image-package"):
+        img = pkg.find("img")
+        caption_tag = pkg.find(class_="image-caption")
+        caption_text = caption_tag.text.strip() if caption_tag else ""
+        pkg.clear()
+        if img:
+            pkg.append(img)
+        if caption_text:
+            cap = soup.new_tag("figcaption", attrs={"class": "image-caption"})
+            cap.string = caption_text
+            pkg.append(cap)
+        pkg.name = "figure"
+        if pkg.get("style"):
+            del pkg["style"]
+
+    # 对任何残留或孤立的图片容器 (如 .image-container, .image-view) 解包 unwrap，彻底消除其 max-height 导致的文字溢出重叠
+    for container in soup.find_all(class_=["image-container", "image-view"]):
+        container.unwrap()
+
     # 3. 移除任何隐藏内容的内联样式 (如微信反爬设置的 visibility: hidden; opacity: 0 等)
     for tag in soup.find_all(True):
         if tag.get("style"):

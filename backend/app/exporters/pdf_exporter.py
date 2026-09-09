@@ -58,6 +58,8 @@ def _get_platform_referer(url: str) -> Dict[str, str]:
         headers["Referer"] = "https://www.cnblogs.com/"
     elif "51cto" in u:
         headers["Referer"] = "https://blog.51cto.com/"
+    elif "jianshu" in u:
+        headers["Referer"] = "https://www.jianshu.com/"
     return headers
 
 
@@ -88,17 +90,27 @@ class PDFExporter(BaseExporter):
         async def fetch_one(client: httpx.AsyncClient, u: str):
             async with sem:
                 headers = _get_platform_referer(u)
-                try:
-                    resp = await client.get(u, headers=headers, timeout=12.0, follow_redirects=True)
-                    if resp.status_code == 200 and len(resp.content) > 100:
-                        content_type = resp.headers.get("content-type", "")
-                        mime = content_type.split(";")[0].strip() if content_type else "image/png"
-                        if not mime.startswith("image/"):
-                            mime = "image/png"
-                        b64_str = base64.b64encode(resp.content).decode("utf-8")
-                        url_to_base64[u] = f"data:{mime};base64,{b64_str}"
-                except Exception as e:
-                    print(f"PDF 下载图片转 Base64 失败 [{u}]: {e}")
+                fetch_urls = [u]
+                if "upload-images.jianshu.io" in u or "jianshu.io" in u:
+                    fetch_urls = [
+                        u,
+                        f"https://img01.sogoucdn.com/net/a/04/link?appid=100520029&url={u}"
+                    ]
+                resp = None
+                for target_url in fetch_urls:
+                    try:
+                        resp = await client.get(target_url, headers=headers, timeout=12.0, follow_redirects=True)
+                        if resp.status_code == 200 and len(resp.content) > 100:
+                            break
+                    except Exception:
+                        continue
+                if resp and resp.status_code == 200 and len(resp.content) > 100:
+                    content_type = resp.headers.get("content-type", "")
+                    mime = content_type.split(";")[0].strip() if content_type else "image/png"
+                    if not mime.startswith("image/"):
+                        mime = "image/png"
+                    b64_str = base64.b64encode(resp.content).decode("utf-8")
+                    url_to_base64[u] = f"data:{mime};base64,{b64_str}"
 
         async with httpx.AsyncClient(verify=False, trust_env=False) as client:
             tasks = [fetch_one(client, u) for u in img_urls]
@@ -332,6 +344,30 @@ class PDFExporter(BaseExporter):
             display: block;
             margin: 14px auto;
             border-radius: 6px;
+        }}
+        .markdown-body figure, .markdown-body .image-package {{
+            margin: 14px auto;
+            text-align: center;
+            max-width: 100%;
+        }}
+        .markdown-body figcaption, .markdown-body .image-caption {{
+            font-size: 8.5pt;
+            color: #64748b;
+            margin-top: 4px;
+            text-align: center;
+        }}
+        .markdown-body .image-container {{
+            max-width: 100% !important;
+            max-height: none !important;
+            height: auto !important;
+        }}
+        .markdown-body .image-container-fill {{
+            display: none !important;
+        }}
+        .markdown-body .image-view {{
+            position: static !important;
+            width: 100% !important;
+            height: auto !important;
         }}
         .markdown-body img.url-icon, 
         .markdown-body img[src*="sinaimg.cn/upload"], 

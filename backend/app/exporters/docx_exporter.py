@@ -26,6 +26,8 @@ def get_platform_referer(url: str) -> Dict[str, str]:
     elif "juejin" in u: headers["Referer"] = "https://juejin.cn/"
     elif "weixin" in u or "qpic" in u: headers["Referer"] = "https://mp.weixin.qq.com/"
     elif "51cto" in u: headers["Referer"] = "https://blog.51cto.com/"
+    elif "jianshu" in u: headers["Referer"] = "https://www.jianshu.com/"
+    elif "sina" in u or "weibo" in u: headers["Referer"] = "https://weibo.com/"
     return headers
 
 def set_cell_background(cell, fill_hex: str):
@@ -518,16 +520,38 @@ def append_article_content_to_docx(
             if embed_images:
                 try:
                     headers = get_platform_referer(src)
-                    resp = httpx.get(src, headers=headers, timeout=6.0)
-                    if resp.status_code == 200 and len(resp.content) > 100:
-                        img_bio = io.BytesIO(resp.content)
-                        img_p = doc.add_paragraph()
-                        img_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                        img_p.paragraph_format.space_before = Pt(8)
-                        img_p.paragraph_format.space_after = Pt(2)
-                        img_run = img_p.add_run()
-                        img_run.add_picture(img_bio, width=Inches(5.5))
-                        inserted = True
+                    fetch_urls = [src]
+                    if "upload-images.jianshu.io" in src or "jianshu.io" in src:
+                        fetch_urls = [
+                            src,
+                            f"https://img01.sogoucdn.com/net/a/04/link?appid=100520029&url={src}"
+                        ]
+                    for u in fetch_urls:
+                        try:
+                            resp = httpx.get(u, headers=headers, timeout=6.0, verify=False)
+                            if resp.status_code == 200 and len(resp.content) > 100:
+                                raw_bytes = resp.content
+                                # 如果是 WebP 格式，python-docx 原生不支持，尝试通过 PIL 转换为 PNG
+                                if raw_bytes[:4] == b'RIFF' and b'WEBP' in raw_bytes[:16]:
+                                    try:
+                                        from PIL import Image
+                                        im = Image.open(io.BytesIO(raw_bytes))
+                                        buf = io.BytesIO()
+                                        im.save(buf, format="PNG")
+                                        raw_bytes = buf.getvalue()
+                                    except Exception:
+                                        pass
+                                img_bio = io.BytesIO(raw_bytes)
+                                img_p = doc.add_paragraph()
+                                img_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                                img_p.paragraph_format.space_before = Pt(8)
+                                img_p.paragraph_format.space_after = Pt(2)
+                                img_run = img_p.add_run()
+                                img_run.add_picture(img_bio, width=Inches(5.5))
+                                inserted = True
+                                break
+                        except Exception:
+                            continue
                 except Exception:
                     pass
 

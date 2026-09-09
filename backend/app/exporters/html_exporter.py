@@ -366,6 +366,30 @@ class HTMLExporter(BaseExporter):
             display: block;
             box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         }}
+        .markdown-body figure, .markdown-body .image-package {{
+            margin: 16px auto;
+            text-align: center;
+            max-width: 100%;
+        }}
+        .markdown-body figcaption, .markdown-body .image-caption {{
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+            text-align: center;
+        }}
+        .markdown-body .image-container {{
+            max-width: 100% !important;
+            max-height: none !important;
+            height: auto !important;
+        }}
+        .markdown-body .image-container-fill {{
+            display: none !important;
+        }}
+        .markdown-body .image-view {{
+            position: static !important;
+            width: 100% !important;
+            height: auto !important;
+        }}
         .markdown-body blockquote {{
             border-left: 4px solid var(--accent);
             padding: 8px 16px;
