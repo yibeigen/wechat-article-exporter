@@ -47,7 +47,13 @@ class OriginalHTMLExporter(BaseExporter):
         ):
             return await self._export_sina_classic(articles, filename_prefix)
 
-        # 4. 弹性降级策略 (若其他平台原版模板尚未独立编写，平滑采用高质量离线排版生成原版)
+        # 新增：简书 PC 原版 1:1 排版路由
+        if platform_name == "简书" or "jianshu" in str(self.platform).lower() or any(
+            (a.platform and "jianshu" in a.platform.lower()) or ("jianshu.com" in a.url) for a in articles
+        ):
+            return await self._export_jianshu_classic(articles, filename_prefix)
+
+        # 4. 弹性降级策略 (若其他平台原版模板尚未独立编写，平滑采用高质量离线版本生成原版)
         return await self._export_fallback_classic(articles, filename_prefix, platform_name)
 
     async def _export_sina_classic(self, articles: List[ArticleItem], filename_prefix: str) -> Path:
@@ -142,6 +148,141 @@ class OriginalHTMLExporter(BaseExporter):
             dot_b64=dot_b64,
             linedot_b64=linedot_b64,
             newsp_b64=newsp_b64,
+            articles_json=json.dumps(articles_data, ensure_ascii=False)
+        )
+
+        output_file.write_text(rendered_html, encoding="utf-8")
+        return output_file
+
+    async def _export_jianshu_classic(self, articles: List[ArticleItem], filename_prefix: str) -> Path:
+        """渲染简书 PC 电脑端 1:1 原版经典排版"""
+        output_file = self.output_dir / f"{filename_prefix}_原版.html"
+
+        # 提取分类/文集名称（优先从文章 category 字段取）
+        category_name = None
+        for a in articles:
+            if a.category and a.category.strip() and a.category.strip() not in ["简书博文", "未分类", "全部博文"]:
+                category_name = a.category.strip()
+                break
+
+        # 标题：如果是专题/文集就显示专题名，否则显示“作者 的简书主页”
+        title = category_name or f"{self.author_name} 的简书主页"
+
+        # 默认作者头像（SVG Base64）
+        default_avatar_svg = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="#a0aec0"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>'
+        default_avatar_b64 = "data:image/svg+xml;base64," + base64.b64encode(default_avatar_svg.encode("utf-8")).decode("ascii")
+
+        # 异步下载图片并转为 Base64，保证离线单文件也能显示头像
+        async def url_to_base64(url: str) -> str:
+            if not url or url.startswith("data:"):
+                return url or default_avatar_b64
+            if url.startswith("//"):
+                url = "https:" + url
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                    resp = await client.get(url, headers={
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                        "Referer": "https://www.jianshu.com/"
+                    })
+                    if resp.status_code == 200:
+                        mime = resp.headers.get("content-type", "image/png").split(";")[0]
+                        if mime == "application/octet-stream":
+                            mime = "image/png"
+                        return f"data:{mime};base64," + base64.b64encode(resp.content).decode("ascii")
+            except Exception:
+                pass
+            return default_avatar_b64
+
+        # 从文章中提取真实作者头像（JianshuScraper 已在 scrape_article_detail 中写入）
+        author_avatar_url = ""
+        for a in articles:
+            if a.author_avatar and a.author_avatar.strip():
+                author_avatar_url = a.author_avatar.strip()
+                break
+        author_avatar = await url_to_base64(author_avatar_url)
+
+        # 作者简介：目前抓取器未统一返回 bio，先留空
+        author_bio = ""
+
+        # 清理正文 HTML：移除可能导致文字与图片重叠的绝对定位、浮动、负边距等样式
+        def sanitize_jianshu_html(html: str) -> str:
+            """对简书正文再做一次安全清洗，防止原站残留样式导致离线排版错乱"""
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, "lxml")
+            for tag in soup.find_all(True):
+                # 1. 清理危险内联样式：绝对定位、固定定位、浮动、负边距、z-index、transform
+                if tag.get("style"):
+                    style = tag["style"]
+                    # 直接移除定位、浮动、层叠相关样式
+                    style = re.sub(r'(position\s*:\s*[^;]+;?)', '', style, flags=re.I)
+                    style = re.sub(r'(float\s*:\s*[^;]+;?)', '', style, flags=re.I)
+                    style = re.sub(r'(z-index\s*:\s*[^;]+;?)', '', style, flags=re.I)
+                    style = re.sub(r'(transform\s*:\s*[^;]+;?)', '', style, flags=re.I)
+                    style = re.sub(r'(margin-top\s*:\s*-[^;]+;?)', '', style, flags=re.I)
+                    style = re.sub(r'(margin-left\s*:\s*-[^;]+;?)', '', style, flags=re.I)
+                    style = re.sub(r'(top\s*:\s*[^;]+;?)', '', style, flags=re.I)
+                    style = re.sub(r'(left\s*:\s*[^;]+;?)', '', style, flags=re.I)
+                    style = re.sub(r'(right\s*:\s*[^;]+;?)', '', style, flags=re.I)
+                    style = re.sub(r'(bottom\s*:\s*[^;]+;?)', '', style, flags=re.I)
+                    style = style.strip().rstrip(';').strip()
+                    if style:
+                        tag["style"] = style
+                    else:
+                        del tag["style"]
+                # 2. 移除危险 class
+                dangerous_classes = ["image-container-fill", "image-container", "image-view", "image-package"]
+                cls = tag.get("class", [])
+                if isinstance(cls, str):
+                    cls = cls.split()
+                new_cls = [c for c in cls if c not in dangerous_classes]
+                if new_cls:
+                    tag["class"] = new_cls
+                else:
+                    if "class" in tag.attrs:
+                        del tag["class"]
+            # 3. 确保图片独立成块，不被文字环绕
+            for img in soup.find_all("img"):
+                img["style"] = "display:block;max-width:100%;margin:20px auto;border-radius:4px;"
+            result = str(soup)
+            # 去除 lxml 自动生成的 html/body 外壳，只保留内部片段
+            if soup.body:
+                result = soup.body.decode_contents()
+            return result
+
+        # 构建给前端模板使用的结构化文章列表
+        articles_data = []
+        for idx, art in enumerate(articles, 1):
+            cleaned_html = sanitize_jianshu_html(art.content_html or "")
+            art_avatar = await url_to_base64(art.author_avatar or author_avatar_url)
+            articles_data.append({
+                "id": art.id or str(idx),
+                "title": art.title,
+                "author": art.author or self.author_name,
+                "author_avatar": art_avatar,
+                "publish_time": art.publish_time,
+                "url": art.url,
+                "content_html": cleaned_html,
+                "like_count": art.like_count or 0,
+                "read_num": art.read_num or 0,
+                "comment_count": art.comment_count or 0
+            })
+
+        # 加载简书模板
+        tmpl_path = CURRENT_DIR / "templates" / "jianshu_classic" / "jianshu_classic.html"
+        if not tmpl_path.exists():
+            # 模板不存在时降级到普通 HTML，避免任务失败
+            return await self._export_fallback_classic(articles, filename_prefix, "简书")
+
+        template_str = tmpl_path.read_text(encoding="utf-8")
+        template = Template(template_str)
+        rendered_html = template.render(
+            title=title,
+            author_name=self.author_name,
+            author_avatar=author_avatar,
+            author_bio=author_bio,
+            category_name=category_name,
+            total_articles=len(articles_data),
             articles_json=json.dumps(articles_data, ensure_ascii=False)
         )
 

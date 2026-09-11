@@ -38,6 +38,7 @@ class ArticleItem(BaseModel):
     read_num: Optional[int] = 0
     like_count: Optional[int] = 0
     old_like_count: Optional[int] = 0
+    author_avatar: Optional[str] = None
     share_count: Optional[int] = 0
     comment_count: Optional[int] = 0
     is_original: bool = False

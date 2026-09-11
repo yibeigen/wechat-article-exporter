@@ -469,6 +469,9 @@ class JianshuScraper(BaseScraper):
                         title = info["public_title"].strip()
                     if info.get("user", {}).get("nickname"):
                         author = info["user"]["nickname"].strip()
+                    if info.get("user", {}).get("avatar"):
+                        # 抓取到文章作者真实头像，优先使用单篇文章的作者头像
+                        self.author_avatar = info["user"]["avatar"].strip()
                     if info.get("first_shared_at"):
                         publish_time = self._normalize_datetime(info["first_shared_at"])
 
@@ -526,6 +529,7 @@ class JianshuScraper(BaseScraper):
             id=post_id,
             title=title,
             author=author,
+            author_avatar=self.author_avatar or "",
             publish_time=publish_time,
             url=url,
             platform="jianshu",

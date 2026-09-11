@@ -492,8 +492,10 @@ class TaskManager:
                 await self._broadcast(task_id)
                 return
 
-            # 5. 智能提炼合集作者与平台名称
+            # 5. 智能提炼合集作者、平台名称与分类专栏名
+            # 过滤掉无效作者名，保留真实博主名（如“欧洋”）
             valid_authors = [a.author for a in scraped_articles if a.author and a.author not in ["互联网博主", "微信公众号", "未知", "", "未知博主", "Blogger"]]
+            # 过滤掉无效平台名，保留真实平台名（如“新浪博客”）
             valid_platforms = [a.platform for a in scraped_articles if a.platform and a.platform not in ["多平台", "多源聚合", "自定义", "", "custom_urls"]]
             
             if not request.author_name_override:
@@ -523,6 +525,22 @@ class TaskManager:
                     platform_str = "51CTO"
                 elif top_platform in ["微博", "weibo"]:
                     platform_str = "微博"
+                elif top_platform in ["新浪博客", "sina_blog"]:
+                    platform_str = "新浪博客"
+                elif top_platform in ["简书", "jianshu"]:
+                    platform_str = "简书"
+                    task.platform = "简书"
+
+            # 如果当前是自定义 URL 模式，scraper 本身没有 category_name，
+            # 则从每篇文章的 category 字段里统计最常见的真实分类/专栏名（如“西游正解”）
+            if not task.category_name:
+                valid_categories = [
+                    a.category for a in scraped_articles
+                    if a.category and a.category.strip()
+                    and a.category.strip() not in ["新浪博文", "全部博文", "未分类", "互联网博文"]
+                ]
+                if valid_categories:
+                    task.category_name = max(set(valid_categories), key=valid_categories.count)
 
             # 6. 开始合并与排版导出
             task.status = TaskStatusEnum.EXPORTING
@@ -530,9 +548,16 @@ class TaskManager:
             task.progress_percent = 82.0
             await self._broadcast(task_id)
 
-            safe_author = re.sub(r'[\\/:*?"<>|]', '_', author_name).strip() or "Blogger"
-            safe_platform = re.sub(r'[\\/:*?"<>|]', '_', platform_str).strip() or "platform"
-            filename_prefix = f"{safe_author}_{safe_platform}_{task_id}"
+            safe_author = re.sub(r'[\/:*?"<>|]', '_', author_name).strip() or "Blogger"
+            safe_platform = re.sub(r'[\/:*?"<>|]', '_', platform_str).strip() or "platform"
+            # 如果抓取的是某个分类/专栏（如新浪博客的“西游正解”），把分类名也放进文件名前缀里
+            # 最终文件名形如：西游正解_欧洋_新浪博客_原版.html
+            # 但简书通常是抓作者全部文章，不需要分类名，直接用“作者_简书”格式。
+            safe_category = re.sub(r'[\/:*?"<>|]', '_', task.category_name or "").strip()
+            if safe_category and safe_category not in ["单篇博文", "未分类"] and safe_platform != "简书":
+                filename_prefix = f"{safe_category}_{safe_author}_{safe_platform}"
+            else:
+                filename_prefix = f"{safe_author}_{safe_platform}"
 
             export_files = {}
             generated_paths = {}

@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>{{ title }}</title>
+    <style>
+        /* ===== 简书原站风格变量 ===== */
+        :root {
+            --bg: #ffffff;
+            --bg-body: #f9f9f9;
+            --text-main: #2f2f2f;
+            --text-title: #404040;
+            --text-muted: #969696;
+            --color-link: #3194d0;
+            --color-accent: #ea6f5a;
+            --border: #f0f0f0;
+            --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            --content-width: 730px;
+            --sidebar-width: 280px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: var(--font-body);
+            background: var(--bg);
+            color: var(--text-main);
+            line-height: 1.7;
+            font-size: 16px;
+            padding-top: 56px;
+        }
+        a { color: var(--color-link); text-decoration: none; }
+
+        /* ===== 顶部导航栏（1:1 复刻简书 PC 顶栏） ===== */
+        .navbar {
+            position: fixed; top: 0; left: 0; right: 0;
+            height: 56px; background: #fff;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 48px 0 24px; z-index: 1000;
+        }
+        .nav-left { display: flex; align-items: center; gap: 36px; }
+        .logo {
+            font-size: 28px; font-weight: 700; color: var(--color-accent);
+            font-family: "STKaiti", "KaiTi", serif; letter-spacing: 2px;
+        }
+        .nav-menu { display: flex; gap: 30px; font-size: 17px; color: #333; }
+        .nav-menu span { cursor: pointer; }
+        .nav-menu span:hover { color: var(--color-accent); }
+        .nav-right { display: flex; align-items: center; gap: 20px; }
+        .nav-title {
+            max-width: 600px; overflow: hidden; text-overflow: ellipsis;
+            white-space: nowrap; font-size: 16px; font-weight: 700;
+            color: var(--text-title); opacity: 0;
+            transition: opacity 0.25s; pointer-events: none;
+            position: absolute; left: 50%; transform: translateX(-50%);
+        }
+        .nav-title.show { opacity: 1; }
+        /* 滚动后：左右两侧都隐藏，只留标题 */
+        .navbar.scrolled .nav-left,
+        .navbar.scrolled .nav-right { display: none; }
+        .nav-search {
+            width: 180px; height: 34px;
+            border: 1px solid #eee; border-radius: 17px;
+            background: #f7f7f7; padding: 0 14px;
+            font-size: 14px; outline: none;
+        }
+        .nav-avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            object-fit: cover; border: 1px solid var(--border);
+        }
+        .nav-avatar.hide { display: none; }
+        .write-btn {
+            padding: 7px 16px; background: var(--color-accent);
+            color: #fff; border-radius: 18px; font-size: 15px;
+            cursor: pointer; border: none;
+        }
+
+        /* ===== 主体布局 ===== */
+        .main-wrap {
+            display: flex; justify-content: center;
+            padding: 24px 0 60px; gap: 24px;
+            max-width: 1200px; margin: 0 auto;
+        }
+
+        /* ===== 左侧悬浮工具栏（赞 / 赞赏 / 手机看全文） ===== */
+        .left-toolbar {
+            width: 60px; position: sticky; top: 50vh;
+            transform: translateY(-50%);
+            height: fit-content; text-align: center;
+            align-self: flex-start;
+        }
+        .tool-btn {
+            width: 56px; height: 56px; border-radius: 50%;
+            background: #fff; border: 1px solid #eee;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            margin-bottom: 14px; cursor: pointer; color: var(--text-muted);
+            font-size: 12px; transition: all 0.2s;
+        }
+        .tool-btn svg { width: 20px; height: 20px; margin-bottom: 2px; fill: currentColor; }
+        .tool-btn:hover { color: var(--color-accent); border-color: var(--color-accent); }
+        .tool-btn.active { color: var(--color-accent); }
+
+        /* ===== 中间内容区 ===== */
+        .content-area { width: var(--content-width); }
+        .article-title {
+            font-size: 32px; font-weight: 700;
+            line-height: 1.4; color: var(--text-title);
+            margin-bottom: 20px; word-break: break-word;
+        }
+
+        /* 作者信息栏 */
+        .author-bar {
+            display: flex; align-items: center;
+            margin-bottom: 30px;
+        }
+        .author-avatar {
+            width: 50px; height: 50px; border-radius: 50%;
+            object-fit: cover; margin-right: 12px;
+            border: 1px solid var(--border);
+        }
+        .author-avatar.hide { display: none; }
+        /* 头像加载失败或无头像时显示名字首字占位 */
+        .avatar-fallback {
+            display: none; align-items: center; justify-content: center;
+            border-radius: 50%; background: var(--color-accent);
+            color: #fff; font-weight: 600;
+        }
+        .avatar-fallback.show { display: flex; }
+        .author-bar .avatar-fallback {
+            width: 50px; height: 50px; margin-right: 12px;
+            font-size: 20px;
+        }
+        .author-card .avatar-fallback {
+            width: 50px; height: 50px; margin-right: 12px;
+            font-size: 20px;
+        }
+        .nav-right .avatar-fallback {
+            width: 36px; height: 36px;
+            font-size: 14px;
+        }
+        .author-info { flex: 1; }
+        .author-name-row { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+        .author-name {
+            font-size: 16px; font-weight: 600; color: #333;
+        }
+        .ip-tag {
+            font-size: 12px; color: var(--text-muted); background: #f7f7f7;
+            padding: 1px 6px; border-radius: 4px;
+        }
+        .author-meta {
+            font-size: 13px; color: var(--text-muted);
+        }
+        .follow-btn {
+            padding: 5px 18px; border: 1px solid var(--color-accent);
+            color: var(--color-accent); border-radius: 16px;
+            background: transparent; cursor: pointer; font-size: 14px;
+        }
+        .follow-btn:hover { background: rgba(234,111,90,0.05); }
+
+        /* ===== 正文区域（强制安全排版，避免文字图片重叠） ===== */
+        .article-body {
+            font-size: 16px; line-height: 1.8;
+            color: var(--text-main); word-break: break-word;
+        }
+        .article-body * {
+            position: static !important;
+            float: none !important;
+            clear: both !important;
+            transform: none !important;
+        }
+        .article-body p { margin-bottom: 20px; }
+        .article-body h1, .article-body h2, .article-body h3, .article-body h4 {
+            font-weight: 700; margin: 28px 0 16px; color: var(--text-title);
+        }
+        .article-body h1 { font-size: 24px; }
+        .article-body h2 { font-size: 22px; }
+        .article-body h3 { font-size: 19px; }
+        .article-body img, .article-body figure img {
+            max-width: 100% !important;
+            display: block !important;
+            margin: 20px auto !important;
+            border-radius: 4px !important;
+            height: auto !important;
+        }
+        .article-body figure {
+            margin: 20px 0; text-align: center;
+        }
+        .article-body figcaption {
+            font-size: 13px; color: var(--text-muted);
+            margin-top: 6px; text-align: center;
+        }
+        .article-body blockquote {
+            margin: 20px 0; padding: 12px 20px;
+            border-left: 4px solid #eee; background: #f7f7f7;
+            color: #555;
+        }
+        .article-body pre {
+            background: #f6f6f6; padding: 16px; border-radius: 4px;
+            overflow-x: auto; margin-bottom: 20px;
+            font-family: Consolas, Monaco, monospace; font-size: 14px;
+        }
+        .article-body code {
+            background: #f6f6f6; padding: 2px 5px; border-radius: 3px;
+            font-family: Consolas, Monaco, monospace; font-size: 14px;
+        }
+        .article-body ul, .article-body ol { margin: 0 0 20px 24px; }
+        .article-body li { margin-bottom: 8px; }
+        .article-body a { color: var(--color-link); border-bottom: 1px solid transparent; }
+        .article-body a:hover { border-bottom-color: var(--color-link); }
+
+        /* ===== 底部互动区 ===== */
+        .action-bar {
+            margin-top: 40px; padding-top: 24px;
+            border-top: 1px solid var(--border);
+            display: flex; align-items: center; gap: 16px;
+        }
+        .like-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 9px 22px; border: 1px solid var(--color-accent);
+            color: var(--color-accent); border-radius: 24px;
+            background: transparent; cursor: pointer; font-size: 15px;
+        }
+        .like-btn svg { width: 18px; height: 18px; fill: currentColor; }
+        .stat-item { color: var(--text-muted); font-size: 14px; }
+
+        /* 原文链接 */
+        .original-link {
+            margin-top: 24px; padding-top: 18px;
+            border-top: 1px solid var(--border);
+            font-size: 13px; color: var(--text-muted);
+        }
+        .original-link a {
+            color: var(--color-link); word-break: break-all;
+        }
+
+        /* 底部评论栏（复刻简书原站：输入框在左，评论/赞/更多在右） */
+        .bottom-bar {
+            margin-top: 30px; padding: 12px 16px;
+            background: #fafafa; border-radius: 24px;
+            border: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px;
+        }
+        .bottom-comment-input {
+            flex: 1; height: 38px;
+            border: none; border-radius: 18px;
+            background: #fff; padding: 0 16px;
+            font-size: 14px; outline: none;
+        }
+        .bottom-actions { display: flex; align-items: center; gap: 18px; }
+        .bottom-action {
+            display: flex; align-items: center; gap: 4px;
+            color: var(--text-muted); font-size: 14px;
+            cursor: pointer;
+        }
+        .bottom-action svg { width: 20px; height: 20px; fill: currentColor; }
+        .bottom-action:hover { color: var(--color-accent); }
+
+        /* ===== 右侧边栏 ===== */
+        .sidebar-right {
+            width: var(--sidebar-width); position: sticky;
+            top: 80px; height: fit-content;
+        }
+        .author-card {
+            background: #fff; border: 1px solid var(--border);
+            border-radius: 4px; padding: 18px;
+            display: flex; align-items: center; gap: 14px;
+            margin-bottom: 20px;
+        }
+        .author-card img {
+            width: 52px; height: 52px; border-radius: 50%;
+            object-fit: cover;
+        }
+        .author-card img.hide { display: none; }
+        .author-card .info { flex: 1; }
+        .author-card .name-row { display: flex; align-items: center; justify-content: space-between; }
+        .author-card .name { font-weight: 600; font-size: 15px; margin-bottom: 3px; }
+        .author-card .edit-btn {
+            padding: 3px 10px; border: 1px solid var(--color-accent);
+            color: var(--color-accent); border-radius: 12px;
+            font-size: 12px; cursor: pointer; background: transparent;
+        }
+        .author-card .meta { font-size: 12px; color: var(--text-muted); }
+        .recommend-box {
+            background: #fff; border: 1px solid var(--border);
+            border-radius: 4px; padding: 18px;
+        }
+        .recommend-title {
+            font-size: 15px; font-weight: 600;
+            margin-bottom: 14px; padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+        .recommend-list { list-style: none; }
+        .recommend-list li {
+            padding: 10px 0; border-bottom: 1px solid #f7f7f7;
+            font-size: 14px; color: #333; cursor: pointer;
+            line-height: 1.5;
+        }
+        .recommend-list li:hover { color: var(--color-accent); }
+        .recommend-list li:last-child { border-bottom: none; }
+
+        /* ===== 目录抽屉（小屏幕） ===== */
+        .toc-toggle {
+            display: none; position: fixed;
+            left: 12px; bottom: 24px;
+            width: 44px; height: 44px; border-radius: 50%;
+            background: var(--color-accent); color: #fff;
+            align-items: center; justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            cursor: pointer; z-index: 1002; border: none;
+        }
+        .toc-drawer {
+            position: fixed; top: 0; left: 0; bottom: 0;
+            width: 280px; background: #fff;
+            transform: translateX(-100%);
+            transition: transform 0.25s; z-index: 1003;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.1);
+            padding: 16px; overflow-y: auto;
+        }
+        .toc-drawer.open { transform: translateX(0); }
+        .toc-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+            display: none; z-index: 1002;
+        }
+        .toc-overlay.open { display: block; }
+        .toc-title {
+            font-size: 15px; font-weight: 600;
+            margin-bottom: 12px; padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+        .toc-search {
+            width: 100%; padding: 8px 10px;
+            border: 1px solid var(--border); border-radius: 4px;
+            font-size: 13px; margin-bottom: 12px; outline: none;
+        }
+        .toc-list { list-style: none; }
+        .toc-list li {
+            padding: 10px 8px; border-radius: 4px;
+            cursor: pointer; font-size: 14px;
+            color: var(--text-muted); border-bottom: 1px solid #fafafa;
+        }
+        .toc-list li:hover { background: #f7f7f7; color: #333; }
+        .toc-list li.active { background: #f7f7f7; color: var(--color-accent); font-weight: 600; }
+
+        /* ===== 切换提示 ===== */
+        .nav-hint {
+            position: fixed; bottom: 24px; left: 50%;
+            transform: translateX(-50%); background: rgba(0,0,0,0.7);
+            color: #fff; padding: 8px 18px; border-radius: 20px;
+            font-size: 13px; opacity: 0; transition: opacity 0.3s;
+            pointer-events: none; z-index: 1001;
+        }
+        .nav-hint.show { opacity: 1; }
+
+        /* ===== 响应式 ===== */
+        @media (max-width: 1100px) {
+            .sidebar-right { display: none; }
+            .main-wrap { padding: 24px 16px; }
+        }
+        @media (max-width: 860px) {
+            .left-toolbar { display: none; }
+            .nav-menu, .write-btn { display: none; }
+            .navbar { padding: 0 16px; }
+            .content-area { width: 100%; max-width: var(--content-width); }
+            .article-title { font-size: 24px; }
+            .toc-toggle { display: flex; }
+        }
+        @media (max-width: 640px) {
+            .nav-search { display: none; }
+            .article-title { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <nav class="navbar" id="mainNavbar">
+        <div class="nav-left" id="navLeft">
+            <div class="logo" id="navLogo">简书</div>
+            <div class="nav-menu" id="navMenu">
+                <span>发现</span>
+                <span>关注</span>
+                <span>会员</span>
+                <span>影视</span>
+                <span>消息</span>
+            </div>
+        </div>
+        <!-- 滚动后只显示文章标题，居中 -->
+        <div class="nav-title" id="navCenterTitle"></div>
+        <div class="nav-right">
+            <input type="text" class="nav-search" placeholder="搜索" value="">
+            <button class="write-btn">写文章</button>
+            <img class="nav-avatar" id="navAvatar" src="{{ author_avatar }}" alt="avatar" onerror="this.classList.add('hide'); document.getElementById('navAvatarFallback').classList.add('show');">
+            <div class="avatar-fallback" id="navAvatarFallback">{{ author_name[0] if author_name else '作' }}</div>
+        </div>
+    </nav>
+
+    <!-- 主体 -->
+    <div class="main-wrap">
+        <!-- 左侧悬浮工具栏 -->
+        <aside class="left-toolbar">
+            <div class="tool-btn active" id="likeToolBtn" title="喜欢">
+                <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                <span id="toolLikeCount">赞</span>
+            </div>
+            <div class="tool-btn" title="赞赏">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                <span>赏</span>
+            </div>
+            <div class="tool-btn" title="手机看全文">
+                <svg viewBox="0 0 24 24"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>
+                <span>全文</span>
+            </div>
+        </aside>
+
+        <!-- 中间内容 -->
+        <main class="content-area">
+            <h1 class="article-title" id="articleTitle"></h1>
+
+            <div class="author-bar">
+                <img class="author-avatar" id="authorAvatar" src="{{ author_avatar }}" alt="" onerror="this.classList.add('hide'); document.getElementById('authorAvatarFallback').classList.add('show');">
+                <div class="avatar-fallback" id="authorAvatarFallback"></div>
+                <div class="author-info">
+                    <div class="author-name-row">
+                        <span class="author-name" id="authorName"></span>
+                        <span class="ip-tag" id="ipTag">IP属地：未知</span>
+                    </div>
+                    <div class="author-meta" id="authorMeta"></div>
+                </div>
+                <button class="follow-btn">关注</button>
+            </div>
+
+            <article class="article-body" id="articleBody"></article>
+
+            <div class="action-bar">
+                <button class="like-btn" id="likeBtn">
+                    <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    <span id="likeCount">喜欢</span>
+                </button>
+                <span class="stat-item" id="readCount"></span>
+                <span class="stat-item" id="commentCount"></span>
+            </div>
+
+            <div class="bottom-bar">
+                <input type="text" class="bottom-comment-input" placeholder="写下你的评论...">
+                <div class="bottom-actions">
+                    <span class="bottom-action" id="bottomCommentCount">
+                        <svg viewBox="0 0 24 24"><path d="M21.99 4c0-1.1-.89-2-1.99-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4-.01-18zM18 14H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
+                        <span>评论0</span>
+                    </span>
+                    <span class="bottom-action" id="bottomLikeBtn">
+                        <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                        <span>赞</span>
+                    </span>
+                    <span class="bottom-action">
+                        <svg viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                    </span>
+                </div>
+            </div>
+
+            <div class="original-link" id="originalLink">
+                原文链接：<a href="" target="_blank" rel="noopener noreferrer"></a>
+            </div>
+        </main>
+
+        <!-- 右侧边栏 -->
+        <aside class="sidebar-right">
+            <div class="author-card">
+                <img id="sidebarAvatar" src="{{ author_avatar }}" alt="" onerror="this.classList.add('hide'); document.getElementById('sidebarAvatarFallback').classList.add('show');">
+                <div class="avatar-fallback" id="sidebarAvatarFallback"></div>
+                <div class="info">
+                    <div class="name-row">
+                        <div class="name">{{ author_name }}</div>
+                        <button class="edit-btn">关注</button>
+                    </div>
+                    {% if author_bio %}
+                    <div class="meta">{{ author_bio }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="recommend-box">
+                <div class="recommend-title">目录</div>
+                <ul class="recommend-list" id="recommendList"></ul>
+            </div>
+        </aside>
+    </div>
+
+    <!-- 移动端目录抽屉 -->
+    <button class="toc-toggle" id="tocToggle" title="文章目录">☰</button>
+    <div class="toc-overlay" id="tocOverlay"></div>
+    <div class="toc-drawer" id="tocDrawer">
+        <div class="toc-title">文章目录（共 {{ total_articles }} 篇）</div>
+        <input type="text" class="toc-search" id="tocSearch" placeholder="搜索文章标题...">
+        <ul class="toc-list" id="tocList"></ul>
+    </div>
+
+    <div class="nav-hint" id="navHint"></div>
+
+    <script>
+        // ===== 后端注入的文章数据 =====
+        const articles = {{ articles_json }};
+        let currentIndex = 0;
+
+        const els = {
+            title: document.getElementById('articleTitle'),
+            contentArea: document.querySelector('.content-area'),
+            avatar: document.getElementById('authorAvatar'),
+            avatarFallback: document.getElementById('authorAvatarFallback'),
+            sidebarAvatar: document.getElementById('sidebarAvatar'),
+            sidebarAvatarFallback: document.getElementById('sidebarAvatarFallback'),
+            navAvatar: document.getElementById('navAvatar'),
+            navAvatarFallback: document.getElementById('navAvatarFallback'),
+            name: document.getElementById('authorName'),
+            meta: document.getElementById('authorMeta'),
+            body: document.getElementById('articleBody'),
+            likeCount: document.getElementById('likeCount'),
+            toolLikeCount: document.getElementById('toolLikeCount'),
+            readCount: document.getElementById('readCount'),
+            commentCount: document.getElementById('commentCount'),
+            bottomCommentCount: document.getElementById('bottomCommentCount'),
+            bottomLikeBtn: document.getElementById('bottomLikeBtn'),
+            recommendList: document.getElementById('recommendList'),
+            tocList: document.getElementById('tocList'),
+            tocSearch: document.getElementById('tocSearch'),
+            tocToggle: document.getElementById('tocToggle'),
+            tocDrawer: document.getElementById('tocDrawer'),
+            tocOverlay: document.getElementById('tocOverlay'),
+            originalLink: document.querySelector('#originalLink a'),
+            navCenterTitle: document.getElementById('navCenterTitle'),
+            hint: document.getElementById('navHint')
+        };
+
+        // ===== 渲染推荐阅读（右侧边栏） =====
+        function renderRecommend() {
+            els.recommendList.innerHTML = '';
+            articles.forEach((art, idx) => {
+                if (idx === currentIndex) return;
+                const li = document.createElement('li');
+                li.textContent = art.title;
+                li.onclick = () => switchArticle(idx);
+                els.recommendList.appendChild(li);
+            });
+        }
+
+        // ===== 渲染目录 =====
+        function renderToc(filterText) {
+            const ft = (filterText || '').toLowerCase();
+            els.tocList.innerHTML = '';
+            let hasMatch = false;
+            articles.forEach((art, idx) => {
+                if (ft && !art.title.toLowerCase().includes(ft)) return;
+                hasMatch = true;
+                const li = document.createElement('li');
+                li.className = idx === currentIndex ? 'active' : '';
+                li.textContent = art.title;
+                li.onclick = () => { switchArticle(idx); closeDrawer(); };
+                els.tocList.appendChild(li);
+            });
+            if (!hasMatch) {
+                els.tocList.innerHTML = '<li style="cursor:default;color:#999;">未找到匹配文章</li>';
+            }
+        }
+
+        // 设置头像：有 URL 就尝试加载，加载失败或无 URL 时显示名字首字占位
+        function setAvatar(imgEl, fallbackEl, avatarUrl, name) {
+            if (!imgEl || !fallbackEl) return;
+            const firstChar = (name || '作').charAt(0);
+            fallbackEl.textContent = firstChar;
+            if (avatarUrl) {
+                imgEl.src = avatarUrl;
+                imgEl.classList.remove('hide');
+                fallbackEl.classList.remove('show');
+            } else {
+                imgEl.classList.add('hide');
+                fallbackEl.classList.add('show');
+            }
+        }
+
+        // ===== 切换文章 =====
+        function switchArticle(idx) {
+            if (idx < 0 || idx >= articles.length) return;
+            currentIndex = idx;
+            const art = articles[idx];
+            const authorName = art.author || '{{ author_name }}';
+            const authorAvatar = art.author_avatar || '{{ author_avatar }}';
+            els.title.textContent = art.title;
+            setAvatar(els.avatar, els.avatarFallback, authorAvatar, authorName);
+            setAvatar(els.sidebarAvatar, els.sidebarAvatarFallback, authorAvatar, authorName);
+            setAvatar(els.navAvatar, els.navAvatarFallback, authorAvatar, authorName);
+            els.name.textContent = authorName;
+
+            let metaParts = [];
+            if (art.publish_time) metaParts.push(art.publish_time);
+            const textLen = stripHtml(art.content_html || '').length;
+            if (textLen > 0) metaParts.push(`字数 ${textLen}`);
+            if (art.read_num) metaParts.push(`阅读 ${art.read_num}`);
+            els.meta.textContent = metaParts.join(' · ');
+
+            els.body.innerHTML = art.content_html || '<p>暂无正文</p>';
+            els.likeCount.innerHTML = (art.like_count || 0) > 0 ? `喜欢 ${art.like_count}` : '喜欢';
+            els.toolLikeCount.textContent = (art.like_count || 0) > 0 ? art.like_count : '赞';
+            els.readCount.textContent = (art.read_num || 0) > 0 ? `阅读 ${art.read_num}` : '';
+            els.commentCount.textContent = (art.comment_count || 0) > 0 ? `评论 ${art.comment_count}` : '';
+
+            // 更新底部评论栏
+            if (els.bottomCommentCount) {
+                els.bottomCommentCount.querySelector('span').textContent = `评论${art.comment_count || 0}`;
+            }
+            if (els.bottomLikeBtn) {
+                const likeText = els.bottomLikeBtn.querySelector('span');
+                likeText.textContent = (art.like_count || 0) > 0 ? `赞 ${art.like_count}` : '赞';
+            }
+
+            // 更新底部原文链接
+            if (els.originalLink && art.url) {
+                els.originalLink.href = art.url;
+                els.originalLink.textContent = art.url;
+            }
+            // 更新顶部中心标题（滚动后显示）
+            if (els.navCenterTitle) {
+                els.navCenterTitle.textContent = art.title;
+                els.navCenterTitle.classList.remove('show');
+            }
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            updateTitleCenter();
+            renderToc(els.tocSearch.value);
+            renderRecommend();
+        }
+
+        // ===== 目录抽屉开关 =====
+        function openDrawer() { els.tocDrawer.classList.add('open'); els.tocOverlay.classList.add('open'); }
+        function closeDrawer() { els.tocDrawer.classList.remove('open'); els.tocOverlay.classList.remove('open'); }
+        els.tocToggle.addEventListener('click', openDrawer);
+        els.tocOverlay.addEventListener('click', closeDrawer);
+        els.tocSearch.addEventListener('input', (e) => renderToc(e.target.value));
+
+        // ===== 滚动时顶部导航栏切换为精简模式（隐藏 logo/菜单，标题位于文章区域中心） =====
+        const mainNavbar = document.getElementById('mainNavbar');
+        function updateTitleCenter() {
+            if (!els.contentArea || !els.navCenterTitle) return;
+            const rect = els.contentArea.getBoundingClientRect();
+            const center = rect.left + rect.width / 2;
+            els.navCenterTitle.style.left = center + 'px';
+        }
+        window.addEventListener('scroll', () => {
+            if (!els.navCenterTitle || !mainNavbar) return;
+            const titleBottom = els.title.getBoundingClientRect().bottom;
+            // 当文章标题滚出顶栏下方时，隐藏左侧 logo/菜单，标题显示在文章区域中心
+            if (titleBottom < 56) {
+                mainNavbar.classList.add('scrolled');
+                updateTitleCenter();
+                els.navCenterTitle.classList.add('show');
+            } else {
+                mainNavbar.classList.remove('scrolled');
+                els.navCenterTitle.classList.remove('show');
+            }
+        });
+        // 窗口大小改变时重新计算标题位置
+        window.addEventListener('resize', updateTitleCenter);
+
+        // ===== 键盘左右键切篇 =====
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.key === 'ArrowLeft') { switchArticle(currentIndex - 1); showHint('← 上一篇'); }
+            else if (e.key === 'ArrowRight') { switchArticle(currentIndex + 1); showHint('下一篇 →'); }
+        });
+
+        // ===== 提示 =====
+        let hintTimer;
+        function showHint(text) {
+            els.hint.textContent = text; els.hint.classList.add('show');
+            clearTimeout(hintTimer); hintTimer = setTimeout(() => els.hint.classList.remove('show'), 1200);
+        }
+
+        // ===== 工具函数 =====
+        function stripHtml(html) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html || '';
+            return tmp.textContent || tmp.innerText || '';
+        }
+
+        // ===== 初始化 =====
+        if (articles.length > 0) {
+            switchArticle(0);
+            updateTitleCenter();
+        } else {
+            els.body.innerHTML = '<p>该文集暂无文章</p>';
+        }
+    </script>
+</body>
+</html>

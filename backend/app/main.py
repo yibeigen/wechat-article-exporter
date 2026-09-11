@@ -26,6 +26,17 @@ from pydantic import BaseModel
 from app.config import OUTPUT_DIR, BASE_DIR
 from app.models import TaskCreateRequest, TaskProgress, TaskStatusEnum
 from app.task_manager import task_manager
+from app.community_wall import (
+    list_contributors,
+    add_contributor,
+    update_contributor,
+    delete_contributor,
+    get_wall_summary,
+    seed_demo_data,
+    CommunityContributor,
+    ContributorType,
+    PrivacyLevel
+)
 from app.core.zhihu_auth import (
     check_zhihu_auth_status,
     sync_local_browser_cookies,
@@ -56,6 +67,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
+    # 初始化社区致谢墙示例数据（仅首次空数据时）
+    seed_demo_data()
+
     banner = r"""
 ======================================================================
    ____  _             ____  _     _   _ _ _           
@@ -924,12 +938,100 @@ async def wechat_mp_search_articles(data: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ================== 社区致谢墙接口 ==================
+@app.get("/api/community-wall")
+async def api_community_wall():
+    """获取社区致谢墙公开数据（已按隐私级别脱敏）"""
+    return get_wall_summary()
+
+
+@app.get("/api/community-wall/admin")
+async def api_admin_list_contributors(type: Optional[str] = None):
+    """管理后台：列出所有贡献者（含隐私信息）"""
+    contributor_type = None
+    if type:
+        try:
+            contributor_type = ContributorType(type)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"无效的贡献类型: {type}")
+    return list_contributors(contributor_type)
+
+
+@app.post("/api/community-wall/admin")
+async def api_admin_add_contributor(data: dict = Body(...)):
+    """管理后台：新增贡献者"""
+    try:
+        contributor_type = ContributorType(data.get("type", "sponsor"))
+        privacy = PrivacyLevel(data.get("privacy", "public"))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    contributor = CommunityContributor(
+        nickname=data.get("nickname", ""),
+        type=contributor_type,
+        privacy=privacy,
+        avatar_url=data.get("avatar_url"),
+        description=data.get("description", ""),
+        detail=data.get("detail", ""),
+        amount=data.get("amount"),
+        created_at=data.get("created_at", ""),
+        display_order=data.get("display_order", 0)
+    )
+    added = add_contributor(contributor)
+    return {"success": True, "contributor": added.dict()}
+
+
+@app.put("/api/community-wall/admin/{contributor_id}")
+async def api_admin_update_contributor(contributor_id: str, data: dict = Body(...)):
+    """管理后台：更新贡献者"""
+    existing = list_contributors()
+    found = None
+    for c in existing:
+        if c.id == contributor_id:
+            found = c
+            break
+    if not found:
+        raise HTTPException(status_code=404, detail="贡献者不存在")
+
+    try:
+        contributor_type = ContributorType(data.get("type", found.type.value))
+        privacy = PrivacyLevel(data.get("privacy", found.privacy.value))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    updated = CommunityContributor(
+        id=contributor_id,
+        nickname=data.get("nickname", found.nickname),
+        type=contributor_type,
+        privacy=privacy,
+        avatar_url=data.get("avatar_url", found.avatar_url),
+        description=data.get("description", found.description),
+        detail=data.get("detail", found.detail),
+        amount=data.get("amount", found.amount),
+        created_at=data.get("created_at", found.created_at),
+        display_order=data.get("display_order", found.display_order)
+    )
+    result = update_contributor(contributor_id, updated)
+    return {"success": True, "contributor": result.dict() if result else None}
+
+
+@app.delete("/api/community-wall/admin/{contributor_id}")
+async def api_admin_delete_contributor(contributor_id: str):
+    """管理后台：删除贡献者"""
+    if delete_contributor(contributor_id):
+        return {"success": True}
+    raise HTTPException(status_code=404, detail="贡献者不存在")
+
+
 # 明确路由
 frontend_dir = BASE_DIR / "frontend"
 assets_dir = frontend_dir / "assets"
 
 if assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+if OUTPUT_DIR.exists():
+    app.mount("/downloads", StaticFiles(directory=str(OUTPUT_DIR)), name="downloads")
 
 @app.api_route("/wechat", methods=["GET", "HEAD"])
 @app.api_route("/wechat.html", methods=["GET", "HEAD"])

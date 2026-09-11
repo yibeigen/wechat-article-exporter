@@ -1,4 +1,5 @@
 import re
+import os
 import html as html_module
 import json
 import datetime
@@ -127,11 +128,22 @@ class WeChatScraper(BaseScraper):
         lines = [line.strip() for line in self.target.split("\n") if line.strip()]
         urls = [line for line in lines if line.startswith("http")]
         
+        # 【诊断日志】帮助定位为什么合集链接会走到搜狗通道
+        print(f"[WeChatScraper] get_article_list target preview: {self.target[:300]!r}")
+        print(f"[WeChatScraper] detected {len(lines)} non-empty lines, {len(urls)} http urls")
+        
         # 场景 A: 检查是否输入了微信「专辑/合集」链接 (appmsgalbum 或 album_id)
         album_urls = [u for u in urls if ("appmsgalbum" in u or "album_id" in u)]
+        print(f"[WeChatScraper] album_urls detected: {len(album_urls)}, 'album_id' in target: {'album_id' in self.target}")
         if album_urls or "album_id" in self.target:
             target_album_url = album_urls[0] if album_urls else self.target.strip()
-            return await self._fetch_album_articles(target_album_url, progress_callback)
+            print(f"[WeChatScraper] entering album branch, url={target_album_url[:200]!r}")
+            album_articles = await self._fetch_album_articles(target_album_url, progress_callback)
+            print(f"[WeChatScraper] album branch returned {len(album_articles)} articles")
+            if album_articles:
+                return album_articles
+            # 如果专辑解析返回空，不直接 fallback，给用户明确提示；但继续向后执行以防其他通道能救场
+            print("[WeChatScraper] album branch returned empty, will try fallback channels")
 
         # 场景 B: 用户只输入了 1 条普通的微信文章链接
         # 免凭证直接导出单篇；如需该号全部历史，可点「获取公众号链接」在微信打开
@@ -626,28 +638,539 @@ class WeChatScraper(BaseScraper):
         return []
 
     async def _fetch_album_articles(self, album_url: str, progress_callback: Optional[Callable[[str, int, int], None]] = None) -> List[Dict[str, str]]:
-        """自动解析微信专辑/合集链接下的全部文章 (免凭证 · 零风控)"""
+        """
+        自动解析微信专辑/合集链接下的全部文章 (免凭证 · 零风控)
+        微信合集页面结构会不定期变化，常见两种形式：
+        1) 一次返回全部 80+ 篇，但 DOM 里只渲染前 10 篇，需要翻页/懒加载 AJAX；
+        2) 直接内嵌完整 JSON。
+        这里先尝试静态解析，再尝试 AJAX 翻页。
+        """
         articles = []
+        html = ""
+        final_url = album_url
         try:
-            resp = await self.client.get(album_url, timeout=12.0)
-            if resp.status_code == 200:
-                soup = BeautifulSoup(resp.text, "lxml")
-                items = soup.select(".album__list-item, .js_album_item, li[data-link]")
-                for idx, item in enumerate(items, 1):
-                    url = item.get("data-link") or item.get("data-msgid") or ""
-                    title_elem = item.select_one(".album__item-title, .js_title, .title")
-                    title = title_elem.text.strip() if title_elem else f"合集文章_{idx}"
-                    if url and url.startswith("http"):
-                        articles.append({
-                            "id": f"album_{idx}",
-                            "url": url,
-                            "title": title
-                        })
-                        if self.max_articles and len(articles) >= self.max_articles:
-                            break
+            print(f"[WeChatScraper._fetch_album_articles] 请求合集页: {album_url[:300]!r}")
+            resp = await self.client.get(album_url, headers=WECHAT_HEADERS, timeout=15.0, follow_redirects=True)
+            final_url = str(resp.url)
+            print(f"[WeChatScraper._fetch_album_articles] 状态码: {resp.status_code}, 最终 URL: {final_url[:300]!r}, 页面长度: {len(resp.text)}")
+            if resp.status_code != 200:
+                return articles
+            html = resp.text
+
+            # 保存原始页面便于排查
+            debug_path = os.path.join(os.getcwd(), "album_debug.html")
+            try:
+                with open(debug_path, "w", encoding="utf-8") as f:
+                    f.write(html)
+                print(f"[WeChatScraper._fetch_album_articles] 已保存原始 HTML 到: {debug_path}")
+            except Exception as e:
+                print(f"[WeChatScraper._fetch_album_articles] 保存 HTML 失败: {e}")
+
+            soup = BeautifulSoup(html, "lxml")
+
+            # ========== 第 1 层：传统 DOM 选择器（微信老版 H5 合集页常见结构）==========
+            items = soup.select(".album__list-item, .js_album_item, li[data-link], .album__item, [data-msgid]")
+            print(f"[WeChatScraper._fetch_album_articles] DOM 选择器命中: {len(items)} 个元素")
+            page_items = []   # 临时保存，用于提取最后一篇的 msgid/itemidx 做翻页起点
+            for idx, item in enumerate(items, 1):
+                # data-link 才是真正的文章永久链接；data-msgid 只是消息编号，不能当 URL 用
+                url = item.get("data-link") or ""
+                msg_id = item.get("data-msgid") or ""
+                item_idx = item.get("data-itemidx") or item.get("data-idx") or "1"
+                if not url.startswith("http"):
+                    # 有时候链接放在 a 标签的 href 里
+                    a_tag = item.select_one("a[href*='/s/'], a[href*='mp.weixin.qq.com']")
+                    if a_tag:
+                        url = a_tag.get("href", "")
+                title_elem = item.select_one(".album__item-title, .js_title, .title, h3")
+                title = title_elem.text.strip() if title_elem else f"合集文章_{idx}"
+
+                # 尝试从 DOM 元素提取发布时间（微信专辑页常见 data-time、data-create-time、.time、.date 等）
+                create_time = ""
+                time_raw = item.get("data-time") or item.get("data-create-time") or item.get("data-pub-time") or ""
+                if not time_raw:
+                    # 微信 H5 专辑页常见的时间元素类名：js_article_create_time / album__item-info-item
+                    time_elem = item.select_one(
+                        ".js_article_create_time, .album__item-info-item, "
+                        ".album__item-time, .time, .date, .post-date, .album__time, .article-time"
+                    )
+                    if time_elem:
+                        time_raw = time_elem.text.strip()
+                if time_raw:
+                    # 如果是纯数字，大概率是 Unix 时间戳
+                    if re.match(r"^\d+$", str(time_raw)):
+                        create_time = self._format_wechat_create_time(int(time_raw))
+                    else:
+                        create_time = str(time_raw)
+
+                if url and url.startswith("http"):
+                    art = {"id": f"album_{idx}", "url": url, "title": title, "create_time": create_time}
+                    # 只有拿到 msgid 时才保存，用于后续翻页
+                    if msg_id:
+                        art["_msg_id"] = msg_id
+                        art["_item_idx"] = item_idx or "1"
+                    page_items.append(art)
+                    articles.append(art)
+                    if self.max_articles and len(articles) >= self.max_articles:
+                        break
+
+            # ========== 第 2 层：从页面内嵌脚本/变量提取 JSON 文章列表 ==========
+            # 注意：不能只在前一层为空时才执行。微信合集页经常是 DOM 只展示 10 篇，
+            # 但页面内嵌脚本里包含全部文章的 JSON，必须每次都尝试。
+            print("[WeChatScraper._fetch_album_articles] DOM 解析完成，继续尝试从页面脚本提取完整 JSON 列表...")
+            json_articles = self._extract_articles_from_album_scripts(html)
+            print(f"[WeChatScraper._fetch_album_articles] 脚本 JSON 提取命中: {len(json_articles)} 篇")
+            for art in json_articles:
+                articles.append({
+                    "id": f"album_{len(articles)+1}",
+                    "url": art["url"],
+                    "title": art["title"]
+                })
+                if self.max_articles and len(articles) >= self.max_articles:
+                    break
+
+            # ========== 第 3 层：正则兜底，扫描页面中所有微信公众号文章永久链接 ==========
+            print("[WeChatScraper._fetch_album_articles] 继续尝试正则扫描页面内所有微信公众号文章链接...")
+            regex_articles = self._extract_articles_from_all_links(html)
+            print(f"[WeChatScraper._fetch_album_articles] 正则兜底命中: {len(regex_articles)} 篇")
+            for art in regex_articles:
+                articles.append({
+                    "id": f"album_{len(articles)+1}",
+                    "url": art["url"],
+                    "title": art["title"]
+                })
+                if self.max_articles and len(articles) >= self.max_articles:
+                    break
+
+            # ========== 第 4 层：微信 H5 专辑页滚动翻页 AJAX 加载 ==========
+            # 如果静态解析只拿到 10 篇且能提取到 msgid，则尝试模拟微信的翻页接口继续加载。
+            print(f"[WeChatScraper._fetch_album_articles] 当前文章数: {len(articles)}，最后一页元素带 msgid 的数量: {len(page_items)}")
+            if page_items:
+                last = page_items[-1]
+                print(f"[WeChatScraper._fetch_album_articles] 尝试以 msg_id={last.get('_msg_id')} item_idx={last.get('_item_idx')} 为起点翻页...")
+                paged_articles = await self._fetch_album_pages_via_ajax(album_url, page_items, html)
+                print(f"[WeChatScraper._fetch_album_articles] 翻页加载额外获得: {len(paged_articles)} 篇")
+            for art in paged_articles:
+                articles.append({
+                    "id": f"album_{len(articles)+1}",
+                    "url": art["url"],
+                    "title": art["title"],
+                    "create_time": art.get("create_time", "")
+                })
+                if self.max_articles and len(articles) >= self.max_articles:
+                    break
+
+            # 去重保持顺序
+            unique = []
+            seen = set()
+            for art in articles:
+                if art["url"] not in seen:
+                    seen.add(art["url"])
+                    # 去掉内部辅助字段再返回，保持对外接口干净
+                    clean = {k: v for k, v in art.items() if not k.startswith("_")}
+                    unique.append(clean)
+            articles = unique
+            print(f"[WeChatScraper._fetch_album_articles] 最终去重后: {len(articles)} 篇")
         except Exception as e:
-            print(f"解析微信合集失败: {e}")
+            print(f"[WeChatScraper._fetch_album_articles] 解析微信合集失败: {e}")
+            import traceback
+            traceback.print_exc()
+            # 即使抛异常，也返回已经解析到的文章，避免直接 fallback 到需要凭证的分支
+            if articles:
+                print(f"[WeChatScraper._fetch_album_articles] 异常兜底返回已解析的 {len(articles)} 篇文章")
+                # 清理内部辅助字段
+                seen = set()
+                unique = []
+                for art in articles:
+                    if art["url"] not in seen:
+                        seen.add(art["url"])
+                        unique.append({k: v for k, v in art.items() if not k.startswith("_")})
+                return unique
         return articles
+
+    def _extract_articles_from_album_scripts(self, html: str) -> List[Dict[str, str]]:
+        """
+        从微信合集页 HTML 内嵌的 JS 变量/JSON 数据里提取文章列表。
+        微信经常把完整文章数据放在 window.__INITIAL_STATE__、var msgList、album_article_list 等变量里。
+        """
+        results = []
+        candidates = []
+
+        # 尝试 1：window.__INITIAL_STATE__ / __I_N_I_T___ 这类 React/Vue 初始状态
+        init_state_match = re.search(r"window\.__INITIAL_STATE__\s*=\s*([\{\[][\s\S]*?);\s*</script>", html)
+        if not init_state_match:
+            init_state_match = re.search(r"window\.__INITIAL_STATE__\s*=\s*({[\s\S]*?});", html)
+        if init_state_match:
+            try:
+                candidates.append(json.loads(init_state_match.group(1)))
+            except Exception as e:
+                print(f"[extract_album_scripts] __INITIAL_STATE__ JSON 解析失败: {e}")
+
+        # 尝试 2：var msgList = '...' ; 这种微信经典转义 JSON
+        msg_list_match = re.search(r"var\s+msgList\s*=\s*['\"]([\s\S]*?)['\"]\s*;", html)
+        if msg_list_match:
+            raw = msg_list_match.group(1)
+            raw = raw.replace('\\x26quot;', '"').replace('\\x26amp;', '&').replace('&quot;', '"')
+            try:
+                candidates.append(json.loads(raw))
+            except Exception as e:
+                print(f"[extract_album_scripts] msgList JSON 解析失败: {e}")
+
+        # 尝试 3：var msgList = {...}; 这种未转义的 JSON
+        m2 = re.search(r"var\s+msgList\s*=\s*(\{[\s\S]*?\})\s*;", html)
+        if m2:
+            try:
+                candidates.append(json.loads(m2.group(1)))
+            except Exception as e:
+                print(f"[extract_album_scripts] msgList 对象解析失败: {e}")
+
+        # 尝试 4：页面里的 album_article_list / albumList / articleList / appmsg_list 等 JSON 数组
+        for pattern in [
+            r"var\s+album_article_list\s*=\s*(\[[\s\S]*?\])\s*;",
+            r"var\s+albumList\s*=\s*(\[[\s\S]*?\])\s*;",
+            r"var\s+articleList\s*=\s*(\[[\s\S]*?\])\s*;",
+            r"var\s+appmsg_list\s*=\s*(\[[\s\S]*?\])\s*;",
+            r"['\"]albumList['\"]:\s*(\[[\s\S]*?\])",
+            r"['\"]articleList['\"]:\s*(\[[\s\S]*?\])",
+            r"['\"]appmsg_list['\"]:\s*(\[[\s\S]*?\])",
+        ]:
+            m = re.search(pattern, html)
+            if m:
+                try:
+                    candidates.append(json.loads(m.group(1)))
+                except Exception:
+                    continue
+
+        # 尝试 5：扫描页面中所有 "content_url" 出现的大型 JSON 块
+        # 微信合集页很多时候把文章列表直接内嵌在一个匿名对象里
+        for big_json_m in re.finditer(r"(\"|')content_url(\"|')\s*:\s*\"[^\"]+\",", html):
+            start = max(0, big_json_m.start() - 200)
+            end = min(len(html), big_json_m.end() + 500)
+            snippet = html[start:end]
+            # 尝试向前扩展找到一个完整的 JSON 对象或数组
+            left = html.rfind("[", 0, big_json_m.start())
+            right = html.find("]", big_json_m.end())
+            if left != -1 and right != -1:
+                try:
+                    arr = json.loads(html[left:right+1])
+                    if isinstance(arr, list) and arr:
+                        candidates.append(arr)
+                except Exception:
+                    pass
+
+        for data in candidates:
+            # 微信通用结构：list -> [{app_msg_ext_info: {title, content_url}}]
+            items = data.get("list", []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                # 尝试多种字段路径
+                info = item.get("app_msg_ext_info") or item.get("appmsg_info") or item
+                title = info.get("title") or item.get("title") or ""
+                url = info.get("content_url") or info.get("url") or item.get("url") or item.get("link") or ""
+                if url:
+                    url = html_module.unescape(url)
+                    if not url.startswith("http"):
+                        url = "https://mp.weixin.qq.com" + url
+                if title and url and url.startswith("http"):
+                    results.append({"title": title.strip(), "url": url})
+                # 多图文里的子文章
+                for sub in info.get("multi_app_msg_item_list", []) if isinstance(info, dict) else []:
+                    sub_title = sub.get("title", "")
+                    sub_url = sub.get("content_url", "")
+                    if sub_url and not sub_url.startswith("http"):
+                        sub_url = "https://mp.weixin.qq.com" + sub_url
+                    if sub_title and sub_url and sub_url.startswith("http"):
+                        results.append({"title": sub_title.strip(), "url": sub_url})
+
+        # 额外尝试 6：扫描页面内所有 data-link 字段的 JSON 数组（微信 H5 喜欢用 data-link 存全文链接）
+        for dl_m in re.finditer(r"['\"]data-link['\"]\s*:\s*['\"](https?://mp\.weixin\.qq\.com/s[^'\"]+)['\"]", html):
+            url = html_module.unescape(dl_m.group(1))
+            # 往前 200 字符找 title 字段
+            snippet = html[max(0, dl_m.start()-200):dl_m.start()]
+            title_m = re.search(r"['\"]title['\"]\s*:\s*['\"]([^'\"]+)['\"]", snippet)
+            title = title_m.group(1) if title_m else ""
+            if url and url not in [r["url"] for r in results]:
+                results.append({"title": title or "微信文章", "url": url})
+
+        print(f"[extract_album_scripts] 所有模式累计找到 {len(results)} 篇（未去重）")
+        return results
+
+    def _extract_articles_from_all_links(self, html: str) -> List[Dict[str, str]]:
+        """
+        兜底扫描：从整张 HTML 中找出所有微信公众号文章永久链接，
+        并尽量从 surrounding 文本/标签属性中提取标题。
+        主要用于微信合集页中文章链接散落在各处、前面选择器都匹配不上的情况。
+        """
+        results = []
+        seen = set()
+        soup = BeautifulSoup(html, "lxml")
+
+        # 1. 扫描所有 a 标签里的 mp.weixin.qq.com/s 文章链接
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            if not href or "mp.weixin.qq.com/s" not in href:
+                continue
+            # 过滤掉非文章链接（如 /s/__biz 分享页、菜单等）
+            if "/mp/appmsgalbum" in href or "/mp/profile_ext" in href:
+                continue
+            url = html_module.unescape(href)
+            if not url.startswith("http"):
+                url = "https://mp.weixin.qq.com" + url
+            if url in seen:
+                continue
+            seen.add(url)
+
+            # 取标题：优先 title 属性 -> 链接文本 -> data-title -> alt
+            title = (
+                a.get("title") or
+                a.get("data-title") or
+                a.get_text(strip=True) or
+                ""
+            )
+            # 如果 a 标签文本为空，看看附近兄弟标签有没有标题
+            if not title:
+                parent = a.find_parent()
+                if parent:
+                    for sel in ["h3", "h2", "h4", ".title", ".item-title", "[data-title]"]:
+                        tnode = parent.select_one(sel)
+                        if tnode and tnode.get_text(strip=True):
+                            title = tnode.get_text(strip=True)
+                            break
+            title = title.strip() or f"微信文章_{len(results)+1}"
+            results.append({"title": title, "url": url})
+
+        # 2. 扫描所有 data-link 属性里的文章链接（DOM 没匹配到但属性存在）
+        for tag in soup.find_all(attrs={"data-link": True}):
+            url = tag["data-link"]
+            if "mp.weixin.qq.com/s" not in url and "mp.weixin.qq.com/s?" not in url:
+                continue
+            url = html_module.unescape(url)
+            if not url.startswith("http"):
+                url = "https://mp.weixin.qq.com" + url
+            if url in seen:
+                continue
+            seen.add(url)
+            title = (
+                tag.get("data-title") or
+                tag.get_text(strip=True) or
+                f"微信文章_{len(results)+1}"
+            )
+            results.append({"title": title.strip(), "url": url})
+
+        # 3. 再用正则扫描文本里所有 s 链接，防止 BeautifulSoup 过滤掉了异常标签
+        for m in re.finditer(r'["\'](https?://mp\.weixin\.qq\.com/s[/?][^"\']+)["\']', html):
+            url = html_module.unescape(m.group(1))
+            if url in seen or not url.startswith("http"):
+                continue
+            seen.add(url)
+            results.append({"title": f"微信文章_{len(results)+1}", "url": url})
+
+        return results
+
+    async def _fetch_album_pages_via_ajax(self, album_url: str, first_page_items: List[Dict], html: str) -> List[Dict[str, str]]:
+        """
+        微信 H5 专辑页滚动分页抓取：用第一页最后一篇文章的 msgid/itemidx 作为起点，
+        循环请求微信的翻页接口，把后面文章全部加载出来。
+        """
+        results = []
+        # 没有 msgid 就没法定位下一页，直接放弃
+        if not first_page_items or "_msg_id" not in first_page_items[-1]:
+            print("[fetch_album_pages] 第一页未拿到 msgid，无法翻页")
+            return results
+
+        last_art = first_page_items[-1]
+        begin_msgid = last_art.get("_msg_id")
+        begin_itemidx = last_art.get("_item_idx") or "1"
+
+        # 解析原始 URL 里的 query 参数，保留 __biz、album_id、key、pass_ticket 等
+        parsed = urllib.parse.urlparse(album_url)
+        base_params = urllib.parse.parse_qs(parsed.query)
+        # parse_qs 返回的是列表值，统一取最后一个值
+        params = {k: (v[-1] if isinstance(v, list) else v) for k, v in base_params.items()}
+        params["action"] = "getalbum"
+        params["f"] = "json"          # 请求 JSON 格式返回
+        params["count"] = "10"        # 每页 10 篇，和微信页面保持一致
+        params["begin_msgid"] = begin_msgid
+        params["begin_itemidx"] = begin_itemidx
+
+        headers = dict(WECHAT_HEADERS)
+        headers["Accept"] = "application/json, text/javascript, */*; q=0.01"
+        headers["X-Requested-With"] = "XMLHttpRequest"
+        headers["Referer"] = album_url
+
+        max_pages = 20  # 最多再翻 20 页，防止死循环
+        for page in range(1, max_pages + 1):
+            # 达到用户设置的最大篇数就停
+            if self.max_articles and len(first_page_items) + len(results) >= self.max_articles:
+                break
+
+            print(f"[fetch_album_pages] 请求第 {page} 页翻页，begin_msgid={begin_msgid}, begin_itemidx={begin_itemidx}")
+            try:
+                page_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}?" + urllib.parse.urlencode(params)
+                resp = await self.client.get(page_url, headers=headers, timeout=15.0, follow_redirects=True)
+                print(f"[fetch_album_pages] 第 {page} 页状态码: {resp.status_code}, 返回长度: {len(resp.text)}")
+
+                if resp.status_code != 200:
+                    break
+
+                # 尝试解析 JSON
+                data = {}
+                try:
+                    data = resp.json()
+                    print(f"[fetch_album_pages] 第 {page} 页 JSON 顶层 keys: {list(data.keys())[:20]}")
+                except Exception as e:
+                    print(f"[fetch_album_pages] 第 {page} 页 JSON 解析失败: {e}")
+                    # 微信 sometimes 返回 JSONP，包在 callback(...) 里，尝试剥壳
+                    text = resp.text
+                    m = re.search(r"callback\((\{[\s\S]*\})\)", text)
+                    if m:
+                        try:
+                            data = json.loads(m.group(1))
+                        except Exception:
+                            pass
+                    if not data:
+                        print(f"[fetch_album_pages] 第 {page} 页不是 JSON/JSONP，终止翻页")
+                        break
+
+                # 检查 base_resp，如果返回错误码就停止
+                base_resp = data.get("base_resp") if isinstance(data, dict) else None
+                if isinstance(base_resp, dict) and base_resp.get("ret") not in (0, None, ""):
+                    print(f"[fetch_album_pages] 第 {page} 页 base_resp 返回错误: {base_resp}")
+                    break
+
+                # 从 JSON 中提取文章列表，兼容微信多种字段名和嵌套结构
+                raw_items = []
+                # 微信专辑翻页接口常见返回: { "base_resp": {}, "getalbum_resp": { "article_list": [...], ... } }
+                getalbum_resp = data.get("getalbum_resp") if isinstance(data, dict) else None
+                if isinstance(getalbum_resp, dict):
+                    print(f"[fetch_album_pages] 第 {page} 页 getalbum_resp keys: {list(getalbum_resp.keys())[:20]}")
+                    for key in ["article_list", "appmsg_list", "app_msg_list", "list", "msgList", "articles"]:
+                        val = getalbum_resp.get(key)
+                        if isinstance(val, list):
+                            raw_items = val
+                            break
+                        elif isinstance(val, dict):
+                            raw_items = val.get("list", [])
+                            if raw_items:
+                                break
+
+                # 如果 getalbum_resp 里没有，再到顶层找
+                if not raw_items:
+                    for key in ["article_list", "appmsg_list", "app_msg_list", "list", "msgList", "articles"]:
+                        val = data.get(key)
+                        if isinstance(val, list):
+                            raw_items = val
+                            break
+                        elif isinstance(val, dict):
+                            raw_items = val.get("list", [])
+                            if raw_items:
+                                break
+
+                print(f"[fetch_album_pages] 第 {page} 页解析到 {len(raw_items)} 篇文章")
+                if not raw_items:
+                    break
+
+                page_results = []
+                for item in raw_items:
+                    if not isinstance(item, dict):
+                        continue
+                    # 微信返回的字段名可能是 title + url/link/content_url
+                    title = item.get("title") or item.get("msg_title") or ""
+                    url = (
+                        item.get("url") or
+                        item.get("link") or
+                        item.get("content_url") or
+                        item.get("msg_link") or
+                        ""
+                    )
+                    if url:
+                        url = html_module.unescape(url)
+                        if not url.startswith("http"):
+                            url = "https://mp.weixin.qq.com" + url
+
+                    # 尝试提取发布时间，微信常见字段 create_time / update_time / pub_time / datetime
+                    create_time = ""
+                    ts = item.get("create_time") or item.get("update_time") or item.get("pub_time") or item.get("publish_time") or item.get("datetime")
+                    if ts:
+                        create_time = self._format_wechat_create_time(ts)
+
+                    page_item = {"title": title.strip(), "url": url, "create_time": create_time}
+
+                    if title and url:
+                        page_results.append(page_item)
+                    else:
+                        # 如果只有 title 没有 url，可能是返回了 msgid/idx，需要组装文章 url
+                        msgid = item.get("msgid") or item.get("msg_id") or item.get("mid")
+                        idx = item.get("itemidx") or item.get("msg_itemidx") or item.get("idx") or "1"
+                        if title and msgid:
+                            synthetic_url = f"https://mp.weixin.qq.com/s?__biz={params.get('__biz', '')}&mid={msgid}&idx={idx}&sn="
+                            page_item["url"] = synthetic_url
+                            page_results.append(page_item)
+
+                if not page_results:
+                    break
+
+                results.extend(page_results)
+
+                # 判断是否需要继续翻页：优先在 getalbum_resp 里找，再在顶层找
+                continue_flag = 1
+                next_msgid = None
+                next_itemidx = None
+                if isinstance(getalbum_resp, dict):
+                    continue_flag = getalbum_resp.get("continue_flag", getalbum_resp.get("can_msg_continue", 1))
+                    next_msgid = getalbum_resp.get("next_msgid") or getalbum_resp.get("next_begin_msgid")
+                    next_itemidx = getalbum_resp.get("next_itemidx") or getalbum_resp.get("next_begin_itemidx")
+                if continue_flag == 1 and not next_msgid:
+                    continue_flag = data.get("continue_flag", data.get("can_msg_continue", 1))
+                    next_msgid = data.get("next_msgid") or data.get("next_begin_msgid")
+                    next_itemidx = data.get("next_itemidx") or data.get("next_begin_itemidx")
+
+                if continue_flag in (0, "0", False):
+                    print("[fetch_album_pages] continue_flag=0，翻页结束")
+                    break
+
+                if next_msgid:
+                    begin_msgid = str(next_msgid)
+                else:
+                    # 否则用本页最后一篇文章的 msgid/idx 继续
+                    last_item = raw_items[-1]
+                    if isinstance(last_item, dict):
+                        fallback_id = last_item.get("msgid") or last_item.get("msg_id") or last_item.get("mid") or last_item.get("id")
+                        if fallback_id:
+                            begin_msgid = str(fallback_id)
+                        else:
+                            print("[fetch_album_pages] 没有 next_msgid 也提取不到 msgid，结束翻页")
+                            break
+                    else:
+                        break
+
+                if next_itemidx:
+                    begin_itemidx = str(next_itemidx)
+                else:
+                    # 没有返回 next_itemidx 时，使用本页最后一篇文章的 idx，否则 +1
+                    last_item = raw_items[-1]
+                    if isinstance(last_item, dict):
+                        last_idx = last_item.get("itemidx") or last_item.get("msg_itemidx") or last_item.get("idx")
+                        if last_idx:
+                            begin_itemidx = str(last_idx)
+                        else:
+                            begin_itemidx = str(int(begin_itemidx) + len(raw_items))
+                    else:
+                        begin_itemidx = str(int(begin_itemidx) + len(raw_items))
+
+                params["begin_msgid"] = begin_msgid
+                params["begin_itemidx"] = begin_itemidx
+
+                await asyncio.sleep(0.6)  # 控制请求频率，避免触发反爬
+
+            except Exception as e:
+                print(f"[fetch_album_pages] 第 {page} 页翻页异常: {e}")
+                import traceback
+                traceback.print_exc()
+                break
+
+        return results
 
     def _format_wechat_create_time(self, create_time: Any) -> str:
         """把微信公众平台返回的 Unix 时间戳格式化为可读的北京时间字符串"""

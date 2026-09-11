@@ -59,8 +59,26 @@
 您的每一个 Star 和每一次分享，都是我持续更新、硬抗平台风控、免费维护下去的最大动力！💖
 
 <div align="center">
-  <p><b>👇 扫码关注作者公众号【艺杯羹】，回复「文章」秒得专属永久激活口令 👇</b></p>
-  <img src="frontend/assets/wechat_qr.png" alt="微信公众号【艺杯羹】" width="300" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);" />
+  <p><b>👇 扫码加入交流群 / 关注公众号，获取激活口令与最新功能 👇</b></p>
+  <table align="center" style="border: none; margin-top: 12px;">
+    <tr>
+      <td align="center" style="border: none; padding: 0 16px;">
+        <img src="frontend/assets/wechat_group_qr.png" alt="博萃·文章导出交流群" width="260" style="border-radius: 10px; border: 1px solid #e5e7eb; box-shadow: 0 4px 14px rgba(0,0,0,0.08);" />
+        <br />
+        <sub><b>博萃·文章导出交流群</b></sub>
+        <br />
+        <sub>扫码进群 · 交流使用技巧 · 反馈 Bug</sub>
+      </td>
+      <td align="center" style="border: none; padding: 0 16px;">
+        <img src="frontend/assets/wechat_qr.png" alt="微信公众号【艺杯羹】" width="260" style="border-radius: 10px; border: 1px solid #e5e7eb; box-shadow: 0 4px 14px rgba(0,0,0,0.08);" />
+        <br />
+        <sub><b>微信公众号【艺杯羹】</b></sub>
+        <br />
+        <sub>关注后回复「<b>文章</b>」领激活口令</sub>
+      </td>
+    </tr>
+  </table>
+  <p><sub>💡 群二维码 7 天失效？关注公众号后回复「进群」联系作者拉你入群</sub></p>
 </div>
 
 ---
