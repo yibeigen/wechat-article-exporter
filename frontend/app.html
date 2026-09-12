@@ -2323,7 +2323,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             <div class="modal-body" style="padding: 20px 24px; max-height: 80vh; overflow-y: auto;">
                 <!-- 顶部引导与原版规则说明 -->
                 <div style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(245, 158, 11, 0.08)); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-size: 0.82rem; color: var(--text-primary); line-height: 1.6;">
-                    💡 <b>关于「网站原版HTML」支持说明：</b>本系统采用双轨制输出，通用现代响应式 HTML 覆盖全平台；而针对“1:1 像素级复刻当年电脑端真实排版”，目前已在<b>【新浪博客】</b>与<b>【简书】</b>上线：新浪博客包含蓝天白云原版头图、标志性折角图标、博主名片栏与毫秒级离线即时搜索；简书包含经典白底黑字、顶部滚动标题、左侧悬浮工具栏、作者名片与右侧目录。为了避免误导用户，<b>在前端切换为新浪博客或简书时方会自动点亮该选项</b>；其他各大主流平台的专属原版模板正在紧锣密鼓开发中！
+                    💡 <b>关于「网站原版HTML」支持说明：</b>本系统采用双轨制输出，通用现代响应式 HTML 覆盖全平台；而针对“1:1 像素级复刻当年电脑端真实排版”，目前已在<b>【新浪博客】</b>、<b>【简书】</b>与<b>【知乎】</b>上线：新浪博客包含蓝天白云原版头图、标志性折角图标、博主名片栏与毫秒级离线即时搜索；简书包含经典白底黑字、顶部滚动标题、左侧悬浮工具栏、作者名片与右侧目录；知乎包含文章与问题回答双版式、左侧分组目录、右侧作者卡片与悬浮互动工具栏。为了避免误导用户，<b>在前端切换为新浪博客、简书或知乎时方会自动点亮该选项</b>；其他各大主流平台的专属原版模板正在紧锣密鼓开发中！
                 </div>
 
                 <!-- 1. 平台支持矩阵全景表 -->
@@ -2368,12 +2368,15 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                                     </td>
                                     <td style="padding: 10px 12px; color: var(--text-muted);">MD / PDF / HTML / DOCX / TXT / ZIP</td>
                                 </tr>
-                                <tr style="border-bottom: 1px solid var(--border-subtle);">
-                                    <td style="padding: 10px 12px; font-weight: 700; color: var(--text-primary);">🔴 知乎</td>
-                                    <td style="padding: 10px 12px; color: var(--text-secondary);">专栏文章 / 历史回答全量溯源</td>
+                                <tr style="border-bottom: 1px solid var(--border-subtle); background: rgba(0, 102, 255, 0.05);">
+                                    <td style="padding: 10px 12px; font-weight: 700; color: var(--text-primary);">
+                                        <span>🔴 知乎</span>
+                                        <span style="font-size: 0.65rem; background: #0066ff; color: #fff; padding: 1px 5px; border-radius: 4px; font-weight: 800; margin-left: 4px; white-space: nowrap;">新版上线</span>
+                                    </td>
+                                    <td style="padding: 10px 12px; color: var(--text-secondary);">文章 / 历史回答全量溯源</td>
                                     <td style="padding: 10px 12px;">
-                                        <span style="color: var(--text-muted); background: var(--bg-subtle); padding: 2px 8px; border-radius: 4px;">
-                                            📅 问答流原版排期中
+                                        <span style="display: inline-flex; align-items: center; gap: 4px; color: #16a34a; font-weight: 700; background: rgba(22, 163, 74, 0.1); padding: 2px 8px; border-radius: 4px;">
+                                            ✅ 已上线 (文章+回答双版式)
                                         </span>
                                     </td>
                                     <td style="padding: 10px 12px; color: var(--text-muted);">MD / PDF / HTML / DOCX / TXT / ZIP</td>
@@ -2450,6 +2453,23 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     </div>
 
                     <div style="display: flex; flex-direction: column; gap: 14px;">
+                        <!-- v2.3.2 -->
+                        <div style="background: var(--bg-surface); border: 1px solid rgba(0, 102, 255, 0.35); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow-sm);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="background: #0066ff; color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; font-family: monospace;">v2.3.2</span>
+                                    <span style="font-weight: 800; font-size: 0.9rem; color: var(--text-primary);">知乎 1:1 原版上线 & 专栏/回答分组</span>
+                                </div>
+                                <span style="font-size: 0.74rem; color: var(--text-muted);">2026-09-11</span>
+                            </div>
+                            <ul style="margin: 0; padding-left: 18px; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.7;">
+                                <li><b>🔵 知乎 PC 电脑端 1:1 原版 HTML 正式上线</b>：复刻知乎顶部导航、知乎文章与问题回答双版式、左侧悬浮赞/评/藏/分享工具栏、右侧作者卡片与内容统计；</li>
+                                <li><b>📂 知乎文章与问题回答彻底分开</b>：抓取阶段即标记每篇内容的类型（article / answer），在线工作台勾选弹窗新增「全部 / 知乎文章 / 问题回答」分组筛选，导出的 1:1 HTML 左侧目录同步按类型分组展示；</li>
+                                <li><b>🛡️ 旧缓存兼容</b>：本地 article_cache 表自动迁移新增 content_type 字段，历史已缓存文章仍可通过标题前缀正确识别类型；</li>
+                                <li><b>🔧 平台支持矩阵同步更新</b>：知乎原版 HTML 状态升级为“已上线”，网站原版 HTML 选项在切换知乎平台时自动点亮。</li>
+                            </ul>
+                        </div>
+
                         <!-- v2.3.1 -->
                         <div style="background: var(--bg-surface); border: 1px solid rgba(234, 111, 90, 0.35); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow-sm);">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -2764,6 +2784,16 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         </div>
                     </div>
                 </div>
+                <!-- 知乎等场景下按文章/回答分组筛选（专栏只是文章的归类标签，用下拉单独筛） -->
+                <div id="linksTypeFilterBox" style="display: none; padding: 0 20px 10px; border-bottom: 1px solid var(--border-subtle);">
+                    <div style="display: flex; gap: 8px; font-size: 0.8rem; flex-wrap: wrap; align-items: center;">
+                        <button type="button" class="nav-btn link-type-filter active" data-filter="all" onclick="switchLinksFilter(this)">全部</button>
+                        <button type="button" class="nav-btn link-type-filter" data-filter="article" onclick="switchLinksFilter(this)">文章</button>
+                        <button type="button" class="nav-btn link-type-filter" data-filter="answer" onclick="switchLinksFilter(this)">问题回答</button>
+                        <select id="linksColumnFilter" onchange="switchColumnFilter(this.value)" style="display: none; height: 30px; border: 1px solid var(--border-main); border-radius: 6px; padding: 0 8px; font-size: 0.78rem; background: var(--bg-main); color: var(--text-primary);"></select>
+                    </div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;">说明：「文章」为博主全量文章，专栏只是其中文章的归类标签，可用右侧下拉按专栏筛选</div>
+                </div>
                 <div style="max-height: 52vh; overflow-y: auto; padding: 0 20px;">
                     <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem; text-align: left;">
                         <thead>
@@ -2797,6 +2827,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         let platformsData = [];
         let activeEventSource = null;
         let currentRangeMode = 'all';
+        let currentLinksFilter = 'all'; // 知乎弹窗中的文章/回答筛选
+        let currentColumnFilter = 'all'; // 知乎弹窗中的专栏下拉筛选（专栏只是文章的归类标签）
 
         const platformIcons = {
             'juejin': `<svg class="icon icon-lg" viewBox="0 0 24 24"><polygon points="12 2 2 12 12 22 22 12 12 2"></polygon><polyline points="7 12 12 17 17 12"></polyline><polyline points="9 8 12 11 15 8"></polyline></svg>`,
@@ -2869,8 +2901,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             const origTip = document.getElementById('originalHtmlExclusiveTip');
             if (!origBadge) return;
 
-            // 目前新浪博客 (sina_blog) 与简书 (jianshu) 支持 1:1 原版电脑端 HTML
-            if (currentPlatform === 'sina_blog' || currentPlatform === 'jianshu') {
+            // 目前已支持 1:1 原版电脑端 HTML 的平台：新浪博客 / 简书 / 知乎
+            if (currentPlatform === 'sina_blog' || currentPlatform === 'jianshu' || currentPlatform === 'zhihu') {
                 origBadge.style.display = 'flex';
                 // 切换到对应平台时自动勾选原版，提供更佳的原版阅读体验
                 origBadge.classList.add('active');
@@ -3720,8 +3752,17 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             if (badge) badge.innerText = '⏹️ 正在结算当前已抓取的文章篇目...';
         }
 
-        function renderLinksModal(author, articles, channel = 'official', meta = {}) {
+        function renderLinksModal(author, articles, channel = 'official', meta = {}, checkedUrls = null) {
             const modal = document.getElementById('linksModal');
+            // 保存当前调用上下文，便于筛选切换时快速恢复
+            window._lastRenderedLinks = { author, articles, channel, meta };
+            // 新弹窗打开时重置筛选为全部（仅非筛选切换场景）
+            if (!checkedUrls) {
+                currentLinksFilter = 'all';
+                document.querySelectorAll('.link-type-filter').forEach(b => {
+                    b.classList.toggle('active', b.dataset.filter === 'all');
+                });
+            }
             const isOfficial = channel === 'official' || channel === 'extension';
             const declaredCount = (meta && meta.declared_count != null) ? Number(meta.declared_count) : null;
             const categoryName = (meta && meta.category_name) ? meta.category_name : null;
@@ -3855,14 +3896,112 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             const platformLabel = (meta && platformDisplayNames[meta.platform]) ? platformDisplayNames[meta.platform] : (author || '公众号');
 
             const tbody = document.getElementById('linksTableBody');
-            tbody.innerHTML = articles.map((a, idx) => `
+            const hasContentType = articles.some(a => ['article', 'column_article', 'answer'].includes(a.content_type));
+            const filterBox = document.getElementById('linksTypeFilterBox');
+            if (filterBox) {
+                filterBox.style.display = hasContentType ? 'block' : 'none';
+            }
+
+            // 类型归一：旧数据可能残留 column_article，统一视为「文章」；
+            // 知乎「文章」是全量集合，专栏只是文章的归类标签（见 column_title 字段）
+            const normType = (a) => a.content_type === 'column_article' ? 'article' : (a.content_type || 'article');
+
+            // 动态填充专栏下拉选项（从文章的 column_title 去重收集）
+            const columnNames = [];
+            articles.forEach(a => {
+                (a.column_title || '').split('、').forEach(n => {
+                    const t = n.trim();
+                    if (t && !columnNames.includes(t)) columnNames.push(t);
+                });
+            });
+            const colSel = document.getElementById('linksColumnFilter');
+            if (colSel) {
+                if (columnNames.length > 0) {
+                    colSel.style.display = 'inline-block';
+                    const articleTotal = articles.filter(a => normType(a) === 'article').length;
+                    colSel.innerHTML = '<option value="all">按专栏筛选（全部 ' + articleTotal + ' 篇文章）</option>' +
+                        columnNames.map(n => {
+                            const cnt = articles.filter(a => (a.column_title || '').split('、').map(s => s.trim()).includes(n)).length;
+                            return '<option value="' + n + '">' + n + ' (' + cnt + ' 篇)</option>';
+                        }).join('');
+                    // 上次选中的专栏若已不存在则重置
+                    if (!columnNames.includes(currentColumnFilter)) currentColumnFilter = 'all';
+                    colSel.value = currentColumnFilter;
+                } else {
+                    colSel.style.display = 'none';
+                    currentColumnFilter = 'all';
+                }
+            }
+
+            // 双维度筛选：类型 Tab（全部/文章/问题回答） + 专栏下拉
+            let filteredArticles = hasContentType && currentLinksFilter !== 'all'
+                ? articles.filter(a => normType(a) === currentLinksFilter)
+                : articles;
+            if (currentColumnFilter !== 'all') {
+                filteredArticles = filteredArticles.filter(a => (a.column_title || '').split('、').map(s => s.trim()).includes(currentColumnFilter));
+            }
+
+            if (hasContentType && currentLinksFilter === 'all' && currentColumnFilter === 'all') {
+                // 全部模式下按类型分组：文章（全量，含被专栏收录的）+ 问题回答
+                const groups = { article: [], answer: [], other: [] };
+                filteredArticles.forEach((a) => {
+                    const t = normType(a);
+                    const item = { ...a, originalIdx: articles.indexOf(a) };
+                    if (t === 'article') groups.article.push(item);
+                    else if (t === 'answer') groups.answer.push(item);
+                    else groups.other.push(item);
+                });
+                let html = '';
+                let displayIdx = 0;
+                const groupDefs = [
+                    { key: 'article', name: '文章', icon: '📄' },
+                    { key: 'answer', name: '问题回答', icon: '💬' }
+                ];
+                groupDefs.forEach(g => {
+                    if (groups[g.key].length > 0) {
+                        html += `
+                            <tr style="background: var(--bg-subtle);">
+                                <td colspan="6" style="padding: 8px 10px; font-weight: 700; color: var(--text-secondary); font-size: 0.8rem;">
+                                    ${g.icon} ${g.name} (${groups[g.key].length} 篇)
+                                </td>
+                            </tr>
+                        `;
+                        html += groups[g.key].map((a, i) => renderLinksRow(a, a.originalIdx, displayIdx + i, shouldCheck, author, platformLabel, checkedUrls)).join('');
+                        displayIdx += groups[g.key].length;
+                    }
+                });
+                if (groups.other.length > 0) {
+                    html += groups.other.map((a, i) => renderLinksRow(a, a.originalIdx, displayIdx + i, shouldCheck, author, platformLabel, checkedUrls)).join('');
+                }
+                tbody.innerHTML = html;
+            } else {
+                tbody.innerHTML = filteredArticles.map((a, i) => renderLinksRow(a, articles.indexOf(a), i, shouldCheck, author, platformLabel, checkedUrls)).join('');
+            }
+
+            updateSelectedLinksCount();
+            if (modal) modal.style.display = 'flex';
+        }
+
+        // 渲染单条文章勾选行
+        // checkedUrls 为 Set，传入时优先按 URL 恢复勾选状态（用于筛选切换不丢失用户手动选择）
+        function renderLinksRow(a, originalIdx, displayIdx, shouldCheck, author, platformLabel, checkedUrls) {
+            // 类型标签：回答 / 文章（文章是全量集合，专栏归属用粉色标签附注）
+            const t = a.content_type === 'column_article' ? 'article' : (a.content_type || 'article');
+            let typeTag = t === 'answer'
+                ? '<span style="font-size:0.7rem;background:#e6f0fd;color:#0066ff;padding:1px 5px;border-radius:3px;margin-right:6px;">回答</span>'
+                : '<span style="font-size:0.7rem;background:#f0f9f4;color:#11a668;padding:1px 5px;border-radius:3px;margin-right:6px;">文章</span>';
+            if (a.column_title) {
+                typeTag += '<span style="font-size:0.7rem;background:#fdf2f8;color:#be185d;padding:1px 5px;border-radius:3px;margin-right:6px;">收录于 ' + a.column_title + '</span>';
+            }
+            const isChecked = checkedUrls && checkedUrls.has(a.url) ? true : shouldCheck(originalIdx);
+            return `
                 <tr style="border-bottom: 1px solid var(--border-subtle);">
                     <td style="padding: 8px 10px; text-align: center;">
-                        <input type="checkbox" class="link-item-checkbox" data-idx="${idx}" data-url="${a.url}" ${shouldCheck(idx) ? 'checked' : ''} onchange="updateSelectedLinksCount()">
+                        <input type="checkbox" class="link-item-checkbox" data-idx="${originalIdx}" data-url="${a.url}" ${isChecked ? 'checked' : ''} onchange="updateSelectedLinksCount()">
                     </td>
-                    <td style="padding: 8px 10px; color: var(--text-muted);">${idx + 1}</td>
+                    <td style="padding: 8px 10px; color: var(--text-muted);">${displayIdx + 1}</td>
                     <td style="padding: 8px 10px; font-weight: 500;">
-                        <a href="${a.url}" target="_blank" style="color: var(--text-primary); text-decoration: none;" onmouseover="this.style.color='var(--accent-primary)'" onmouseout="this.style.color='var(--text-primary)'">${a.title || '无标题'}</a>
+                        ${typeTag}<a href="${a.url}" target="_blank" style="color: var(--text-primary); text-decoration: none;" onmouseover="this.style.color='var(--accent-primary)'" onmouseout="this.style.color='var(--text-primary)'">${a.title || '无标题'}</a>
                     </td>
                     <td style="padding: 8px 10px; color: var(--accent-emerald); font-weight: 600; font-size: 0.8rem;">
                         ${a.author || author || platformLabel}
@@ -3872,10 +4011,45 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         <a href="${a.url}" target="_blank" style="color: var(--accent-emerald); font-size: 0.75rem; text-decoration: underline;">查看</a>
                     </td>
                 </tr>
-            `).join('');
+            `;
+        }
 
-            updateSelectedLinksCount();
-            if (modal) modal.style.display = 'flex';
+        // 切换知乎弹窗里的文章/回答筛选
+        function switchLinksFilter(el) {
+            document.querySelectorAll('.link-type-filter').forEach(b => b.classList.remove('active'));
+            el.classList.add('active');
+            currentLinksFilter = el.dataset.filter;
+            // 记录当前已勾选的 URL，重新渲染后恢复，避免丢失用户手动选择
+            const checkedUrls = new Set(
+                Array.from(document.querySelectorAll('.link-item-checkbox:checked')).map(b => b.getAttribute('data-url'))
+            );
+            if (window._lastRenderedLinks) {
+                renderLinksModal(
+                    window._lastRenderedLinks.author,
+                    window._lastRenderedLinks.articles,
+                    window._lastRenderedLinks.channel,
+                    window._lastRenderedLinks.meta,
+                    checkedUrls
+                );
+            }
+        }
+
+        // 切换知乎弹窗里的专栏下拉筛选（专栏只是文章的归类标签，不影响全量勾选状态）
+        function switchColumnFilter(val) {
+            currentColumnFilter = val;
+            // 记录当前已勾选的 URL，重新渲染后恢复，避免丢失用户手动选择
+            const checkedUrls = new Set(
+                Array.from(document.querySelectorAll('.link-item-checkbox:checked')).map(b => b.getAttribute('data-url'))
+            );
+            if (window._lastRenderedLinks) {
+                renderLinksModal(
+                    window._lastRenderedLinks.author,
+                    window._lastRenderedLinks.articles,
+                    window._lastRenderedLinks.channel,
+                    window._lastRenderedLinks.meta,
+                    checkedUrls
+                );
+            }
         }
 
         function updateSelectedLinksCount() {
@@ -3929,12 +4103,22 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 alert('请至少勾选一篇文章！');
                 return;
             }
-            const urls = Array.from(checkedBoxes).map(b => b.getAttribute('data-url')).filter(Boolean);
+            // 收集勾选文章的完整元数据（而不只是 URL），确保后端能保留 content_type / column_title 等分类信息。
+            // data-idx 对应 window._lastRenderedLinks.articles 的原始下标。
+            const selectedArticles = Array.from(checkedBoxes).map(b => {
+                const idx = parseInt(b.getAttribute('data-idx'), 10);
+                return window._lastRenderedLinks.articles[idx];
+            }).filter(Boolean);
+
+            if (selectedArticles.length === 0) {
+                alert('未找到已选文章的元数据，请重新检索文章清单后再试。');
+                return;
+            }
             closeLinksModal();
 
-            // 填入勾选的全部文章链接，并直接启动抓取导出任务
-            document.getElementById('targetInput').value = urls.join('\n');
-            startScrapeTask(true);
+            // 把已选文章元数据直接传给导出流程，不再把 URL 列表塞回输入框，
+            // 避免后端把多链接误判为 custom_urls 而丢失专栏/回答分类。
+            startScrapeTask(true, selectedArticles);
         }
 
         function toggleWechatManualInput() {
@@ -4441,7 +4625,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             startScrapeTask();
         }
 
-        async function startScrapeTask(isFromModal = false) {
+        async function startScrapeTask(isFromModal = false, selectedArticles = null) {
             const target = document.getElementById('targetInput').value.trim();
             if (!target) {
                 alert('请先输入目标博主主页链接、用户名或文章 URL！');
@@ -4497,7 +4681,9 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 end_index: endIndex,
                 author_name_override: authorOverride || null,
                 wechat_token: wechatToken || null,
-                wechat_cookie: wechatCookie || null
+                wechat_cookie: wechatCookie || null,
+                // 两阶段导出：若从弹窗勾选了文章，把完整元数据回传后端，避免 URL 列表丢失分类信息
+                articles_meta: selectedArticles
             };
 
             const startBtn = document.getElementById('startBtn') || document.getElementById('extractLinksBtn');
@@ -4861,6 +5047,13 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     const spinner = document.getElementById('taskSpinner');
                     if (spinner) spinner.style.display = 'none';
 
+                    // 无论是否有产物，都要更新结果摘要中的文章数量
+                    const resultSummaryText = document.getElementById('resultSummaryText');
+                    if (resultSummaryText) {
+                        const succCount = (task.success_articles || []).length;
+                        resultSummaryText.innerText = `本次共处理 ${succCount} 篇文章，已自动去除广告水印并完成排版。`;
+                    }
+
                     const files = task.export_files || {};
                     const formatLabels = {
                         'md': 'Markdown (.md)',
@@ -4879,26 +5072,48 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         'txt': '📄'
                     };
 
+                    // 如果产物为空（导出阶段全部失败），在下载区展示明确提示，不要显示空白
                     let htmlOutput = '';
-                    Object.entries(files).forEach(([fmt, url]) => {
-                        if (fmt !== 'zip') {
-                            htmlOutput += `
-                                <a href="${url}" class="action-card-btn secondary-action-btn" target="_blank" download style="text-decoration:none; justify-content:space-between; padding: 12px 16px;">
-                                    <div style="display:flex; align-items:center; gap:8px;">
-                                        <span>${formatIcons[fmt] || '📄'}</span>
-                                        <span style="font-weight:700;">${formatLabels[fmt] || fmt.toUpperCase()}</span>
-                                    </div>
-                                    <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                                </a>
-                            `;
+                    if (Object.keys(files).length === 0) {
+                        htmlOutput = `
+                            <div style="padding: 16px; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25); border-radius: 8px; color: #ef4444; font-size: 0.84rem; line-height: 1.6;">
+                                <strong>⚠️ 文章抓取成功，但文档导出失败</strong><br>
+                                服务器在生成导出文件时遇到错误，请复制任务标识联系管理员排查后台日志；<br>
+                                也可以点击下方按钮刷新重试，或更换导出格式后再试。
+                            </div>
+                        `;
+                        // 取消 ZIP 大礼包高亮按钮的可点状态，避免用户点击无效下载
+                        const zipBtn = document.getElementById('zipDownloadBtn');
+                        if (zipBtn) {
+                            zipBtn.style.pointerEvents = 'none';
+                            zipBtn.style.opacity = '0.5';
+                            zipBtn.removeAttribute('href');
                         }
-                    });
+                    } else {
+                        Object.entries(files).forEach(([fmt, url]) => {
+                            if (fmt !== 'zip') {
+                                htmlOutput += `
+                                    <a href="${url}" class="action-card-btn secondary-action-btn" target="_blank" download style="text-decoration:none; justify-content:space-between; padding: 12px 16px;">
+                                        <div style="display:flex; align-items:center; gap:8px;">
+                                            <span>${formatIcons[fmt] || '📄'}</span>
+                                            <span style="font-weight:700;">${formatLabels[fmt] || fmt.toUpperCase()}</span>
+                                        </div>
+                                        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                    </a>
+                                `;
+                            }
+                        });
+                        if (files['zip']) {
+                            const zipBtn = document.getElementById('zipDownloadBtn');
+                            if (zipBtn) {
+                                zipBtn.href = files['zip'];
+                                zipBtn.style.pointerEvents = '';
+                                zipBtn.style.opacity = '';
+                            }
+                        }
+                    }
 
                     if (dGrid) dGrid.innerHTML = htmlOutput;
-                    if (files['zip']) {
-                        const zipBtn = document.getElementById('zipDownloadBtn');
-                        if (zipBtn) zipBtn.href = files['zip'];
-                    }
                     if (resultSec) {
                         resultSec.style.display = 'block';
                         resultSec.scrollIntoView({ behavior: 'smooth' });
@@ -4943,6 +5158,11 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         `;
                     }
                     if (statusText) statusText.innerText = '任务失败: ' + (task.error_message || '未知错误');
+                    const resultSummaryText = document.getElementById('resultSummaryText');
+                    if (resultSummaryText) {
+                        const succCount = (task.success_articles || []).length;
+                        resultSummaryText.innerText = `本次共成功处理 ${succCount} 篇文章，但在导出阶段失败：${task.error_message || '未知错误'}。`;
+                    }
                 }
             };
 
@@ -5128,7 +5348,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                             </div>
                         </div>
                         <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                            ${badgesHtml || '<span style="color: var(--text-muted); font-size: 0.72rem;">无产物</span>'}
+                            ${badgesHtml || '<span style="color: #ef4444; font-size: 0.72rem; font-weight: 600;">无产物 / 导出失败</span>'}
                             <button type="button" class="nav-btn" onclick="deleteHistoryItem('${t.task_id}')" style="height: 26px; padding: 0 6px; color: #ef4444; border-color: transparent; font-size: 0.74rem;" title="删除本条历史记录">
                                 🗑️
                             </button>

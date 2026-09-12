@@ -45,6 +45,21 @@ class ArticleItem(BaseModel):
     comments: List[Dict[str, Any]] = Field(default_factory=list)
     is_failed: bool = False
     error_reason: Optional[str] = None
+    content_type: Optional[str] = Field(default=None, description="内容类型：article 知乎文章（全量） / answer 问题回答，用于分类展示")
+    column_title: Optional[str] = Field(default=None, description="所属专栏名（文章的归类标签，可多选，用 、 分隔）")
+
+    # 兼容旧数据：未设置 content_type 时，根据标题前缀推断（仅知乎历史数据）
+    def get_content_type(self) -> str:
+        if self.content_type:
+            # 旧模型曾把专栏文章当作独立类型 column_article；
+            # 新模型里「文章」是全量集合，专栏只是归类标签（看 column_title 字段）
+            return "article" if self.content_type == "column_article" else self.content_type
+        # 历史旧数据的标题前缀兼容：【专栏文章】也属于「文章」全量集合
+        if self.title.startswith("【专栏】") or self.title.startswith("【专栏文章】") or self.title.startswith("【文章】"):
+            return "article"
+        if self.title.startswith("【回答】"):
+            return "answer"
+        return "article"
 
 class TaskCreateRequest(BaseModel):
     platform: PlatformEnum
@@ -76,6 +91,10 @@ class TaskCreateRequest(BaseModel):
     include_comments: bool = Field(True, description="是否抓取并内嵌微信精选留言与互动统计")
     zhihu_cookie: Optional[str] = Field(None, description="知乎登录凭证 Cookie / z_c0 (可选，用于抓取个人主页全部文章与回答)")
     zhihu_content_types: Optional[List[str]] = Field(default=["articles", "answers"], description="知乎抓取内容类型 (默认抓取全部文章与回答)")
+    # 两阶段导出专用：当用户在「检索文章清单」弹窗中勾选具体篇目后，
+    # 前端把已选文章的完整元数据回传，后端直接使用这些元数据抓取正文并导出，
+    # 避免把 URL 列表错判定为 custom_urls 而丢失 content_type / column_title 等分类信息
+    articles_meta: Optional[List[Dict[str, Any]]] = Field(None, description="已选文章元数据列表，存在时直接按此列表导出")
 
 class TaskStatusEnum(str, Enum):
     PENDING = "pending"

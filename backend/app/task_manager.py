@@ -133,8 +133,12 @@ class TaskManager:
     def create_task(self, request: TaskCreateRequest) -> str:
         task_id = str(uuid.uuid4())[:8]
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+
         detected_platform = self._detect_platform(request.target, request.platform)
+        # 若前端传入了已选文章元数据，说明用户从「检索清单弹窗」勾选了具体篇目，
+        # 此时必须沿用用户选定的平台（如知乎），避免 URL 多条被误判为 custom_urls 丢失分类信息
+        if request.articles_meta and len(request.articles_meta) > 0:
+            detected_platform = request.platform
         progress = TaskProgress(
             task_id=task_id,
             platform=detected_platform.value,
@@ -234,29 +238,40 @@ class TaskManager:
             task.status = TaskStatusEnum.FETCHING_LIST
             task.message = "正在连接目标平台并获取博主信息..."
             await self._broadcast(task_id)
-            
-            author_info = await scraper.get_author_info()
-            author_name = request.author_name_override or author_info.get("name") or "目标博主"
-            task.author_name = author_name
-            
-            if task.is_cancelled:
-                task.status = TaskStatusEnum.CANCELLED
+
+            # ===== 两阶段导出（弹窗勾选后直接导出）=====+
+            # 当请求里携带了已选文章元数据时，跳过「重新检索文章列表」步骤，
+            # 直接用前端回传的元数据作为 article_list，确保 content_type / column_title
+            # 等分类信息不因为 URL 列表被识别为 custom_urls 而丢失。
+            if request.articles_meta and len(request.articles_meta) > 0:
+                article_list = request.articles_meta
+                author_name = request.author_name_override or article_list[0].get("author") or "目标博主"
+                task.author_name = author_name
+                task.message = f"已接收用户勾选的 {len(article_list)} 篇文章，开始抓取正文..."
                 await self._broadcast(task_id)
-                await scraper.close()
-                return
+            else:
+                author_info = await scraper.get_author_info()
+                author_name = request.author_name_override or author_info.get("name") or "目标博主"
+                task.author_name = author_name
 
-            # 2. 遍历获取文章列表
-            task.message = f"正在检索博主 [{author_name}] 的文章列表..."
-            await self._broadcast(task_id)
-            
-            def list_progress_cb(msg: str, count: int, _: int):
                 if task.is_cancelled:
+                    task.status = TaskStatusEnum.CANCELLED
+                    await self._broadcast(task_id)
+                    await scraper.close()
                     return
-                task.message = msg
-                task.total_articles = count
-                asyncio.create_task(self._broadcast(task_id))
 
-            article_list = await scraper.get_article_list(list_progress_cb)
+                # 2. 遍历获取文章列表
+                task.message = f"正在检索博主 [{author_name}] 的文章列表..."
+                await self._broadcast(task_id)
+
+                def list_progress_cb(msg: str, count: int, _: int):
+                    if task.is_cancelled:
+                        return
+                    task.message = msg
+                    task.total_articles = count
+                    asyncio.create_task(self._broadcast(task_id))
+
+                article_list = await scraper.get_article_list(list_progress_cb)
             
             if hasattr(scraper, "declared_count") and scraper.declared_count is not None:
                 task.declared_count = scraper.declared_count
@@ -376,6 +391,19 @@ class TaskManager:
                         save_cached_article(article_item)
                     # 轻量延时防限频
                     await asyncio.sleep(0.2)
+
+                # ===== 两阶段导出：用前端传回的分类元数据覆盖缓存/抓取结果 =====
+                # 缓存里的 ArticleItem 可能在之前导出时没有 column_title/content_type，
+                # 本次弹窗已重新识别好分类，必须用它覆盖，否则导出模板里专栏还是会显示为空。
+                if request.articles_meta and (idx - 1) < len(request.articles_meta):
+                    selected_meta = request.articles_meta[idx - 1]
+                    if selected_meta.get("content_type"):
+                        article_item.content_type = selected_meta["content_type"]
+                    if selected_meta.get("column_title"):
+                        article_item.column_title = selected_meta["column_title"]
+                    # 顺手把更新后的正确分类写回缓存，下次直接导出也能保持专栏信息
+                    if request.use_cache and is_valid_cache:
+                        save_cached_article(article_item)
 
                 # 如果是公众号文章，智能在标题前附带公众号名称
                 if (article_item.platform in ["微信公众号", "wechat"] or "weixin.qq.com" in article_item.url):
@@ -561,6 +589,7 @@ class TaskManager:
 
             export_files = {}
             generated_paths = {}
+            export_errors = []  # 记录各格式导出失败原因，避免静默吞异常
 
             total_formats = len(request.export_formats)
             for idx, fmt in enumerate(request.export_formats, 1):
@@ -610,7 +639,13 @@ class TaskManager:
                         export_files["pdf"] = f"/api/download/{out_path.name}"
                         generated_paths["pdf"] = out_path
                 except Exception as export_err:
-                    print(f"导出格式 {fmt.value} 失败: {export_err}")
+                    err_msg = f"导出格式 {fmt.value} 失败: {export_err}"
+                    print(err_msg)
+                    export_errors.append(err_msg)
+
+            # 若全部导出格式均失败，任务应标记为失败，不要让前端显示「已完成但无产物」
+            if not export_files and export_errors:
+                raise RuntimeError("; ".join(export_errors))
 
             # 7. 自动生成全量 ZIP 归档包
             if task.is_cancelled:

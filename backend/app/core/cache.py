@@ -30,9 +30,17 @@ def init_db():
                 content_markdown TEXT,
                 images_json TEXT,
                 tags_json TEXT,
+                content_type TEXT,
+                column_title TEXT,
                 cached_at TEXT
             )
         """)
+        # 兼容旧缓存表：如不存在 content_type / column_title 列则动态添加（避免清空已有缓存）
+        for col_name in ["content_type", "column_title"]:
+            try:
+                conn.execute(f"ALTER TABLE article_cache ADD COLUMN {col_name} TEXT")
+            except Exception:
+                pass
         conn.commit()
 
 init_db()
@@ -62,7 +70,9 @@ def get_cached_article(url: str) -> Optional[ArticleItem]:
                     content_markdown=row["content_markdown"] or "",
                     images=images,
                     tags=tags,
-                    category=category
+                    category=category,
+                    content_type=row["content_type"] or None,
+                    column_title=row["column_title"] or None
                 )
     except Exception as e:
         print(f"读取缓存异常: {e}")
@@ -81,8 +91,8 @@ def save_cached_article(article: ArticleItem):
             conn.execute("""
                 INSERT OR REPLACE INTO article_cache (
                     url, platform, article_id, title, author, publish_time,
-                    summary, content_html, content_markdown, images_json, tags_json, cached_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    summary, content_html, content_markdown, images_json, tags_json, content_type, column_title, cached_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 article.url.strip(),
                 article.platform,
@@ -95,6 +105,8 @@ def save_cached_article(article: ArticleItem):
                 article.content_markdown,
                 images_json,
                 tags_json,
+                article.content_type,
+                article.column_title,
                 now_str
             ))
             conn.commit()

@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>{{ title }} - 知乎 PC 原版离线存档</title>
+    <style>
+        /* ===== 知乎原站配色与字体变量（取自真实页面） ===== */
+        :root {
+            --zhihu-bg: #f6f6f6;
+            --zhihu-card: #ffffff;
+            --zhihu-border: #ebebeb;
+            --zhihu-text: #121212;
+            --zhihu-text-2: #646464;      /* 次级文字 */
+            --zhihu-text-3: #999999;      /* 弱化文字 */
+            --zhihu-blue: #056de8;        /* 知乎主蓝（按钮/链接） */
+            --zhihu-blue-deep: #175199;   /* 正文链接蓝 */
+            --zhihu-blue-light: #ebf3ff;  /* 浅蓝背景（收录于标签） */
+            --zhihu-hot: #f1403c;         /* 热榜红 */
+            --font-ui: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+            --leftbar-width: 264px;
+            --sidebar-width: 296px;
+            --content-width: 690px;       /* 知乎正文列宽 */
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: var(--font-ui);
+            background: var(--zhihu-bg);
+            color: var(--zhihu-text);
+            font-size: 15px;
+            line-height: 1.6;
+            padding-top: 53px;
+        }
+        a { color: var(--zhihu-blue-deep); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        button { font-family: inherit; }
+
+        /* ===== 顶部导航栏（1:1 复刻知乎 PC 顶栏） ===== */
+        .zh-topnav {
+            position: fixed; top: 0; left: 0; right: 0; height: 53px;
+            background: #fff; border-bottom: 1px solid #f0f0f0;
+            box-shadow: 0 1px 3px rgba(18,18,18,.08);
+            z-index: 1000;
+        }
+        .zh-topnav-inner {
+            max-width: 1400px; height: 100%; margin: 0 auto;
+            display: flex; align-items: center; padding: 0 24px;
+        }
+        .zh-logo {
+            font-size: 28px; font-weight: 700; color: var(--zhihu-blue);
+            margin-right: 28px; white-space: nowrap; cursor: pointer; user-select: none;
+            font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+        .zh-nav-links { display: flex; align-items: center; gap: 26px; }
+        .zh-nav-links a { color: #121212; font-size: 15px; white-space: nowrap; flex-shrink: 0; }
+        .zh-nav-links a:hover { color: var(--zhihu-blue); text-decoration: none; }
+        .zh-nav-ai { display: inline-flex; align-items: center; gap: 4px; }
+        .zh-beta {
+            font-size: 10px; color: #fff; background: #056de8;
+            border-radius: 8px 8px 8px 0; padding: 1px 5px; transform: translateY(-8px);
+        }
+        /* 搜索框 */
+        .zh-search {
+            display: flex; align-items: center; margin-left: 20px; flex-shrink: 0;
+            width: 300px; height: 34px; background: #f6f6f6;
+            border: 1px solid #ebebeb; border-radius: 4px; overflow: hidden;
+        }
+        .zh-search-input {
+            flex: 1; height: 100%; border: none; outline: none;
+            background: transparent; padding: 0 12px; font-size: 14px; color: var(--zhihu-text);
+        }
+        .zh-search-btn {
+            width: 44px; height: 100%; border: none; cursor: pointer;
+            background: transparent; display: flex; align-items: center; justify-content: center;
+        }
+        .zh-search-btn:hover { background: #ebebeb; }
+        .zh-search-btn svg { width: 17px; height: 17px; fill: var(--zhihu-blue); }
+        /* 右侧功能图标区 */
+        .zh-topnav-right { margin-left: auto; display: flex; align-items: center; gap: 24px; }
+        .zh-topnav-right .nav-item {
+            display: flex; align-items: center; gap: 5px;
+            font-size: 14px; color: #8590a6; cursor: pointer; position: relative;
+            white-space: nowrap; flex-shrink: 0;
+        }
+        .zh-topnav-right .nav-item:hover { color: #121212; }
+        .zh-topnav-right svg { width: 20px; height: 20px; fill: currentColor; }
+        .zh-badge {
+            position: absolute; top: -8px; left: 12px;
+            background: var(--zhihu-hot); color: #fff; font-size: 11px;
+            border-radius: 8px; padding: 0 5px; line-height: 15px;
+        }
+        .zh-ask-btn {
+            width: 68px; height: 32px; border-radius: 3px; border: none;
+            background: var(--zhihu-blue); color: #fff; font-size: 14px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 4px;
+        }
+        .zh-ask-btn svg { width: 14px; height: 14px; fill: #fff; }
+
+        /* ===== 主体三栏布局（左目录 264 + 正文自适应 + 右栏 296 + 间距 ≈ 1400） ===== */
+        .zh-main {
+            max-width: 1400px; margin: 0 auto;
+            display: flex; gap: 16px; padding: 20px 24px 60px;
+            align-items: flex-start;
+        }
+
+        /* 左侧目录栏（离线存档专属导航，样式贴合知乎卡片语言） */
+        .zh-leftbar {
+            width: var(--leftbar-width); flex-shrink: 0;
+            position: sticky; top: 73px;
+            max-height: calc(100vh - 93px); overflow-y: auto;
+        }
+        .zh-card {
+            background: var(--zhihu-card);
+            box-shadow: 0 1px 3px rgba(18,18,18,.1);
+            border-radius: 2px; margin-bottom: 16px; overflow: hidden;
+        }
+        .zh-card-head {
+            padding: 12px 16px; font-size: 15px; font-weight: 600;
+            color: var(--zhihu-text); border-bottom: 1px solid #f0f0f0;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .zh-card-head .count { font-size: 13px; font-weight: 400; color: var(--zhihu-text-3); }
+        .zh-filter-tabs { display: flex; border-bottom: 1px solid #f0f0f0; }
+        .zh-filter-tab {
+            flex: 1; text-align: center; padding: 9px 0; font-size: 14px;
+            color: var(--zhihu-text-2); cursor: pointer; border-bottom: 1px solid transparent;
+        }
+        .zh-filter-tab:hover { color: var(--zhihu-text); }
+        .zh-filter-tab.active { color: var(--zhihu-blue); font-weight: 500; border-bottom-color: var(--zhihu-blue); }
+        .zh-toc-search { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; }
+        .zh-toc-search input {
+            width: 100%; height: 32px; border: none; outline: none;
+            background: #f6f6f6; border-radius: 3px; padding: 0 10px; font-size: 13px;
+        }
+        .zh-toc-search input:focus { background: #fff; box-shadow: 0 0 0 1px var(--zhihu-blue); }
+        .zh-toc-list { padding: 4px 0; }
+        .zh-toc-item {
+            padding: 8px 14px; font-size: 14px; color: var(--zhihu-text-2);
+            cursor: pointer; display: flex; align-items: center; gap: 7px;
+        }
+        .zh-toc-item:hover { background: #f6f6f6; color: var(--zhihu-text); }
+        .zh-toc-item.active { background: var(--zhihu-blue-light); color: var(--zhihu-blue); }
+        .zh-toc-tag {
+            font-size: 12px; color: var(--zhihu-text-3); flex-shrink: 0; width: 52px;
+        }
+        .zh-toc-item.active .zh-toc-tag { color: var(--zhihu-blue); }
+        .zh-toc-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        /* 专栏分组（手风琴）：组头=专栏名，展开后是组内文章 */
+        .zh-toc-group-head {
+            display: flex; align-items: center; gap: 6px;
+            padding: 9px 12px; font-size: 13px; font-weight: 600;
+            color: var(--zhihu-text); cursor: pointer; user-select: none;
+        }
+        .zh-toc-group-head:hover { background: #f6f6f6; }
+        .zh-toc-group-head .arrow { font-size: 11px; color: var(--zhihu-text-3); }
+        .zh-toc-group-head .gcnt { margin-left: auto; font-weight: 400; font-size: 12px; color: var(--zhihu-text-3); }
+        .zh-toc-group-body { padding-bottom: 4px; }
+        .zh-toc-group-body .zh-toc-item { padding-left: 26px; }
+        .zh-toc-empty { padding: 24px 16px; text-align: center; color: var(--zhihu-text-3); font-size: 13px; }
+
+        /* 中间内容区 */
+        .zh-content { flex: 1; min-width: 0; }
+        .zh-content-card {
+            background: var(--zhihu-card);
+            box-shadow: 0 1px 3px rgba(18,18,18,.1);
+            border-radius: 2px; padding: 28px 32px;
+        }
+
+        /* 文章标题 / 问题标题 */
+        .ArticleTitle {
+            font-size: 24px; font-weight: 600; line-height: 1.4;
+            color: var(--zhihu-text); margin-bottom: 14px; word-break: break-word;
+        }
+        .QuestionTitle {
+            font-size: 22px; font-weight: 600; line-height: 1.4;
+            color: var(--zhihu-text); margin-bottom: 12px; word-break: break-word;
+        }
+
+        /* 作者信息栏（离线存档不展示头像，仅保留名字+一句话简介+关注按钮） */
+        .AuthorRow { display: flex; align-items: center; margin-bottom: 14px; }
+        .AuthorRow .info { flex: 1; min-width: 0; }
+        .AuthorRow .name {
+            font-size: 15px; font-weight: 600; color: var(--zhihu-text);
+            line-height: 1.3; cursor: pointer;
+        }
+        .AuthorRow .name:hover { color: var(--zhihu-text-2); }
+        .AuthorRow .headline {
+            font-size: 13px; color: var(--zhihu-text-3);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .FollowBtn {
+            padding: 5px 16px; background: var(--zhihu-blue); color: #fff;
+            border: none; border-radius: 3px; font-size: 14px; cursor: pointer;
+        }
+        .FollowBtn:hover { background: #3a83e8; }
+
+        /* 「收录于 · 专栏」标签（复刻知乎专栏归属样式） */
+        .ColumnChip {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 5px 12px; background: var(--zhihu-blue-light);
+            border-radius: 15px; font-size: 13px; color: var(--zhihu-blue);
+            margin-bottom: 14px; cursor: pointer;
+        }
+        .ColumnChip svg { width: 14px; height: 14px; fill: currentColor; }
+        .ColumnChip:hover { background: #dbe9ff; }
+        .ColumnChip .arrow { font-size: 12px; opacity: .8; }
+
+        /* 「N 人赞同了该文章」meta 行 */
+        .VoteMeta {
+            font-size: 14px; color: var(--zhihu-text-3); margin-bottom: 18px;
+        }
+
+        /* 正文 RichText（对齐知乎 .RichText 排版） */
+        .RichText { font-size: 16px; line-height: 1.67; color: var(--zhihu-text); word-break: break-word; }
+        .RichText p { margin-bottom: 15px; }
+        .RichText h1, .RichText h2, .RichText h3, .RichText h4 { font-weight: 600; margin: 24px 0 12px; }
+        .RichText h2 { font-size: 20px; }
+        .RichText h3 { font-size: 18px; }
+        .RichText img { max-width: 100%; height: auto; display: block; margin: 16px auto; border-radius: 2px; }
+        .RichText figure, .RichText .image-package { margin: 16px auto; text-align: center; }
+        .RichText figcaption, .RichText .image-caption { font-size: 13px; color: var(--zhihu-text-3); margin-top: 6px; }
+        .RichText blockquote {
+            border-left: 3px solid #d3d3d3; padding: 2px 14px;
+            margin-bottom: 15px; color: var(--zhihu-text-2);
+        }
+        .RichText pre {
+            background: #f6f6f6; border-radius: 4px; padding: 14px 16px;
+            overflow-x: auto; margin-bottom: 15px; font-size: 14px; line-height: 1.5;
+        }
+        .RichText code {
+            font-family: Consolas, Menlo, monospace; background: rgba(18,18,18,.06);
+            padding: 2px 5px; border-radius: 3px; font-size: .9em;
+        }
+        .RichText pre code { background: none; padding: 0; }
+        .RichText b, .RichText strong { font-weight: 600; }
+        .RichText ul, .RichText ol { margin: 0 0 15px 26px; }
+        .RichText li { margin-bottom: 4px; }
+        .RichText table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+        .RichText th, .RichText td { border: 1px solid #d3d3d3; padding: 8px 12px; }
+        .RichText th { background: #f6f6f6; font-weight: 600; }
+
+        /* 正文底部：发布时间 + 版权声明（与知乎一致） */
+        .ContentFooter { margin-top: 20px; font-size: 14px; color: var(--zhihu-text-3); }
+        .ContentFooter .copyright { margin-top: 3px; font-size: 13px; }
+        /* 原文链接：小字灰色，链接保留知乎蓝 */
+        .SourceLink { margin-top: 6px; font-size: 13px; word-break: break-all; }
+        .SourceLink a { color: var(--zhihu-blue); text-decoration: none; }
+        .SourceLink a:hover { text-decoration: underline; }
+
+        /* 底部操作栏（复刻知乎：赞同+反对组合按钮 + 功能按钮组） */
+        .ActionBar { margin-top: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .VoteGroup { display: flex; }
+        .VoteUpBtn {
+            display: flex; align-items: center; gap: 6px;
+            padding: 7px 18px; background: var(--zhihu-blue); color: #fff;
+            border: none; border-radius: 3px 0 0 3px; font-size: 15px; cursor: pointer;
+        }
+        .VoteUpBtn:hover { background: #3a83e8; }
+        .VoteUpBtn svg { width: 14px; height: 14px; fill: #fff; }
+        .VoteDownBtn {
+            padding: 7px 14px; background: var(--zhihu-blue-light); color: var(--zhihu-blue);
+            border: none; border-radius: 0 3px 3px 0; cursor: pointer;
+            display: flex; align-items: center; border-left: 1px solid #dbe9ff;
+        }
+        .VoteDownBtn:hover { background: #dbe9ff; }
+        .VoteDownBtn svg { width: 14px; height: 14px; fill: currentColor; }
+        .ActionBtn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 14px; background: transparent; color: var(--zhihu-text-3);
+            border: none; border-radius: 3px; font-size: 15px; cursor: pointer;
+        }
+        .ActionBtn:hover { background: #f6f6f6; color: var(--zhihu-text-2); }
+        .ActionBtn svg { width: 15px; height: 15px; fill: currentColor; }
+
+        /* 右侧边栏 */
+        .zh-rightbar {
+            width: var(--sidebar-width); flex-shrink: 0;
+            position: sticky; top: 73px; align-self: flex-start;
+        }
+        /* 作者卡片（无头像：离线存档里头像意义不大，只保留名字与关注按钮） */
+        .AuthorCard { padding: 20px; text-align: center; }
+        .AuthorCard .name { font-size: 17px; font-weight: 600; margin-bottom: 4px; }
+        .AuthorCard .bio { font-size: 13px; color: var(--zhihu-text-3); margin-bottom: 14px; line-height: 1.5; }
+        .AuthorCard .FollowBtn { width: 100%; padding: 7px 0; }
+        .AuthorStats {
+            display: flex; border-top: 1px solid #f0f0f0; padding: 12px 0;
+            justify-content: space-around;
+        }
+        .AuthorStats .cell { flex: 1; text-align: center; cursor: pointer; }
+        .AuthorStats .num { font-size: 15px; font-weight: 600; color: var(--zhihu-text); }
+        .AuthorStats .label { font-size: 12px; color: var(--zhihu-text-3); margin-top: 2px; }
+        /* 信息卡片（导出信息等） */
+        .InfoCard .row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 16px; font-size: 14px; color: var(--zhihu-text-2);
+        }
+        .InfoCard .row + .row { border-top: 1px solid #f6f6f6; }
+        .InfoCard .row .val { color: var(--zhihu-text); font-weight: 500; }
+
+        /* 离线存档角标 */
+        .OfflineBadge {
+            position: fixed; bottom: 14px; right: 14px;
+            background: rgba(18,18,18,.7); color: #fff;
+            padding: 5px 12px; border-radius: 14px; font-size: 12px;
+            z-index: 2000; pointer-events: none;
+        }
+
+        /* 响应式：窄屏收起左右栏（知乎窄屏同样隐藏侧栏） */
+        @media (max-width: 1240px) {
+            .zh-leftbar, .zh-rightbar { display: none; }
+            .zh-nav-links { display: none; }
+        }
+        @media (max-width: 700px) {
+            .zh-search { display: none; }
+            .zh-content-card { padding: 18px 16px; }
+            .ArticleTitle { font-size: 20px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- ===== 顶部导航（1:1 知乎 PC 顶栏：菜单 / 搜索 / 功能图标） ===== -->
+    <nav class="zh-topnav">
+        <div class="zh-topnav-inner">
+            <div class="zh-logo">知 乎</div>
+            <div class="zh-nav-links">
+                <a href="javascript:;">关注</a>
+                <a href="javascript:;">推荐</a>
+                <a href="javascript:;">热榜</a>
+                <a href="javascript:;">圈子</a>
+                <a href="javascript:;" class="zh-nav-ai">AI Works<span class="zh-beta">Beta</span></a>
+                <a href="javascript:;">故事</a>
+            </div>
+            <div class="zh-search">
+                <input class="zh-search-input" placeholder="搜索你感兴趣的内容">
+                <button class="zh-search-btn" title="搜索">
+                    <svg viewBox="0 0 24 24"><path d="M16.88 15.14l4.96 4.96-1.74 1.74-4.96-4.96a8.5 8.5 0 1 1 1.74-1.74zM10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z"/></svg>
+                </button>
+            </div>
+            <div class="zh-topnav-right">
+                <div class="nav-item">
+                    <svg viewBox="0 0 24 24"><path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm8-6v-5c0-3.07-1.63-5.64-4.5-6.32V4a1.5 1.5 0 0 0-3 0v.68C9.64 5.36 8 7.92 8 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+                    消息
+                </div>
+                <div class="nav-item">
+                    <svg viewBox="0 0 24 24"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg>
+                    私信
+                    <span class="zh-badge">19</span>
+                </div>
+                <button class="zh-ask-btn">
+                    <svg viewBox="0 0 24 24"><path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg>
+                    直答
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ===== 主体三栏 ===== -->
+    <div class="zh-main">
+        <!-- 左侧：全站目录（离线存档导航） -->
+        <aside class="zh-leftbar">
+            <div class="zh-card">
+                <div class="zh-card-head">
+                    <span>目录</span>
+                    <span class="count" id="tocCount">0 篇</span>
+                </div>
+                <div class="zh-toc-search">
+                    <input type="text" id="tocSearch" placeholder="搜索标题" oninput="renderToc()">
+                </div>
+                <div class="zh-filter-tabs">
+                    <div class="zh-filter-tab active" data-filter="all" onclick="switchFilter(this)">全部</div>
+                    <div class="zh-filter-tab" data-filter="article" onclick="switchFilter(this)">文章</div>
+                    <!-- 专栏 Tab：专指被收录进专栏的文章，具体专栏名标注在目录条目小字中 -->
+                    <div class="zh-filter-tab" data-filter="column" onclick="switchFilter(this)">专栏</div>
+                    <div class="zh-filter-tab" data-filter="answer" onclick="switchFilter(this)">回答</div>
+                </div>
+                <div class="zh-toc-list" id="tocList"></div>
+            </div>
+        </aside>
+
+        <!-- 中间：内容卡片 -->
+        <main class="zh-content">
+            <div class="zh-content-card">
+                <!-- 标题：文章用文章标题；回答用问题标题（链回原问题） -->
+                <div id="titleArea">
+                    <h1 class="ArticleTitle" id="articleTitle">加载中...</h1>
+                </div>
+
+                <!-- 作者栏 -->
+                <div class="AuthorRow">
+                    <div class="info">
+                        <div class="name" id="authorName">作者：{{ author_name }}</div>
+                        <div class="headline" id="authorHeadline"></div>
+                    </div>
+                    <button class="FollowBtn">+ 关注</button>
+                </div>
+
+                <!-- 收录于 · 专栏 标签（仅专栏文章显示） -->
+                <div class="ColumnChip" id="columnChip" style="display:none;">
+                    <svg viewBox="0 0 24 24"><path d="M6 2h12a1 1 0 0 1 1 1v19l-7-4.2L5 22V3a1 1 0 0 1 1-1zm2 2v14.3l5-3 5 3V4H8z"/></svg>
+                    <span>收录于 · <b id="columnChipName"></b></span>
+                    <span class="arrow">›</span>
+                </div>
+
+                <!-- 「N 人赞同了该文章/回答」meta 行 -->
+                <div class="VoteMeta" id="voteMeta"></div>
+
+                <!-- 正文 -->
+                <div class="RichText" id="articleContent"><p>正在加载内容...</p></div>
+
+                <!-- 正文底部：发布时间 + 版权 + 原文链接 -->
+                <div class="ContentFooter">
+                    <div id="publishLine">发布于 <span id="publishTime">-</span></div>
+                    <div class="copyright">著作权归作者所有</div>
+                    <!-- 小字原文链接，方便回溯源站 -->
+                    <div class="SourceLink">原文链接：<a id="sourceLink" href="#" target="_blank" rel="noopener"></a></div>
+                </div>
+
+                <!-- 底部操作栏：赞同/反对 + 评论/收藏/喜欢/分享 -->
+                <div class="ActionBar">
+                    <div class="VoteGroup">
+                        <button class="VoteUpBtn">
+                            <svg viewBox="0 0 24 24"><path d="M2 20h3V10H2v10zM22 11a2 2 0 0 0-2-2h-5.3l.8-4.2v-.3c0-.4-.2-.8-.4-1L14 2 8.6 7.6A2 2 0 0 0 8 9v9a2 2 0 0 0 2 2h7.4c.8 0 1.5-.5 1.8-1.2l2.7-6.4c.1-.2.1-.4.1-.6v-1z"/></svg>
+                            <span>赞同 <span id="voteUpCount">0</span></span>
+                        </button>
+                        <button class="VoteDownBtn" title="反对">
+                            <svg viewBox="0 0 24 24"><path d="M22 4h-3v10h3V4zM2 13c0 1.1.9 2 2 2h5.3l-.8 4.2v.3c0 .4.2.8.4 1L10 22l5.4-5.6c.4-.4.6-.9.6-1.4V6a2 2 0 0 0-2-2H6.6c-.8 0-1.5.5-1.8 1.2L2.1 11.6c-.1.2-.1.4-.1.6v1z"/></svg>
+                        </button>
+                    </div>
+                    <button class="ActionBtn">
+                        <svg viewBox="0 0 24 24"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg>
+                        <span id="commentBtnText">添加评论</span>
+                    </button>
+                    <button class="ActionBtn">
+                        <svg viewBox="0 0 24 24"><path d="M17 3H7a2 2 0 0 0-2 2v16l7-3 7 3V5a2 2 0 0 0-2-2z"/></svg>
+                        <span id="favBtnText">收藏</span>
+                    </button>
+                    <button class="ActionBtn">
+                        <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                        <span id="likeBtnText">喜欢</span>
+                    </button>
+                    <button class="ActionBtn">
+                        <svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 1 0-3-3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 1 0 0 6c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65a2.92 2.92 0 1 0 2.92-2.92z"/></svg>
+                        分享
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- 右侧：作者卡片 + 存档信息 -->
+        <aside class="zh-rightbar">
+            <div class="zh-card">
+                <div class="AuthorCard">
+                    <div class="name" id="cardAuthorName">{{ author_name }}</div>
+                    <div class="bio">知乎博主</div>
+                    <button class="FollowBtn">+ 关注</button>
+                </div>
+                <div class="AuthorStats">
+                    <div class="cell">
+                        <div class="num" id="statArticle">{{ article_count }}</div>
+                        <div class="label">文章</div>
+                    </div>
+                    <div class="cell">
+                        <div class="num" id="statColumn">{{ column_count }}</div>
+                        <div class="label">专栏</div>
+                    </div>
+                    <div class="cell">
+                        <div class="num" id="statAnswer">{{ answer_count }}</div>
+                        <div class="label">回答</div>
+                    </div>
+                </div>
+            </div>
+            <div class="zh-card InfoCard">
+                <div class="zh-card-head">存档信息</div>
+                <div class="row">
+                    <span>收录内容</span>
+                    <span class="val" id="sideTotal">{{ total_articles }} 篇</span>
+                </div>
+                <div class="row">
+                    <span>导出时间</span>
+                    <span class="val" id="exportTime">-</span>
+                </div>
+                <div class="row">
+                    <span>排版版本</span>
+                    <span class="val">知乎 PC 原版</span>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <div class="OfflineBadge">离线存档 · 知乎 PC 排版</div>
+
+    <script>
+        // 后端注入的文章数据集合
+        const articles = {{ articles_json|safe }};
+        let currentIndex = 0;
+        let currentFilter = 'all';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('exportTime').innerText = new Date().toLocaleString('zh-CN');
+            renderToc();
+            if (articles.length > 0) {
+                renderArticle(0);
+            } else {
+                document.getElementById('articleContent').innerHTML = '<p>暂无内容</p>';
+            }
+        });
+
+        // 过滤标签切换
+        function switchFilter(el) {
+            document.querySelectorAll('.zh-filter-tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+            currentFilter = el.dataset.filter;
+            renderToc();
+            const visible = getVisibleArticles();
+            if (visible.length > 0) renderArticle(articles.indexOf(visible[0]));
+        }
+
+        // 类型归一：旧数据可能残留 column_article 类型，统一视为「文章」（专栏归属看 column_title）
+        function normType(a) {
+            return a.content_type === 'column_article' ? 'article' : (a.content_type || 'article');
+        }
+
+        // 当前过滤条件下可见的文章列表
+        // Tab 语义：all=全部内容；article=文章全量（含被专栏收录的）；
+        // column=仅被收录进专栏的文章（专栏名看条目小字）；answer=问题回答
+        function getVisibleArticles() {
+            const keyword = document.getElementById('tocSearch').value.trim().toLowerCase();
+            return articles.filter(a => {
+                let matchFilter;
+                if (currentFilter === 'all') {
+                    matchFilter = true;
+                } else if (currentFilter === 'column') {
+                    matchFilter = normType(a) === 'article' && !!a.column_title;
+                } else {
+                    matchFilter = normType(a) === currentFilter;
+                }
+                const matchKeyword = !keyword || (a.title && a.title.toLowerCase().includes(keyword));
+                return matchFilter && matchKeyword;
+            });
+        }
+
+        // 渲染左侧目录
+        // 全部/文章/回答 Tab：平铺列表；仅「专栏」Tab 按专栏分组（手风琴）
+        function renderToc() {
+            const list = document.getElementById('tocList');
+            const visible = getVisibleArticles();
+            document.getElementById('tocCount').innerText = visible.length + ' 篇';
+
+            if (visible.length === 0) {
+                list.innerHTML = '<div class="zh-toc-empty">未找到匹配内容</div>';
+                return;
+            }
+
+            // 专栏 Tab：第一层是专栏名，展开后才是文章
+            if (currentFilter === 'column') {
+                const groupOrder = [];  // 保持专栏首次出现的顺序
+                const groupMap = {};    // 专栏名 -> 文章列表
+                visible.forEach(a => {
+                    const cols = (a.column_title || '').split('、').map(s => s.trim()).filter(Boolean);
+                    // 一篇文章属于多个专栏时，会在多个组里各出现一次
+                    cols.forEach(c => {
+                        if (!groupMap[c]) { groupMap[c] = []; groupOrder.push(c); }
+                        groupMap[c].push(a);
+                    });
+                });
+
+                // 组内条目：组头已标明专栏名，条目直接显示标题
+                const itemHtml = (a) => {
+                    const realIdx = articles.indexOf(a);
+                    const isActive = realIdx === currentIndex;
+                    const title = (a.title || '').replace(/^【[^】]*】/, '');
+                    return `
+                        <div class="zh-toc-item ${isActive ? 'active' : ''}" onclick="renderArticle(${realIdx})">
+                            <span class="zh-toc-text">${escapeHtml(title)}</span>
+                        </div>
+                    `;
+                };
+
+                list.innerHTML = groupOrder.map(name => {
+                    const items = groupMap[name];
+                    return `
+                        <div class="zh-toc-group">
+                            <div class="zh-toc-group-head" onclick="toggleGroup(this)">
+                                <span class="arrow">▾</span>
+                                <span class="gname">${escapeHtml(name)}</span>
+                                <span class="gcnt">${items.length} 篇</span>
+                            </div>
+                            <div class="zh-toc-group-body">${items.map(itemHtml).join('')}</div>
+                        </div>
+                    `;
+                }).join('');
+                return;
+            }
+
+            // 其余 Tab（全部/文章/回答）：平铺列表
+            list.innerHTML = visible.map((a) => {
+                const realIdx = articles.indexOf(a);
+                // 全部 Tab 下显示类型小标签（文章/专栏/回答），其余 Tab 类型单一无需标签
+                const tag = currentFilter === 'all'
+                    ? (normType(a) === 'answer' ? '回答' : (a.column_title ? '专栏' : '文章'))
+                    : '';
+                const isActive = realIdx === currentIndex;
+                const title = (a.title || '').replace(/^【[^】]*】/, '');
+                return `
+                    <div class="zh-toc-item ${isActive ? 'active' : ''}" onclick="renderArticle(${realIdx})">
+                        ${tag ? `<span class="zh-toc-tag">${tag}</span>` : ''}
+                        <span class="zh-toc-text">${escapeHtml(title)}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 折叠 / 展开专栏分组（点击组头切换）
+        function toggleGroup(head) {
+            const body = head.nextElementSibling;
+            const willExpand = body.style.display === 'none';
+            body.style.display = willExpand ? 'block' : 'none';
+            head.querySelector('.arrow').innerText = willExpand ? '▾' : '▸';
+        }
+
+        // 渲染单篇文章 / 回答到内容卡片
+        function renderArticle(idx) {
+            if (idx < 0 || idx >= articles.length) return;
+            currentIndex = idx;
+            const art = articles[idx];
+            const isAnswer = normType(art) === 'answer';
+            const rawTitle = (art.title || '').replace(/^【[^】]*】/, '');
+
+            // 标题区：回答显示问题标题并链向原问题，文章直接显示标题
+            const titleArea = document.getElementById('titleArea');
+            if (isAnswer && art.url && art.url.includes('/question/')) {
+                const questionUrl = art.url.replace(/\/answer\/\d+/, '');
+                titleArea.innerHTML = `<h1 class="QuestionTitle"><a href="${escapeHtml(questionUrl)}" target="_blank" rel="noopener">${escapeHtml(rawTitle)}</a></h1>`;
+            } else {
+                titleArea.innerHTML = `<h1 class="ArticleTitle">${escapeHtml(rawTitle)}</h1>`;
+            }
+
+            // 「收录于 · 专栏」标签：只要文章有专栏归属就显示
+            const chip = document.getElementById('columnChip');
+            if (art.column_title) {
+                document.getElementById('columnChipName').innerText = art.column_title;
+                chip.style.display = 'inline-flex';
+            } else {
+                chip.style.display = 'none';
+            }
+
+            // 「N 人赞同了该文章/该回答」meta 行
+            const like = art.like_count || 0;
+            document.getElementById('voteMeta').innerText = `${like} 人赞同了${isAnswer ? '该回答' : '该文章'}`;
+
+            // 作者信息（离线存档不展示头像，名字前加「作者：」标识）
+            document.getElementById('authorName').innerText = '作者：' + (art.author || '{{ author_name }}');
+            document.getElementById('cardAuthorName').innerText = art.author || '{{ author_name }}';
+            document.getElementById('authorHeadline').innerText = art.author_headline || '';
+
+            // 正文
+            document.getElementById('articleContent').innerHTML = art.content_html || '<p>内容为空</p>';
+
+            // 原文链接（点击在新标签打开源站文章）
+            const srcLink = document.getElementById('sourceLink');
+            if (art.url) {
+                srcLink.href = art.url;
+                srcLink.innerText = art.url;
+                srcLink.parentElement.style.display = 'block';
+            } else {
+                srcLink.parentElement.style.display = 'none';
+            }
+
+            // 发布时间与互动计数
+            document.getElementById('publishTime').innerText = art.publish_time || '-';
+            document.getElementById('voteUpCount').innerText = like;
+            const comment = art.comment_count || 0;
+            document.getElementById('commentBtnText').innerText = comment > 0 ? `${comment} 条评论` : '添加评论';
+            const fav = art.fav_count || 0;
+            document.getElementById('favBtnText').innerText = fav > 0 ? `收藏 ${fav}` : '收藏';
+            const likeCnt = art.heart_count || 0;
+            document.getElementById('likeBtnText').innerText = likeCnt > 0 ? `喜欢 ${likeCnt}` : '喜欢';
+
+            // 刷新目录高亮并回到顶部
+            renderToc();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // HTML 转义，防止标题中的特殊字符破坏 DOM
+        function escapeHtml(str) {
+            if (str == null) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+    </script>
+</body>
+</html>

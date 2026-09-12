@@ -12,43 +12,6 @@ from app.cleaners.html_cleaner import clean_html_content
 from app.config import DEFAULT_HEADERS
 from app.core.zhihu_auth import get_saved_zhihu_cookies
 
-class ZhihuScraper(BaseScraper):
-    """知乎全维度博主内容抓取器 (支持专栏/个人主页/单篇内容溯源全量抓取)"""
-    
-    def __init__(self, target: str, enable_noise_filter: bool = True, max_articles: Optional[int] = None):
-        super().__init__(target, enable_noise_filter=enable_noise_filter, max_articles=max_articles)
-        self.cookies = get_saved_zhihu_cookies()
-        self.author_info_cache = {}
-
-    def _is_direct_article_url(self) -> bool:
-        return bool(re.search(r"zhuanlan\.zhihu\.com/p/\d+|zhihu\.com/question/\d+/answer/\d+|zhihu\.com/p/\d+", self.target))
-
-    def _is_column_url(self) -> bool:
-        return bool(re.search(r"zhuanlan\.zhihu\.com/(?:c_|column/)|zhihu\.com/column/", self.target))
-
-    def _is_people_url(self) -> bool:
-        return bool(re.search(r"zhihu\.com/people/([a-zA-Z0-9\-_]+)", self.target))
-
-    def _extract_id(self) -> str:
-        # 专栏链接: zhuanlan.zhihu.com/c_xxxx 或 zhihu.com/column/xxxx
-        match = re.search(r"(?:zhuanlan\.zhihu\.com/(?:c_|column/)|zhihu\.com/column/)([a-zA-Z0-9\-_]+)", self.target)
-        if match:
-            return match.group(1)
-        # 用户主页链接: zhihu.com/people/xxxx
-        match = re.search(r"zhihu\.com/people/([a-zA-Z0-9\-_]+)", self.target)
-        if match:
-            return match.group(1)
-        # 单篇文章链接
-        match = re.search(r"(?:zhuanlan\.zhihu\.com/p/|zhihu\.com/p/)(\d+)", self.target)
-        if match:
-            return match.group(1)
-        # 单个回答链接
-        match = re.search(r"zhihu\.com/question/\d+/answer/(\d+)", self.target)
-        if match:
-            return match.group(1)
-            
-        return self.target.strip("/ ")
-
 def _resolve_author_sync(url: str, cookies: Optional[Dict[str, str]]) -> Optional[Dict[str, str]]:
     """在工作线程中同步解析单篇文章作者"""
     import time
@@ -176,127 +139,249 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
             time.sleep(1.5)
 
             # ==========================================================
-            # 步骤 1: 全量抓取博主专栏文章 (Articles)
+            # 步骤 1: 全量抓取博主「文章」Tab（模拟真人浏览，滚动加载）
+            # 说明：知乎已收紧 members 接口的签名校验（自行拼 API 的 fetch
+            # 会返回 403），因此改为驱动页面 Tab 滚动加载，数据由知乎自己
+            # 签好名的请求返回，稳定且不易触发风控
             # ==========================================================
-            offset = 0
-            limit = 20
-            while True:
+
+            # 通用 JS：从当前页面的卡片 DOM 中解析出文章/回答条目
+            extract_js = '''() => {
+                const out = {};
+                document.querySelectorAll('.List-item, .Card').forEach(card => {
+                    const a = card.querySelector('a[href*="/p/"], a[href*="/answer/"]');
+                    if (!a) return;
+                    const href = a.href || '';
+                    const t = (a.innerText || '').trim();
+                    if (!t) return;
+                    let type = null;
+                    if (/zhihu\\.com\\/p\\/\\d+/.test(href)) type = 'article';
+                    else if (/question\\/\\d+\\/answer\\/\\d+/.test(href)) type = 'answer';
+                    if (!type) return;
+                    const timeEl = card.querySelector('.ContentItem-time');
+                    out[href] = { url: href, title: t, type: type, time: timeEl ? (timeEl.innerText || '').trim() : '' };
+                });
+                return Object.values(out);
+            }'''
+
+            def _extract_time(raw_text):
+                """从「发布于 2026-09-08 22:45:49」这类文本里提取时间字符串"""
+                m = re.search(r"\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?", raw_text or "")
+                return m.group(0).replace("T", " ") if m else ""
+
+            def _norm_article_url(u):
+                """统一文章 URL 主机名：www.zhihu.com/p/x 与 zhuanlan.zhihu.com/p/x 视为同一篇"""
+                return re.sub(r"^https?://(?:www\.)?zhihu\.com/p/", "https://zhuanlan.zhihu.com/p/", u or "")
+
+            def _scroll_collect(expected_type):
+                """在当前 Tab 页反复滚动直到连续 3 轮无新内容，返回该类型的条目列表"""
+                stable_rounds = 0
+                last_count = 0
+                items = []
+                type_label = "文章" if expected_type == "article" else "回答"
+                while stable_rounds < 3:
+                    if max_articles and len(all_articles) >= max_articles:
+                        break
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    time.sleep(1.0)
+                    raw = page.evaluate(extract_js) or []
+                    items = [r for r in raw if r.get("type") == expected_type]
+                    if progress_callback:
+                        progress_callback(f"正在滚动加载博主【{author_name}】的{type_label} (已发现 {len(items)} 条)...", len(all_articles), 0)
+                    if len(items) == last_count:
+                        stable_rounds += 1
+                    else:
+                        stable_rounds = 0
+                        last_count = len(items)
+                return items
+
+            # 打开「文章」Tab 并滚动采集
+            try:
+                page.goto(f"https://www.zhihu.com/people/{url_token}/posts", wait_until="domcontentloaded", timeout=25000)
+                time.sleep(2.0)
+            except Exception:
+                pass
+            for r in _scroll_collect("article"):
+                u = r.get("url") or ""
+                if u in seen_urls:
+                    continue
                 if max_articles and len(all_articles) >= max_articles:
                     break
-                    
-                if progress_callback:
-                    progress_callback(f"正在抓取博主【{author_name}】的专栏文章 (已发现 {len(all_articles)} 篇)...", len(all_articles), 0)
+                seen_urls.add(u)
+                art_id = u.rstrip("/").split("/")[-1]
+                all_articles.append({
+                    "id": art_id or u,
+                    "url": u,
+                    "title": "【文章】" + (r.get("title") or f"知乎文章_{art_id}"),
+                    "publish_time": _extract_time(r.get("time")),
+                    "content_html": "",
+                    "excerpt": "",
+                    "content_type": "article",  # article 普通知乎文章 / 后续步骤会升级为专栏文章
+                    "column_title": None
+                })
 
-                articles_data = page.evaluate(f'''async () => {{
-                    try {{
-                        const resp = await fetch('/api/v4/members/{url_token}/articles?include=data[*].content,voteup_count,created&offset={offset}&limit={limit}&sort_by=created');
-                        return await resp.json();
-                    }} catch(e) {{
-                        return null;
-                    }}
-                }}''')
-
-                if not articles_data or not articles_data.get("data"):
+            # ==========================================================
+            # 步骤 2: 全量抓取博主历史回答（同样滚动「回答」Tab 采集）
+            # ==========================================================
+            try:
+                page.goto(f"https://www.zhihu.com/people/{url_token}/answers", wait_until="domcontentloaded", timeout=25000)
+                time.sleep(2.0)
+            except Exception:
+                pass
+            for r in _scroll_collect("answer"):
+                u = r.get("url") or ""
+                if u in seen_urls:
+                    continue
+                if max_articles and len(all_articles) >= max_articles:
                     break
+                seen_urls.add(u)
+                ans_id = u.rstrip("/").split("/")[-1]
+                all_articles.append({
+                    "id": ans_id or u,
+                    "url": u,
+                    "title": "【回答】" + (r.get("title") or f"回答_{ans_id}"),
+                    "publish_time": _extract_time(r.get("time")),
+                    "content_html": "",
+                    "excerpt": "",
+                    "content_type": "answer"  # 知乎问题回答
+                })
 
-                items = articles_data.get("data", [])
-                if not items:
-                    break
+            # ==========================================================
+            # 步骤 3: 最后访问专栏页，建立「文章 URL -> 专栏名」映射并打标
+            # （专栏列表接口不受签名保护，随时可访问；放在最后顺路完成）
+            # ==========================================================
+            try:
+                page.goto(f"https://www.zhihu.com/people/{url_token}/columns", wait_until="domcontentloaded", timeout=25000)
+                time.sleep(1.5)
+                # 轻微滚动一次，触发可能的懒加载内容
+                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                time.sleep(0.8)
 
-                for it in items:
-                    art_id = str(it.get("id", ""))
-                    u = it.get("url") or f"https://zhuanlan.zhihu.com/p/{art_id}"
-                    if u not in seen_urls:
-                        seen_urls.add(u)
-                        created_time = it.get("created", 0) or it.get("updated", 0)
-                        pub_str = ""
-                        if created_time:
-                            try:
-                                pub_str = datetime.datetime.fromtimestamp(int(created_time)).strftime("%Y-%m-%d %H:%M:%S")
-                            except Exception:
-                                pass
-                        all_articles.append({
-                            "id": art_id or u,
-                            "url": u,
-                            "title": "【专栏】" + it.get("title", f"专栏文章_{art_id}"),
-                            "publish_time": pub_str,
-                            "content_html": it.get("content", ""),
-                            "excerpt": it.get("excerpt", "")
-                        })
-                        if max_articles and len(all_articles) >= max_articles:
+                # 提取专栏 ID：新版链接为 www.zhihu.com/column/c_xxx，旧版为 zhuanlan.zhihu.com/{slug}
+                col_links = page.evaluate('''() => {
+                    const out = [];
+                    document.querySelectorAll('a[href*="/column/"], a[href*="zhuanlan.zhihu.com"]').forEach(a => {
+                        const href = a.href || '';
+                        let m = href.match(/zhihu\\.com\\/column\\/([A-Za-z0-9_-]+)\\/?$/);
+                        if (!m) m = href.match(/zhuanlan\\.zhihu\\.com\\/([A-Za-z0-9_-]+)\\/?$/);
+                        if (m) out.push({ id: m[1], text: (a.innerText || '').trim().slice(0, 60) });
+                    });
+                    return out;
+                }''')
+
+                # 按 ID 去重
+                slugs = {}
+                for lk in col_links or []:
+                    slugs.setdefault(lk.get("id"), lk.get("text") or "")
+
+                if not slugs:
+                    # 专栏页可能被登录墙拦截（未配置 Cookie 或 Cookie 失效）
+                    wall = page.evaluate("document.body.innerText.includes('请登录后查看')")
+                    print(f"[知乎] 未能从专栏页解析到专栏（登录墙: {wall}）。如需专栏分组，请在设置中配置有效知乎 Cookie")
+
+                print(f"[知乎] 从专栏页解析到 {len(slugs)} 个专栏: {list(slugs.keys())}")
+
+                # 专栏归属映射：key=文章 URL, value=该文章所属的专栏名列表
+                # 注意：「文章」是全量集合，专栏只是文章的归类标签（一篇文章可属于多个专栏）
+                column_map: Dict[str, List[str]] = {}
+                for slug in slugs:
+                    if not slug:
+                        continue
+                    # 获取专栏名称（失败则退回链接文本或 slug）
+                    col_title = slugs.get(slug) or slug
+                    try:
+                        col_meta = page.evaluate(f'''async () => {{
+                            try {{
+                                const resp = await fetch('/api/v4/columns/{slug}');
+                                if (!resp.ok) return null;
+                                return await resp.json();
+                            }} catch(e) {{
+                                return null;
+                            }}
+                        }}''')
+                        if col_meta and col_meta.get("title"):
+                            col_title = col_meta.get("title")
+                    except Exception:
+                        pass
+
+                    # 分页拉取该专栏下的全部文章 URL（/articles 失败时退回 /items）
+                    coff = 0
+                    while True:
+                        col_articles = page.evaluate(f'''async () => {{
+                            try {{
+                                const resp = await fetch('/api/v4/columns/{slug}/articles?limit=20&offset={coff}');
+                                if (!resp.ok) return null;
+                                return await resp.json();
+                            }} catch(e) {{
+                                return null;
+                            }}
+                        }}''')
+                        if not col_articles:
+                            col_articles = page.evaluate(f'''async () => {{
+                                try {{
+                                    const resp = await fetch('/api/v4/columns/{slug}/items?limit=20&offset={coff}');
+                                    if (!resp.ok) return null;
+                                    return await resp.json();
+                                }} catch(e) {{
+                                    return null;
+                                }}
+                            }}''')
+                        col_items = (col_articles or {}).get("data", [])
+                        if not col_items:
                             break
-
-                if max_articles and len(all_articles) >= max_articles:
-                    break
-
-                paging = articles_data.get("paging", {})
-                if paging.get("is_end", True):
-                    break
-                offset += limit
-                if offset > 2000:
-                    break
-
-            # ==========================================================
-            # 步骤 2: 全量抓取博主历史回答 (Answers)
-            # ==========================================================
-            offset = 0
-            while True:
-                if max_articles and len(all_articles) >= max_articles:
-                    break
-
-                if progress_callback:
-                    progress_callback(f"正在抓取博主【{author_name}】的历史回答 (已发现 {len(all_articles)} 篇)...", len(all_articles), 0)
-
-                answers_data = page.evaluate(f'''async () => {{
-                    try {{
-                        const resp = await fetch('/api/v4/members/{url_token}/answers?include=data[*].content,voteup_count,created_time&offset={offset}&limit={limit}&sort_by=created');
-                        return await resp.json();
-                    }} catch(e) {{
-                        return null;
-                    }}
-                }}''')
-
-                if not answers_data or not answers_data.get("data"):
-                    break
-
-                items = answers_data.get("data", [])
-                if not items:
-                    break
-
-                for it in items:
-                    ans_id = str(it.get("id", ""))
-                    q_id = str(it.get("question", {}).get("id", ""))
-                    u = f"https://www.zhihu.com/question/{q_id}/answer/{ans_id}" if q_id else f"https://www.zhihu.com/answer/{ans_id}"
-                    if u not in seen_urls:
-                        seen_urls.add(u)
-                        q_title = it.get("question", {}).get("title", f"回答_{ans_id}")
-                        created_time = it.get("created_time", 0) or it.get("updated_time", 0)
-                        pub_str = ""
-                        if created_time:
-                            try:
-                                pub_str = datetime.datetime.fromtimestamp(int(created_time)).strftime("%Y-%m-%d %H:%M:%S")
-                            except Exception:
-                                pass
-                        all_articles.append({
-                            "id": ans_id or u,
-                            "url": u,
-                            "title": "【回答】" + q_title,
-                            "publish_time": pub_str,
-                            "content_html": it.get("content", ""),
-                            "excerpt": it.get("excerpt", "")
-                        })
-                        if max_articles and len(all_articles) >= max_articles:
+                        for a in col_items:
+                            au = a.get("url") or f"https://zhuanlan.zhihu.com/p/{a.get('id')}"
+                            column_map.setdefault(_norm_article_url(au), []).append(col_title)
+                        col_paging = (col_articles or {}).get("paging", {})
+                        if col_paging.get("is_end", True):
                             break
+                        coff += 20
+                        time.sleep(0.3)  # 轻微延迟，避免触发反爬
 
-                if max_articles and len(all_articles) >= max_articles:
-                    break
+                    # 兜底：专栏接口可能漏掉个别文章（实测会少 1 篇），
+                    # 再滚动专栏页面本身，从 DOM 里补充文章链接求并集
+                    try:
+                        page.goto(f"https://www.zhihu.com/column/{slug}", wait_until="domcontentloaded", timeout=25000)
+                        time.sleep(1.5)
+                        stable_rounds = 0
+                        last_count = 0
+                        while stable_rounds < 3:
+                            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                            time.sleep(0.8)
+                            p_links = page.evaluate('''() => {
+                                const out = new Set();
+                                document.querySelectorAll('a[href*="/p/"]').forEach(a => {
+                                    const href = a.href || '';
+                                    if (/zhihu\\.com\\/p\\/\\d+/.test(href)) out.add(href);
+                                });
+                                return Array.from(out);
+                            }''') or []
+                            if len(p_links) == last_count:
+                                stable_rounds += 1
+                            else:
+                                stable_rounds = 0
+                                last_count = len(p_links)
+                            if last_count >= 500:  # 防御性上限，避免异常页面死循环
+                                break
+                        for href in p_links:
+                            # 新版专栏页在 www.zhihu.com 域下，/p/ 链接可能是 www 前缀，统一归一化
+                            column_map.setdefault(_norm_article_url(href), []).append(col_title)
+                        print(f"[知乎] 专栏【{col_title}】页面 DOM 补充后累计映射 {sum(1 for v in column_map.values() if col_title in v)} 篇")
+                    except Exception as _col_e:
+                        print(f"[知乎] 专栏【{col_title}】页面 DOM 兜底解析失败: {_col_e}")
 
-                paging = answers_data.get("paging", {})
-                if paging.get("is_end", True):
-                    break
-                offset += limit
-                if offset > 2000:
-                    break
+                # 统一打标：专栏只是文章的归类标签——文章的 content_type 保持
+                # 「article」不变，仅把所属专栏名写入 column_title 字段
+                marked = 0
+                for art in all_articles:
+                    col_hits = column_map.get(_norm_article_url(art.get("url") or ""))
+                    if col_hits and art.get("content_type") == "article":
+                        # 去重后拼接（一篇文章可能同时被收入多个专栏）
+                        art["column_title"] = "、".join(dict.fromkeys(col_hits))
+                        marked += 1
+                print(f"[知乎] 专栏映射完成，共为 {marked} 篇文章标注专栏归属")
+            except Exception as e:
+                print(f"枚举知乎专栏异常（不影响文章抓取）: {e}")
 
             browser.close()
     except Exception as e:
@@ -304,11 +389,14 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
 
     # 如果仍未抓到任何列表内容，返回单篇内容兜底
     if not all_articles and is_direct_article:
+        # 根据回退链接判断是专栏文章还是回答
+        fallback_type = "answer" if re.search(r"zhihu\.com/question/\d+/answer/\d+", target_fallback_url) else "article"
         all_articles.append({
             "id": target_fallback_url,
             "url": target_fallback_url,
             "title": f"知乎博主文章",
-            "publish_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            "publish_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "content_type": fallback_type
         })
 
     return all_articles
@@ -508,10 +596,12 @@ class ZhihuScraper(BaseScraper):
                     articles.append({
                         "id": article_id or url,
                         "url": url,
-                        "title": title or f"知乎专栏文章_{article_id}",
+                        "title": "【专栏文章】" + (title or f"知乎文章_{article_id}"),
                         "publish_time": publish_time,
                         "content_html": item.get("content", ""),
-                        "excerpt": item.get("excerpt", "")
+                        "excerpt": item.get("excerpt", ""),
+                        "content_type": "column_article",  # 专栏文章
+                        "column_title": column_meta.get("title") if column_meta else None
                     })
                     
                     if self.max_articles and len(articles) >= self.max_articles:
@@ -539,6 +629,9 @@ class ZhihuScraper(BaseScraper):
         author_info = await self.get_author_info()
         author = author_info.get("name", "知乎博主")
         raw_html = article_meta.get("content_html", "")
+        # 继承列表阶段已识别的内容类型（专栏文章/普通知乎文章/回答）
+        content_type = article_meta.get("content_type") or ("answer" if re.search(r"zhihu\.com/question/\d+/answer/\d+", url) else "article")
+        column_title = article_meta.get("column_title")
 
         # 如果列表未直接提供正文，使用 Playwright 同步引擎抓取详情
         if not raw_html or len(raw_html.strip()) < 10:
@@ -560,7 +653,9 @@ class ZhihuScraper(BaseScraper):
                 summary=article_meta.get("excerpt", ""),
                 content_html=cleaned_html,
                 content_markdown=md_content,
-                images=images
+                images=images,
+                content_type=content_type,
+                column_title=column_title
             )
 
         return ArticleItem(
@@ -572,5 +667,7 @@ class ZhihuScraper(BaseScraper):
             platform="知乎",
             content_html="<p>内容提取失败或需要登录知乎账号</p>",
             content_markdown="内容提取失败或需要登录知乎账号",
-            images=[]
+            images=[],
+            content_type=content_type,
+            column_title=column_title
         )
