@@ -39,8 +39,12 @@ class TaskManager:
     def get_task(self, task_id: str) -> Optional[TaskProgress]:
         return self.tasks.get(task_id)
 
-    def list_tasks(self) -> List[TaskProgress]:
-        return sorted(list(self.tasks.values()), key=lambda t: t.created_at, reverse=True)
+    def list_tasks(self, client_id: Optional[str] = None) -> List[TaskProgress]:
+        if not client_id or not client_id.strip():
+            # 未提供 client_id 时不公开暴露全局所有人的任务，防止公网隐私泄露
+            return []
+        matching = [t for t in self.tasks.values() if t.client_id == client_id.strip()]
+        return sorted(matching, key=lambda t: t.created_at, reverse=True)
 
     async def subscribe(self, task_id: str) -> asyncio.Queue:
         if task_id not in self.subscribers:
@@ -141,6 +145,7 @@ class TaskManager:
             detected_platform = request.platform
         progress = TaskProgress(
             task_id=task_id,
+            client_id=request.client_id,
             platform=detected_platform.value,
             target=request.target,
             status=TaskStatusEnum.PENDING,

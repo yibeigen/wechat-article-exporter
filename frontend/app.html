@@ -1602,6 +1602,20 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
+
+                <div class="switch-card">
+                    <div>
+                        <div class="switch-title">
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            <span>完成后自动保存至电脑</span>
+                        </div>
+                        <div class="switch-desc">服务端打包完成自动拉起浏览器下载，无需守候点击</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="autoDownloadSwitch" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
 
             <!-- 6. 导出文档设置 -->
@@ -1771,7 +1785,13 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         <svg class="icon icon-lg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
                     </div>
                     <h2 style="font-size: 1.3rem; font-weight: 800; color: var(--text-primary); margin-bottom: 4px;">🎉 博文提取与电子书打包完成！</h2>
-                    <p style="font-size: 0.84rem; color: var(--text-muted); margin: 0;" id="resultSummaryText">本次共处理 0 篇文章，已自动去除广告水印并完成排版。</p>
+                    <p style="font-size: 0.84rem; color: var(--text-muted); margin: 0 0 10px;" id="resultSummaryText">本次共处理 0 篇文章，已自动去除广告水印并完成排版。</p>
+                </div>
+
+                <!-- 存储与及时下载提示条 -->
+                <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.78rem; line-height: 1.5; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24" style="color: #f59e0b; flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    <span><b>温馨提示：</b>公网服务器会定期自动清理过期文章产物，请立即点击下方按钮下载保存至您的电脑本地妥善收藏！</span>
                 </div>
 
                 <!-- 格式下载按钮矩阵 -->
@@ -1808,7 +1828,18 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     <button type="button" class="nav-btn" onclick="clearAllHistory()" style="font-size: 0.76rem; height: 28px; padding: 0 10px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);" title="清空全部历史记录">🗑️ 清空历史</button>
                 </div>
             </div>
-            <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0 0 12px;">所有已完成的博文提取与电子书打包记录均已持久化保存在您的本地浏览器中，随时可一键重新下载各格式产物。</p>
+
+            <!-- 存储与清理机制详细说明提示条 -->
+            <div style="background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; padding: 10px 14px; margin: 0 0 14px; font-size: 0.78rem; line-height: 1.6; color: var(--text-secondary);">
+                <div style="font-weight: 700; color: var(--accent-primary); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24" style="color: var(--accent-primary);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                    <span>💡 文件存储与定期清理说明：</span>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 3px;">
+                    <div>• <b>公网云端使用：</b>提取排版生成的压缩包暂时存放在服务器端，<b>服务器会定期自动清理过期文章产物</b>。下方的归档卡片为您的专属提货凭据，请务必<b>及时点击按钮下载保存至您的电脑本地</b>（也可在上方开启「完成后自动保存至电脑」免去手动点击）。</div>
+                    <div>• <b>本地电脑运行：</b>若在您个人电脑本地启动（localhost），生成的全部文件会直接永久保存在您的电脑 <code>downloads/</code> 文件夹中，不受任何服务器清理影响。</div>
+                </div>
+            </div>
             <div id="historyListContainer" class="history-list">
                 <!-- 动态填充历史记录 -->
             </div>
@@ -4683,7 +4714,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 wechat_token: wechatToken || null,
                 wechat_cookie: wechatCookie || null,
                 // 两阶段导出：若从弹窗勾选了文章，把完整元数据回传后端，避免 URL 列表丢失分类信息
-                articles_meta: selectedArticles
+                articles_meta: selectedArticles,
+                client_id: getOrCreateClientId()
             };
 
             const startBtn = document.getElementById('startBtn') || document.getElementById('extractLinksBtn');
@@ -5120,6 +5152,21 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     }
                     saveTaskToLocalHistory(task);
                     loadHistory();
+
+                    // 自动触发下载至本地电脑 (若开启且存在 ZIP 归档包)
+                    const autoDownloadEl = document.getElementById('autoDownloadSwitch');
+                    if (autoDownloadEl && autoDownloadEl.checked && files['zip']) {
+                        try {
+                            const a = document.createElement('a');
+                            a.href = files['zip'];
+                            a.download = '';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                        } catch (err) {
+                            console.warn('自动触发下载异常:', err);
+                        }
+                    }
                 } else if (task.status === 'cancelled') {
                     if (pauseResumeBtn) pauseResumeBtn.style.display = 'none';
                     if (stopAndExportBtn) stopAndExportBtn.style.display = 'none';
@@ -5196,9 +5243,23 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         }
 
         // ==========================================
-        // 本地持久化历史归档与桌面端管理
+        // 本地持久化历史归档与客户端沙盒隔离
         // ==========================================
         const HISTORY_STORAGE_KEY = 'blogdistiller_local_history_v2';
+        const CLIENT_ID_STORAGE_KEY = 'blogdistiller_client_id';
+
+        function getOrCreateClientId() {
+            try {
+                let cid = localStorage.getItem(CLIENT_ID_STORAGE_KEY);
+                if (!cid) {
+                    cid = 'c_' + Math.random().toString(36).substring(2, 10) + '_' + Date.now().toString(36);
+                    localStorage.setItem(CLIENT_ID_STORAGE_KEY, cid);
+                }
+                return cid;
+            } catch (e) {
+                return 'c_anonymous_' + Math.random().toString(36).substring(2, 8);
+            }
+        }
 
         function getStoredLocalHistory() {
             try {
@@ -5241,21 +5302,25 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
 
             let localList = getStoredLocalHistory();
 
-            // 尝试同步后端最新任务并合并
+            // 仅按当前设备客户端 ID 向后端安全同步任务（绝不获取其他公网用户的任务，彻底杜绝历史串台）
             try {
-                const res = await fetch('/api/tasks');
+                const cid = getOrCreateClientId();
+                const res = await fetch(`/api/tasks?client_id=${encodeURIComponent(cid)}`);
                 if (res.ok) {
                     const serverTasks = await res.json();
-                    if (serverTasks && Array.isArray(serverTasks)) {
+                    if (serverTasks && Array.isArray(serverTasks) && serverTasks.length > 0) {
                         const localIds = new Set(localList.map(t => t.task_id));
+                        let hasNew = false;
                         serverTasks.forEach(st => {
                             if (st.status === 'completed' && !localIds.has(st.task_id)) {
                                 localList.push(st);
+                                hasNew = true;
                             }
                         });
-                        // 重新按时间排序
-                        localList.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-                        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(localList.slice(0, 100)));
+                        if (hasNew) {
+                            localList.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+                            localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(localList.slice(0, 100)));
+                        }
                     }
                 }
             } catch (e) {
@@ -5853,6 +5918,18 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             const ghEl = document.getElementById('ghVisitorCount');
             if (ghEl) ghEl.textContent = ghVisits;
         })();
+
+        // 自动下载开关偏好记忆 (默认勾选)
+        const autoDlSwitch = document.getElementById('autoDownloadSwitch');
+        if (autoDlSwitch) {
+            const savedAutoDl = localStorage.getItem('bd_auto_download');
+            if (savedAutoDl !== null) {
+                autoDlSwitch.checked = savedAutoDl === 'true';
+            }
+            autoDlSwitch.addEventListener('change', () => {
+                localStorage.setItem('bd_auto_download', autoDlSwitch.checked ? 'true' : 'false');
+            });
+        }
 
         initTheme();
         updateActivationStatusUI();

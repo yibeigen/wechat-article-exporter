@@ -227,9 +227,9 @@ async def create_task(request: TaskCreateRequest):
     return {"task_id": task_id, "status": "pending", "message": "任务已创建并进入调度队列"}
 
 @app.get("/api/tasks")
-async def list_tasks():
-    """获取所有历史任务"""
-    return task_manager.list_tasks()
+async def list_tasks(client_id: Optional[str] = None):
+    """获取指定客户端的历史任务 (未提供 client_id 时返回空以保护多用户隐私)"""
+    return task_manager.list_tasks(client_id=client_id)
 
 @app.get("/api/tasks/{task_id}")
 async def get_task_status(task_id: str):

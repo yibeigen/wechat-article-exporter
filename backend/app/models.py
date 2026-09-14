@@ -95,6 +95,7 @@ class TaskCreateRequest(BaseModel):
     # 前端把已选文章的完整元数据回传，后端直接使用这些元数据抓取正文并导出，
     # 避免把 URL 列表错判定为 custom_urls 而丢失 content_type / column_title 等分类信息
     articles_meta: Optional[List[Dict[str, Any]]] = Field(None, description="已选文章元数据列表，存在时直接按此列表导出")
+    client_id: Optional[str] = Field(None, description="客户端匿名设备标识 (用于多用户免登录会话与历史隔离)")
 
 class TaskStatusEnum(str, Enum):
     PENDING = "pending"
@@ -110,6 +111,7 @@ class TaskStatusEnum(str, Enum):
 
 class TaskProgress(BaseModel):
     task_id: str
+    client_id: Optional[str] = None
     platform: str
     target: str
     author_name: str = ""
