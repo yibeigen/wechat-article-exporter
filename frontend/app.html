@@ -5245,8 +5245,15 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         // ==========================================
         // 本地持久化历史归档与客户端沙盒隔离
         // ==========================================
-        const HISTORY_STORAGE_KEY = 'blogdistiller_local_history_v2';
+        const HISTORY_STORAGE_KEY = 'blogdistiller_local_history_v3';
         const CLIENT_ID_STORAGE_KEY = 'blogdistiller_client_id';
+
+        // 自动清理旧版 v2 混杂了公网他人历史的脏缓存，让所有人无感升级至纯净的 v3 设备沙盒
+        try {
+            if (localStorage.getItem('blogdistiller_local_history_v2')) {
+                localStorage.removeItem('blogdistiller_local_history_v2');
+            }
+        } catch (e) {}
 
         function getOrCreateClientId() {
             try {
