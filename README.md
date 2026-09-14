@@ -1,3 +1,4 @@
+<!-- BlogDistiller 官方中文开源项目 · 全网博文批量导出与知识归档助手 -->
 <div align="center">
 
   <img src="frontend/assets/logo_horizontal.png" alt="BlogDistiller · 博萃" width="760" style="max-width: 100%; border-radius: 12px;" />

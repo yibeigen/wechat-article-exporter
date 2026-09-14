@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 🚀 BlogDistiller 微信桌面客户端阅读凭证嗅探助手 (Capture Runner)
-基于「公号三刀」逆向成果开发，实现 0 门槛自动截获微信电脑版阅读通行密钥 (uin/key/pass_ticket)。
+基于自动化嗅探技术，实现 0 门槛自动截获微信电脑版阅读通行凭证 (uin/key/pass_ticket)。
 """
 
 import os

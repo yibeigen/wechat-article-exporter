@@ -2,6 +2,8 @@
   "name": "blogdistiller-desktop-app",
   "version": "1.0.0",
   "description": "BlogDistiller 微信文章导出助手桌面版",
+  "author": "艺杯羹",
+  "license": "CC-BY-NC-SA-4.0",
   "main": "desktop/main.js",
   "scripts": {
     "start": "electron desktop",

@@ -5,7 +5,7 @@
   "description": "BlogDistiller —— 微信公众号文章全量抓取与排版导出桌面客户端",
   "private": true,
   "main": "./main.js",
-  "author": "BlogDistiller Team",
+  "author": "艺杯羹",
   "homepage": "https://doc.305758.xyz/app",
   "scripts": {
     "start": "electron .",

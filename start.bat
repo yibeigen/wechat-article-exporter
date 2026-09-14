@@ -1,4 +1,5 @@
 @echo off
+@rem BlogDistiller · 本地一键免配置启动脚本
 title BlogDistiller 博萃 - 本地工作台一键启动
 chcp 65001 >nul
 echo ========================================================

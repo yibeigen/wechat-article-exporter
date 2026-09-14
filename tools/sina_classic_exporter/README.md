@@ -53,3 +53,5 @@ python tools/sina_classic_exporter/export_classic_sina.py --url "https://blog.si
 | `--output-dir` | `-o` | `downloads/` | 导出的 HTML 文件保存目录 |
 | `--max-articles` | `-m` | `None` (全部) | 最大抓取文章数量限制 |
 | `--no-inline-images` | | `False` | 不内联 Base64 图片（减小体积，但离线需联网看图） |
+
+> 提示：双击目录下 `run_export.bat` 即可在本地图形化/命令行交互中直接使用。

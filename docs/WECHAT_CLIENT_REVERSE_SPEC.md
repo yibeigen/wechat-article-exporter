@@ -1,4 +1,4 @@
-# 微信公众号桌面客户端（公号三刀逆向与自研落地全景架构规范）
+# 微信公众号桌面客户端 · 客户端逆向分析与自研嗅探架构规范
 
 ## 1. 逆向核心成果梳理 (已保存在 `docs/sanji_source/`)
 已完成对 `sanji-1.2.1-setup.exe` 的完整解包与主进程 JS 混淆代码的自动化解码（生成文件：`docs/sanji_source/out/main/index_decoded.js`）。
