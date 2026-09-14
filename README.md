@@ -201,28 +201,43 @@ graph TD
 
 ---
 
-## 🛠️ 开发者本地自建指南 (Developer Quick Start)
+## 🛠️ 本地运行指南 (Local Quick Start)
 
-如果您希望在自己的本地电脑或私有服务器上完全离线运行本项目：
+如果您希望在自己的个人电脑上完全离线运行本项目（**100% 本地运算 · 零云端消耗 · 产物永久直存电脑**）：
+
+### 🟢 方式一：Windows 小白一键启动（强烈推荐 · 双击即用）
+
+1. **下载源码**：
+   - 点击本页面右上角绿色按钮 `Code` ➔ `Download ZIP` 下载源码压缩包并解压；
+   - 或者使用 Git 克隆：`git clone https://github.com/yibeigen/wechat-article-exporter.git`
+2. **直接双击根目录下的 `start.bat`**：
+   - 脚本会自动检测 Python 环境（若未安装会贴心提示下载安装）；
+   - 首次启动会自动创建虚拟环境并静默安装全部依赖及渲染内核；
+   - 启动成功后，**会自动弹出默认浏览器打开本地控制台**：`http://127.0.0.1:8000`！
+3. **日常使用**：
+   - 以后每次需要使用，只需双击 `start.bat` 即可秒开；提取的所有博文与电子书直接保存在您电脑的 `downloads/` 目录中，永久保存、永不丢失！
+
+---
+
+### 💻 方式二：开发者命令行手动运行 (Python 3.10+)
 
 ```bash
-# 1. 克隆本项目代码仓库
+# 1. 克隆代码并进入目录
 git clone https://github.com/yibeigen/wechat-article-exporter.git
 cd wechat-article-exporter
 
-# 2. 安装 Python 依赖环境 (推荐使用 uv 或 Python 3.10+)
-uv venv .venv
-uv pip install fastapi "uvicorn[standard]" httpx beautifulsoup4 markdownify lxml python-docx jinja2 pydantic playwright --python .\.venv\Scripts\python.exe
+# 2. 创建虚拟环境 (支持 uv 或 原生 venv)
+python -m venv .venv
+.\.venv\Scripts\activate
 
-# 3. 安装 Playwright 渲染引擎 (用于知乎动态渲染)
-.\.venv\Scripts\playwright.exe install chromium
+# 3. 安装依赖与渲染内核
+pip install -r requirements.txt
+playwright install chromium
 
-# 4. Windows 下一键启动
-start.bat
-# 或通过命令行启动
+# 4. 启动本地服务
 python run.py
 ```
-启动后在浏览器打开：`http://127.0.0.1:8000` 即可使用本地完整工作台！
+启动成功后，浏览器打开：`http://127.0.0.1:8000` 即可使用！
 
 ---
 
