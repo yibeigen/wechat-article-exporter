@@ -72,7 +72,7 @@
   <table align="center" style="border: none; margin-top: 12px;">
     <tr>
       <td align="center" style="border: none; padding: 0 16px;">
-        <img src="frontend/assets/wechat_group_qr.png" alt="博萃·文章导出交流群" width="260" style="border-radius: 10px; border: 1px solid #e5e7eb; box-shadow: 0 4px 14px rgba(0,0,0,0.08);" />
+        <img src="frontend/assets/wechat_group_qr.png?v=20260918" alt="博萃·文章导出交流群" width="260" style="border-radius: 10px; border: 1px solid #e5e7eb; box-shadow: 0 4px 14px rgba(0,0,0,0.08);" />
         <br />
         <sub><b>博萃·文章导出交流群</b></sub>
         <br />
