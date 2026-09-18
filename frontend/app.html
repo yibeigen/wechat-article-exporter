@@ -1322,6 +1322,19 @@
             </div>
         </div>
 
+        <!-- ⚠️ 维护公告横幅（微信桌面端暂不可用 · 其他平台正常） -->
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.07)); border: 1px solid rgba(217, 119, 6, 0.4); border-radius: 12px; padding: 12px 18px; margin-bottom: 14px; box-shadow: 0 4px 14px -3px rgba(217, 119, 6, 0.12);">
+            <div style="display: flex; align-items: flex-start; gap: 10px; font-size: 0.88rem; color: var(--text-primary); line-height: 1.65;">
+                <span style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 9999px; letter-spacing: 0.5px; flex-shrink: 0; margin-top: 2px;">公告</span>
+                <span>⚠️ <b>微信公众号桌面端</b>因微信官方近期调整接口<b>暂时无法使用</b>，我们正在全力寻找新方案，<b>修复后会第一时间在交流群通知大家</b>，请先扫码进群耐心等待，感谢理解！🙏<br>
+                <span style="font-size: 0.82rem; color: var(--text-secondary);">🌐 其他平台网站端均可正常使用；各平台会不定期更新，如遇解析失败或导出异常，请<b>加交流群</b>或加作者微信 <b>peace-83</b> 反馈，我们会尽快修复。</span></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <button type="button" class="btn-secondary" style="padding: 5px 12px; font-size: 0.78rem; font-weight: 600; border-color: rgba(217, 119, 6, 0.45); color: #d97706;" onclick="var m=document.getElementById('communityModal'); if(m){m.style.display='flex';}">👥 扫码进群</button>
+                <button type="button" class="btn-secondary" style="padding: 5px 12px; font-size: 0.78rem; font-weight: 700; border-color: rgba(99, 102, 241, 0.45); color: #6366f1; background: rgba(99, 102, 241, 0.08);" onclick="openChangelogModal()">📢 更新与支持日志</button>
+            </div>
+        </div>
+
         <!-- 🎉 新增平台重磅升级通知横幅 -->
         <div class="update-notice-banner" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; background: linear-gradient(135deg, rgba(230, 22, 45, 0.07), rgba(234, 111, 90, 0.09)); border: 1px solid rgba(234, 111, 90, 0.35); border-radius: 12px; padding: 12px 18px; margin-bottom: 20px; box-shadow: 0 4px 14px -3px rgba(234, 111, 90, 0.12);">
             <div style="display: flex; align-items: center; gap: 10px; font-size: 0.88rem; color: var(--text-primary);">
@@ -1456,7 +1469,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 <div id="zhihuSmartHintBar" style="display: none; margin-top: 8px; padding: 8px 12px; background: var(--accent-subtle); border: 1px solid var(--accent-gold); border-radius: 6px; font-size: 0.78rem; color: var(--text-primary);"></div>
                 
                 <div class="input-tip" style="margin-top: 8px;">
-                    <span id="platformTipText"><b style="color:var(--accent-emerald);">🟢 微信公众号专属通道：</b>输入公众号名称即可反查官方名片，一键检索其全部公开文章并导出。</span>
+                    <!-- 微信平台提示文案已按需求移除：此处仅保留容器，供其他平台切换时动态填充 -->
+                    <span id="platformTipText"></span>
                 </div>
             </div>
 
@@ -3015,7 +3029,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             'wechat': {
                 label: '输入微信公众号名称 (或指定文章链接)',
                 placeholder: '输入微信公众号名称（如：艺杯羹、代码随想录、阿里技术），或单篇文章链接...',
-                tipHtml: '<b style="color:var(--accent-emerald);">🟢 微信公众号专属通道：</b>输入公众号名称即可反查官方名片，一键检索其全部公开文章并导出。'
+                // 提示文案已按需求移除（置空避免切换平台时再次显示旧说明产生误导）
+                tipHtml: ''
             },
             'zhihu': {
                 label: '输入知乎博主主页或回答/专栏链接',
@@ -3372,7 +3387,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
 
             if (card && nameEl) {
                 nameEl.innerText = nickname;
-                if (descEl) descEl.innerText = signature || ('微信官方认证公众号「' + nickname + '」· 点击下方按钮直接抓取并导出文章');
+                if (descEl) descEl.innerText = signature || ('已选定公众号「' + nickname + '」· 粘贴单篇/合集链接可免登录提取；全量检索需连接公众号后台凭证');
                 if (avatarEl) {
                     if (nickname === '艺杯羹' || (nickname && nickname.includes('艺杯羹'))) {
                         avatarEl.src = '/assets/avatar.png';
@@ -3623,7 +3638,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
 
                 let res, data;
                 try {
-                    res = await fetch('/api/extract-links', {
+                    // 关键改动：改用带重试的请求助手，网络瞬时失败（如代理掐断、CDN 抖动）自动重试 2 次
+                    res = await fetchWithRetry('/api/extract-links', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
@@ -4729,7 +4745,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             }
 
             try {
-                const res = await fetch('/api/tasks', {
+                // 同样使用重试助手：检索成功后若导出请求因网络抖动失败，会前功尽弃，这里自动重试兜底
+                const res = await fetchWithRetry('/api/tasks', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -4750,6 +4767,29 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         <svg class="icon" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                         <span>🚀 检索文章列表目录并挑选导出</span>
                     `;
+                }
+            }
+        }
+
+        // 带自动重试的网络请求助手：专门对抗 CDN 瞬时抖动、代理/VPN 掉线导致的 "Failed to fetch"
+        // 原理：网络层失败（Failed to fetch）往往是瞬时的（连接被重置），间隔 0.8s / 1.6s 重试 2 次即可自愈；
+        // 全部失败时，把生硬的英文报错翻译成普通用户能看懂的中文排查指引
+        async function fetchWithRetry(url, options = {}, attempts = 3) {
+            for (let i = 1; i <= attempts; i++) {
+                try {
+                    const res = await fetch(url, options);
+                    // 5xx 属于服务器瞬时故障，也纳入重试；4xx 是参数/权限问题，重试无意义，直接返回
+                    if (res.status < 500 || i === attempts) return res;
+                    await new Promise(r => setTimeout(r, 800 * i));
+                } catch (e) {
+                    const isNetworkErr = e.message && e.message.includes('Failed to fetch');
+                    // 非网络错误，或已重试到最后一次：不再重试
+                    if (!isNetworkErr || i === attempts) {
+                        throw isNetworkErr
+                            ? new Error('网络连接失败（浏览器无法连通服务器）。常见原因：①开启了代理/VPN/加速器，连接被其掐断；②浏览器扩展（尤其广告拦截类）拦截了请求；③当前网络环境对该站点受限。建议依次尝试：关闭代理软件或更换节点 → 无痕模式并禁用扩展 → 切换网络（如手机热点）→ 换 Chrome/Edge 浏览器重试。')
+                            : e;
+                    }
+                    await new Promise(r => setTimeout(r, 800 * i));
                 }
             }
         }
