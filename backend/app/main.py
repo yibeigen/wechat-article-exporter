@@ -1475,13 +1475,21 @@ async def download_client_standard():
 async def download_client_win7():
     """下载 Windows 7/8.1 兼容版桌面客户端"""
     dist_dir = BASE_DIR / "dist"
+    # Win7 版构建产物隔离在 dist/win7/ 子目录（electron-builder 配置 builder-win7.yml 决定）
     candidates = [
+        dist_dir / "win7" / "BlogDistiller-Win7-Setup-x64.exe",
+        dist_dir / "win7" / "BlogDistiller-Win7.exe",
         dist_dir / "BlogDistiller-Win7-Setup-x64.exe",
-        dist_dir / "BlogDistiller-Win7.exe",
     ]
     for p in candidates:
         if p.exists():
             return FileResponse(p, filename="BlogDistiller-Win7-Setup-x64.exe", media_type="application/octet-stream")
+    # 兜底：取 dist/win7/ 下最新构建的安装包（electron-builder 默认命名为 "{productName} Setup {version}.exe"）
+    win7_dir = dist_dir / "win7"
+    if win7_dir.exists():
+        exes = sorted(win7_dir.glob("*.exe"), key=lambda f: f.stat().st_mtime, reverse=True)
+        if exes:
+            return FileResponse(exes[0], filename="BlogDistiller-Win7-Setup-x64.exe", media_type="application/octet-stream")
     raise HTTPException(status_code=404, detail="Win7 兼容版安装包正在打包中，敬请期待")
 
 
