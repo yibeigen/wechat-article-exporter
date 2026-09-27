@@ -15,13 +15,20 @@ if exist ".venv\Scripts\python.exe" goto start_service
 
 echo [1/3] 正在检测本地 Python 运行环境...
 
+:: 依赖清单：优先 Win7 专属清单（存在则说明是 Win7 版），否则用普通清单
+if exist "requirements-win7.txt" (
+    set "REQ_FILE=requirements-win7.txt"
+) else (
+    set "REQ_FILE=requirements.txt"
+)
+
 :: 优先检查 uv 极速包管理器
 where uv >nul 2>nul
 if %errorlevel% equ 0 (
     echo [2/3] 检测到 uv 工具，正在极速初始化虚拟环境并安装依赖...
     uv venv .venv
-    if exist "requirements.txt" (
-        uv pip install -r requirements.txt --python .\.venv\Scripts\python.exe
+    if exist "%REQ_FILE%" (
+        uv pip install -r %REQ_FILE% --python .\.venv\Scripts\python.exe
     ) else (
         uv pip install fastapi "uvicorn[standard]" httpx beautifulsoup4 markdownify lxml python-docx jinja2 pydantic playwright pillow --python .\.venv\Scripts\python.exe
     )
@@ -34,8 +41,8 @@ if %errorlevel% equ 0 (
     echo [2/3] 正在创建 Python 虚拟环境 (.venv)...
     python -m venv .venv
     echo [2/3] 正在自动安装项目依赖 (首次启动需要 1~2 分钟，请稍候)...
-    if exist "requirements.txt" (
-        .\.venv\Scripts\pip.exe install -r requirements.txt -q
+    if exist "%REQ_FILE%" (
+        .\.venv\Scripts\pip.exe install -r %REQ_FILE% -q
     ) else (
         .\.venv\Scripts\pip.exe install fastapi "uvicorn[standard]" httpx beautifulsoup4 markdownify lxml python-docx jinja2 pydantic playwright pillow -q
     )
@@ -45,8 +52,10 @@ if %errorlevel% equ 0 (
 echo.
 echo ========================================================
 echo ❌ [错误] 未检测到系统 Python 环境！
-echo 请先下载并安装 Python 3.10+ (安装时务必勾选 "Add Python to PATH"):
-echo 官方下载地址: https://www.python.org/downloads/
+echo 请先下载并安装 Python 3.8 或 3.10+ (安装时务必勾选 "Add Python to PATH"):
+echo   Win10/11 用户: https://www.python.org/downloads/
+echo   Win7 用户: 请安装 Python 3.8.10 (3.9+ 无法在 Win7 上运行)
+echo      下载地址: https://www.python.org/downloads/release/python-3810/
 echo ========================================================
 echo.
 pause

@@ -1,0 +1,25 @@
+# ============================================================
+# BlogDistiller · Win7 版专属依赖清单
+# 用途：交付给 Win7 用户的客户端，运行环境为 Python 3.8.10
+#        （Python 官方 3.9 起放弃 Win7，必须锁 3.8）
+#
+# 说明：
+# - 版本全部精确锁定为【明确支持 Python 3.8】的历史稳定版，
+#   不是"最后支持 3.8 的边界版"，避免 Windows 平台上缺失 wheel/binary。
+# - 与 requirements.txt（Win10/11 版，用较新依赖）分开维护，
+#   两条依赖线互不干扰，符合「同一份代码、两套构建」策略。
+# - Playwright 固定 1.37.x：其内置 Chromium 109 是最后支持 Win7 的内核。
+# - 后端代码已做 3.8 语法兼容（见 backend/app/scrapers/cto51.py 切片改写）。
+# ============================================================
+
+fastapi==0.110.0
+uvicorn[standard]==0.30.6
+httpx==0.27.2
+beautifulsoup4==4.12.3
+markdownify==0.13.0
+lxml==5.2.2
+python-docx==1.1.2
+jinja2==3.1.4
+pydantic==2.7.4
+playwright==1.37.0
+pillow==10.4.0

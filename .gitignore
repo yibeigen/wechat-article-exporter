@@ -28,6 +28,8 @@ data/*.json
 data/*.db
 data/*.sqlite*
 data/albums/
+# data 下所有子目录一律排除（登录态、缓存快照等隐私数据可能出现在任意新子目录）
+data/*/
 *.cookie
 cookies.json
 tokens.json
@@ -78,6 +80,7 @@ package-lock.json
 # ----------------------------------------------
 .idea/
 .vscode/
+.trae/
 .workbuddy/
 *.swp
 *.swo
@@ -85,3 +88,9 @@ package-lock.json
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ----------------------------------------------
+# 8. 本地分发产物与第三方软件压缩包（不得公开分发）
+# ----------------------------------------------
+dist_local/
+wcplusPro_windows.zip

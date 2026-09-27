@@ -13,6 +13,17 @@ from app.config import DEFAULT_HEADERS
 BOT_USER_AGENT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
 
 
+def _strip_blog_suffix(raw: str) -> str:
+    """去掉昵称尾部的「的博客」后缀。
+    等价于 Python 3.9+ 的 str.removesuffix("的博客")，
+    用切片写法实现以兼容 Python 3.8（Win7 版运行环境）。
+    """
+    suffix = "的博客"
+    if raw.endswith(suffix):
+        return raw[: -len(suffix)]
+    return raw
+
+
 def _launch_browser(p):
     """优先调用 Edge 浏览器内核，其次 Chrome，最后 Chromium，配备完整反反爬参数"""
     launch_args = [
@@ -76,7 +87,7 @@ def _fetch_51cto_via_bot_sync(user_id: str, max_articles: Optional[int] = None) 
                     name_tag = soup.select_one(".name, .username, h1, .avatar-name, .base-info .name, .user-info .name, .nickname")
                     if name_tag and name_tag.text.strip():
                         raw_name = name_tag.text.strip()
-                        author_name = raw_name.removesuffix("的博客").strip()
+                        author_name = _strip_blog_suffix(raw_name).strip()
                     elif soup.title and soup.title.string:
                         m_title = re.search(r"^(.*?)的博客", soup.title.string)
                         if m_title:
@@ -196,7 +207,7 @@ def _scrape_51cto_author_and_list_sync(target: str, max_articles: Optional[int] 
                 name_tag = soup.select_one(".name, .username, h1, .avatar-name, .base-info .name, .user-info .name")
                 if name_tag and name_tag.text.strip():
                     raw_name = name_tag.text.strip()
-                    author_name = raw_name.removesuffix("的博客").strip()
+                    author_name = _strip_blog_suffix(raw_name).strip()
 
                 for c in context.cookies():
                     cookies_dict[c["name"]] = c["value"]

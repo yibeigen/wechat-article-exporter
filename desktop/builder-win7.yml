@@ -1,0 +1,60 @@
+# ============================================================
+# BlogDistiller · Win7 桌面版 electron-builder 独立构建配置
+# 用法：cd desktop && npx electron-builder --win --config builder-win7.yml
+# 产物输出到 ../dist/win7/（与 Win10/11 版的 ../dist 完全隔离）
+#
+# 为什么需要单独一份配置：
+# - Win7 必须用 Electron 22.x（23+ 强制要求 Win10 1809+，Win7 装不上）
+# - 必须打包 requirements-win7.txt 而非 requirements.txt（Python 3.8 依赖线）
+# 本文件不触碰现有 electron-builder 配置（desktop/package.json 内的 build 段）。
+# ============================================================
+
+appId: com.yibeigen.blogdistiller
+productName: "BlogDistiller 微信文章导出助手"
+copyright: "Copyright © 2026 艺杯羹"
+npmRebuild: false
+directories:
+  output: "../dist/win7"
+
+# 关键：强制 electron-builder 拉取 Electron 22.x（最后支持 Win7 的主版本）
+electronVersion: "22.3.27"
+
+files:
+  - "main.js"
+  - "preload.js"
+  - "renderer/**/*"
+  - "package.json"
+  - "node_modules/**/*"
+
+# Win7 仅 x64；用 nsis 保证有安装向导、zip 便于分发/免安装
+win:
+  icon: "renderer/assets/logo_icon.png"
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: zip
+      arch:
+        - x64
+
+# 随客户端附带后端 + 启动脚本 + Win7 专属依赖清单
+extraResources:
+  - from: "../backend"
+    to: "backend"
+    filter:
+      - "**/*"
+      - "!**/__pycache__"
+      - "!**/*.pyc"
+  - from: "../run.py"
+    to: "run.py"
+  - from: "../requirements-win7.txt"
+    to: "requirements.txt"
+  - from: "../start.bat"
+    to: "start.bat"
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: "BlogDistiller 微信文章导出助手"

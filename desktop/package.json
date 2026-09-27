@@ -9,7 +9,8 @@
   "homepage": "https://doc.305758.xyz/app",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "dist:win7": "electron-builder --win --config builder-win7.yml"
   },
   "build": {
     "appId": "com.yibeigen.blogdistiller",
