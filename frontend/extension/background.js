@@ -123,10 +123,143 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: true });
         return true;
     }
+
+    // 本地直连健康检测：用本机网络对知乎首页发一次真实请求
+    if (request.action === "PING_LOCAL_RELAY") {
+        (async () => {
+            const testRes = await relayFetchUrl("https://www.zhihu.com/", {
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            });
+            // 只要收到响应（2xx/3xx/4xx）就算本地网络可用，只有请求抛错才算异常
+            const networkReachable = testRes.success || (!!testRes.status && testRes.status > 0 && testRes.status < 500);
+            sendResponse({
+                success: networkReachable,
+                status: testRes.status,
+                error: testRes.error || null
+            });
+        })();
+        return true;
+    }
+
+    // 5. 本地住宅IP中继抓取单篇 (100% 消耗用户本机家庭宽带，规避云端机房IP风控)
+    if (request.action === "FETCH_URL_RELAY") {
+        relayFetchUrl(request.url, request.headers || {}).then(res => sendResponse(res));
+        return true;
+    }
+
+    // 6. 本地住宅IP批量并发中继抓取
+    if (request.action === "BATCH_FETCH_URLS_RELAY") {
+        const tabId = sender.tab ? sender.tab.id : null;
+        relayBatchFetchUrls(request.items || [], request.concurrency || 3, (prog) => {
+            if (tabId) {
+                chrome.tabs.sendMessage(tabId, {
+                    action: "RELAY_BATCH_PROGRESS",
+                    batchId: request.batchId,
+                    ...prog
+                }).catch(() => {});
+            }
+        })
+            .then(res => {
+                // 每篇结果已经随进度消息逐篇送回页面了。
+                // 大批量(>20篇)时最终回包只带状态和总数，不带原始 HTML——
+                // 否则几百 MB 的数据包会超出 Chrome 消息通道上限导致回传失败。
+                const includeResults = res.length <= 20;
+                sendResponse({
+                    success: true,
+                    total: res.length,
+                    results: includeResults ? res : []
+                });
+            })
+            .catch(err => sendResponse({ success: false, error: err.message }));
+        return true;
+    }
 });
 
-// 5. 监听 Cookie 动态变更自动同步
+// 6. 本地网络中继抓取核心引擎：使用用户本机真实环境发起请求
+async function relayFetchUrl(url, customHeaders = {}) {
+    try {
+        const defaultHeaders = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"
+        };
+        const headers = { ...defaultHeaders, ...customHeaders };
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+        const resp = await fetch(url, {
+            method: "GET",
+            headers: headers,
+            credentials: "include",
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        const text = await resp.text();
+        return {
+            success: resp.ok,
+            status: resp.status,
+            url: resp.url || url,
+            raw_html: text
+        };
+    } catch (e) {
+        return {
+            success: false,
+            error: e.name === "AbortError" ? "请求超时(20s)" : (e.message || "本地网络请求失败"),
+            url: url
+        };
+    }
+}
+
+async function relayBatchFetchUrls(items, concurrency = 3, onProgress = null) {
+    const results = [];
+    const queue = [...items];
+    const total = items.length;
+    let completed = 0;
+
+    async function worker() {
+        while (queue.length > 0) {
+            const item = queue.shift();
+            try {
+                const res = await relayFetchUrl(item.url, item.headers || {});
+                const resultItem = {
+                    ...item,
+                    raw_html: res.raw_html || "",
+                    is_failed: !res.success,
+                    error_reason: res.error || null,
+                    status_code: res.status
+                };
+                results.push(resultItem);
+                completed++;
+                if (onProgress) {
+                    onProgress({ current: completed, total: total, item: resultItem });
+                }
+            } catch (err) {
+                const failItem = {
+                    ...item,
+                    is_failed: true,
+                    error_reason: err.message
+                };
+                results.push(failItem);
+                completed++;
+                if (onProgress) {
+                    onProgress({ current: completed, total: total, item: failItem });
+                }
+            }
+        }
+    }
+
+    const workers = [];
+    const workerCount = Math.min(concurrency, Math.max(1, items.length));
+    for (let i = 0; i < workerCount; i++) {
+        workers.push(worker());
+    }
+    await Promise.all(workers);
+    return results;
+}
+
+// 7. 监听 Cookie 动态变更自动同步
 chrome.cookies.onChanged.addListener((changeInfo) => {
     if (changeInfo.cookie.domain.includes("zhihu.com")) syncZhihuCookies().catch(() => {});
     if (changeInfo.cookie.domain.includes("weibo.com") || changeInfo.cookie.domain.includes("weibo.cn")) syncWeiboCookies().catch(() => {});
 });
+

@@ -183,10 +183,21 @@ class CSDNScraper(BaseScraper):
         error_msg = None
         
         try:
-            headers = self._get_headers(referer=url)
-            resp = await self.client.get(url, headers=headers, timeout=15.0)
-            if resp.status_code == 200:
-                soup = BeautifulSoup(resp.text, "lxml")
+            resp_text = article_meta.get("raw_html")
+            if not resp_text:
+                headers = self._get_headers(referer=url)
+                resp = await self.client.get(url, headers=headers, timeout=15.0)
+                if resp.status_code == 200:
+                    resp_text = resp.text
+                elif resp.status_code == 404:
+                    error_msg = "HTTP 404 文章已被作者删除或链接无效"
+                elif resp.status_code == 403:
+                    error_msg = "HTTP 403 访问被 CSDN 防护拦截"
+                else:
+                    error_msg = f"CSDN 返回 HTTP {resp.status_code}"
+
+            if resp_text:
+                soup = BeautifulSoup(resp_text, "lxml")
                 
                 title_tag = soup.select_one("#articleContentId, .title-article, h1")
                 if title_tag:

@@ -1,6 +1,6 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
-const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell, nativeImage, session } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const http = require("http");
@@ -9,7 +9,7 @@ const net = require("net");
 const tls = require("tls");
 const url = require("url");
 const os = require("os");
-const { exec, execFile } = require("child_process");
+const { exec, execFile, spawn, execSync } = require("child_process");
 const forge = require("node-forge");
 const docx = require("docx");
 const writeXlsxFile = require("write-excel-file/node");
@@ -28,6 +28,7 @@ const CERTS_DIR = path.join(DATA_DIR, "certs");
 const CACHE_DIR = path.join(DATA_DIR, "cache");
 const DEFAULT_EXPORT_DIR = path.join(os.homedir(), "Downloads", "BlogDistiller文章导出");
 const AUTH_FILE = path.join(DATA_DIR, "auth.json");
+const HISTORY_FILE = path.join(DATA_DIR, "accounts_history.json");
 
 function decodeResponseBody(buffer, encoding) {
     if (!buffer || buffer.length === 0) return "";
@@ -57,6 +58,7 @@ if (!fs.existsSync(DEFAULT_EXPORT_DIR)) fs.mkdirSync(DEFAULT_EXPORT_DIR, { recur
 let mainWindow = null;
 let proxyInstance = null;
 let mpLoginWindow = null;
+let localPythonManager = null;
 
 // 微信凭证状态 (支持客户端嗅探凭证 + 官方公众平台直连 Token)
 let wechatAuth = {
@@ -70,7 +72,8 @@ let wechatAuth = {
     captured_at: null,
     mpToken: "",
     mpCookie: "",
-    mpConnected: false
+    mpConnected: false,
+    lastTrafficAt: 0  // 最近一次嗅探到微信 HTTPS 流量的时间戳，用于判断代理链路是否畅通
 };
 
 const MP_SESSION_PATH = path.join(DATA_DIR, "wechat_session.json");
@@ -118,6 +121,112 @@ class ArticleCacheManager {
             };
             fs.writeFileSync(filePath, JSON.stringify(cache, null, 2), "utf8");
         } catch(e) {}
+    }
+}
+
+// =========================================================================
+// 1.1 本地公众号历史档案库磁盘持久化管理 (AccountHistoryManager)
+// 彻底解决浏览器 localStorage 5MB 限制与重启丢失问题
+// =========================================================================
+class AccountHistoryManager {
+    static getAll() {
+        try {
+            if (fs.existsSync(HISTORY_FILE)) {
+                const raw = fs.readFileSync(HISTORY_FILE, "utf8");
+                const list = JSON.parse(raw);
+                if (Array.isArray(list) && list.length > 0) return list;
+            }
+            // 若历史文件尚无数据，尝试自动从 cache 目录导入旧缓存数据
+            const cacheDir = path.join(DATA_DIR, "cache");
+            if (fs.existsSync(cacheDir)) {
+                const files = fs.readdirSync(cacheDir).filter(f => f.startsWith("articles_") && f.endsWith(".json"));
+                const migrated = [];
+                for (const f of files) {
+                    try {
+                        const raw = fs.readFileSync(path.join(cacheDir, f), "utf8");
+                        const data = JSON.parse(raw);
+                        const urls = Object.keys(data);
+                        if (urls.length > 0) {
+                            const firstArt = data[urls[0]];
+                            const author = firstArt.author || "微信公众号";
+                            const biz = f.replace("articles_", "").replace(".json", "");
+                            const articles = urls.map((u, i) => {
+                                const item = data[u];
+                                return {
+                                    id: `art_${i + 1}`,
+                                    title: item.title || `文章_${i + 1}`,
+                                    author: item.author || author,
+                                    url: u,
+                                    create_time: item.create_time || "",
+                                    digest: item.digest || "",
+                                    is_original: item.is_original !== false,
+                                    biz: biz,
+                                    status: item.content_markdown ? "completed" : "pending"
+                                };
+                            });
+                            migrated.push({
+                                author,
+                                biz,
+                                count: articles.length,
+                                updatedAt: new Date().toLocaleString(),
+                                articles
+                            });
+                        }
+                    } catch(e) {}
+                }
+                if (migrated.length > 0) {
+                    fs.writeFileSync(HISTORY_FILE, JSON.stringify(migrated, null, 2), "utf8");
+                    return migrated;
+                }
+            }
+        } catch(e) {
+            console.error("[AccountHistory] 读取历史档案异常:", e);
+        }
+        return [];
+    }
+
+    static saveAccount(accountData) {
+        if (!accountData || !accountData.articles || accountData.articles.length === 0) return false;
+        try {
+            const list = this.getAll();
+            const key = accountData.biz || accountData.author;
+            const filtered = list.filter(item => {
+                const itemKey = item.biz || item.author;
+                return itemKey !== key;
+            });
+
+            const newItem = {
+                author: accountData.author || "微信公众号",
+                biz: accountData.biz || "",
+                targetUrl: accountData.targetUrl || "",
+                count: accountData.articles.length,
+                updatedAt: accountData.updatedAt || new Date().toLocaleString(),
+                articles: accountData.articles
+            };
+
+            filtered.unshift(newItem);
+            const finalList = filtered.slice(0, 100);
+            fs.writeFileSync(HISTORY_FILE, JSON.stringify(finalList, null, 2), "utf8");
+            return true;
+        } catch(e) {
+            console.error("[AccountHistory] 保存历史档案异常:", e);
+            return false;
+        }
+    }
+
+    static deleteAccount(key) {
+        try {
+            const list = this.getAll();
+            const filtered = list.filter(item => {
+                const itemKey = item.biz || item.author;
+                return itemKey !== key && item.biz !== key && item.author !== key;
+            });
+            fs.writeFileSync(HISTORY_FILE, JSON.stringify(filtered, null, 2), "utf8");
+            return true;
+        } catch(e) {
+            console.error("[AccountHistory] 删除历史档案异常:", e);
+            return false;
+        }
     }
 }
 
@@ -292,6 +401,13 @@ class InterceptProxy {
             const port = parseInt(parts[1] || "443", 10);
 
             if (host === this.target || host.endsWith("weixin.qq.com") || host.endsWith("qq.com")) {
+                // 记录最近一次微信流量时间，并打限频心跳日志（5 秒最多 1 条）
+                wechatAuth.lastTrafficAt = Date.now();
+                const now = Date.now();
+                if (!this._lastConnectLog || now - this._lastConnectLog > 5000) {
+                    this._lastConnectLog = now;
+                    sendDebugLog(`[代理链路] 已截获微信 HTTPS 连接: ${host} (微信流量正经过工具代理 ✓)`, "info");
+                }
                 socket.write("HTTP/1.1 200 Connection Established\r\n\r\n", () => {
                     this.tls.emit("connection", socket);
                     if (head && head.length) socket.unshift(head);
@@ -317,7 +433,17 @@ class InterceptProxy {
         const rawCookie = req.headers["cookie"] || "";
         const reqUrl = req.url || "";
         const referer = req.headers["referer"] || "";
-        
+
+        // 诊断增强：记录所有"首次出现"的请求路径（按路径去重，不再 5 秒限频）。
+        // 目的：当用户在电脑微信里滚动公众号主页时，看清微信客户端到底用哪个接口拉文章列表，
+        // 从而区分"服务器返回空列表"还是"客户端改用了工具未解析的新接口"这两种截然不同的根因。
+        const reqPath = reqUrl.split("?")[0];
+        if (!this._seenReqPaths) this._seenReqPaths = new Set();
+        if (!this._seenReqPaths.has(reqPath)) {
+            this._seenReqPaths.add(reqPath);
+            sendDebugLog(`[代理链路] 新请求路径: ${reqPath}`, "info");
+        }
+
         let bodyChunks = [];
         req.on("data", chunk => bodyChunks.push(chunk));
         req.on("end", () => {
@@ -341,6 +467,13 @@ class InterceptProxy {
             }, (forwardRes) => {
                 const setCookies = forwardRes.headers["set-cookie"] || [];
                 this.parseAndFire(reqUrl, rawCookie, setCookies, "", referer);
+
+                // 微信主页/文章经常通过 302/307 跳转附带全新 key/pass_ticket，
+                // 但跳转目标可能不会再被客户端重新发起，因此在这里主动嗅探 Location。
+                const location = forwardRes.headers["location"];
+                if (location && typeof location === "string" && location.includes("mp.weixin.qq.com")) {
+                    this.parseAndFire(location, "", setCookies, "", referer);
+                }
                 
                 res.writeHead(forwardRes.statusCode, forwardRes.headers);
 
@@ -384,33 +517,60 @@ class InterceptProxy {
 
             if (bodyStr) {
                 try {
-                    const bodyParams = new URLSearchParams(bodyStr);
-                    if (!uin) uin = bodyParams.get("uin") || "";
-                    if (!key) key = bodyParams.get("key") || "";
-                    if (!pass_ticket) pass_ticket = bodyParams.get("pass_ticket") || "";
-                    if (!appmsg_token) appmsg_token = bodyParams.get("appmsg_token") || "";
-                    if (!biz) biz = bodyParams.get("__biz") || "";
+                    if (bodyStr.startsWith("{") && bodyStr.endsWith("}")) {
+                        const jsonBody = JSON.parse(bodyStr);
+                        if (!uin && jsonBody.uin) uin = String(jsonBody.uin);
+                        if (!key && jsonBody.key) key = String(jsonBody.key);
+                        if (!pass_ticket && jsonBody.pass_ticket) pass_ticket = String(jsonBody.pass_ticket);
+                        if (!appmsg_token && jsonBody.appmsg_token) appmsg_token = String(jsonBody.appmsg_token);
+                        if (!biz && jsonBody.__biz) biz = String(jsonBody.__biz);
+                    } else {
+                        const bodyParams = new URLSearchParams(bodyStr);
+                        if (!uin) uin = bodyParams.get("uin") || "";
+                        if (!key) key = bodyParams.get("key") || "";
+                        if (!pass_ticket) pass_ticket = bodyParams.get("pass_ticket") || "";
+                        if (!appmsg_token) appmsg_token = bodyParams.get("appmsg_token") || "";
+                        if (!biz) biz = bodyParams.get("__biz") || "";
+                    }
                 } catch(e) {}
             }
 
-            if (!biz && refererHeader) {
-                const refMatch = refererHeader.match(/__biz=([^&#]+)/);
-                if (refMatch && isValidBiz(decodeURIComponent(refMatch[1]))) {
-                    biz = decodeURIComponent(refMatch[1]);
+            if (refererHeader) {
+                try {
+                    const refUrl = new URL(refererHeader.startsWith("http") ? refererHeader : `https://${this.target}${refererHeader}`);
+                    if (!key) key = refUrl.searchParams.get("key") || "";
+                    if (!uin) uin = refUrl.searchParams.get("uin") || "";
+                    if (!pass_ticket) pass_ticket = refUrl.searchParams.get("pass_ticket") || "";
+                    if (!appmsg_token) appmsg_token = refUrl.searchParams.get("appmsg_token") || "";
+                    if (!biz) {
+                        const refBiz = refUrl.searchParams.get("__biz");
+                        if (refBiz && isValidBiz(refBiz)) biz = refBiz;
+                    }
+                } catch(e) {
+                    const refMatch = refererHeader.match(/__biz=([^&#]+)/);
+                    if (refMatch && isValidBiz(decodeURIComponent(refMatch[1]))) {
+                        biz = decodeURIComponent(refMatch[1]);
+                    }
                 }
             }
 
             let wap_sid2 = "";
             const cookieStr = [cookieHeader, ...setCookies].join("; ");
-            const sidMatch = cookieStr.match(/wap_sid2=([^;]+)/);
+            const sidMatch = cookieStr.match(/(?:^|;\s*)wap_sid2=([^;]+)/);
             if (sidMatch) wap_sid2 = sidMatch[1];
-            const ptMatch = cookieStr.match(/pass_ticket=([^;]+)/);
+            const ptMatch = cookieStr.match(/(?:^|;\s*)pass_ticket=([^;]+)/);
             if (ptMatch && !pass_ticket) pass_ticket = ptMatch[1];
-            const uinMatch = cookieStr.match(/wxuin=([^;]+)/);
+            const uinMatch = cookieStr.match(/(?:^|;\s*)(?:wxuin|uin)=([^;]+)/);
             if (uinMatch && !uin) uin = uinMatch[1];
+            const keyMatch = cookieStr.match(/(?:^|;\s*)key=([^;]+)/);
+            if (keyMatch && !key) key = keyMatch[1];
+            const tokenMatch = cookieStr.match(/(?:^|;\s*)appmsg_token=([^;]+)/);
+            if (tokenMatch && !appmsg_token) appmsg_token = tokenMatch[1];
+
+            const isProfileRequest = reqUrl.includes("profile_ext") || (refererHeader && refererHeader.includes("profile_ext"));
 
             if (key || pass_ticket || wap_sid2 || appmsg_token || biz) {
-                this.onCaptured({ uin, key, pass_ticket, appmsg_token, wap_sid2, biz });
+                this.onCaptured({ uin, key, pass_ticket, appmsg_token, wap_sid2, biz, isProfileRequest });
             }
         } catch(e) {}
     }
@@ -460,10 +620,16 @@ function applyWindowsPac(port, enable) {
 
     if (enable) {
         // 关键：彻底清除任何遗留的 AutoConfigURL，确保 Windows 流量 100% 走 ProxyServer 127.0.0.1:port
-        const cmd = `reg delete "${INET_KEY}" /v AutoConfigURL /f 2>nul & reg add "${INET_KEY}" /v ProxyEnable /t REG_DWORD /d 1 /f & reg add "${INET_KEY}" /v ProxyServer /t REG_SZ /d "127.0.0.1:${port}" /f`;
+        // 同时把 ProxyOverride（绕过列表）重置为仅绕过本地地址，防止残留的 *.qq.com 等条目把微信流量绕过代理
+        const cmd = `reg delete "${INET_KEY}" /v AutoConfigURL /f 2>nul & reg add "${INET_KEY}" /v ProxyEnable /t REG_DWORD /d 1 /f & reg add "${INET_KEY}" /v ProxyServer /t REG_SZ /d "127.0.0.1:${port}" /f & reg add "${INET_KEY}" /v ProxyOverride /t REG_SZ /d "<local>" /f`;
         exec(cmd, () => {
             exec(refreshCmd, () => {
                 console.log(`[BlogDistiller] Windows 系统代理已强制激活: 127.0.0.1:${port}`);
+                // 回读注册表实际状态并输出到诊断日志，方便确认代理是否真的生效
+                exec(`reg query "${INET_KEY}" /v ProxyServer & reg query "${INET_KEY}" /v ProxyOverride 2>nul`, (qErr, qStdout) => {
+                    const state = qStdout ? qStdout.replace(/\s+/g, " ").trim() : "注册表回读失败";
+                    sendDebugLog(`[系统代理] 已激活并广播刷新 (127.0.0.1:${port})。回读状态: ${state}`, "info");
+                });
             });
         });
     } else {
@@ -532,26 +698,139 @@ function sendDebugLog(text, level = "info") {
     }
 }
 
+// 从任意响应体（HTML/JS/JSON）中抓取微信凭证，解决 key 只出现在页面脚本或 JSON 中的情况。
+function extractAuthFromBody(resBodyStr, reqUrl = "") {
+    if (!resBodyStr) return;
+    const payload = resBodyStr;
+    const keyM = payload.match(/["']?key["']?\s*[:=]\s*["']([a-f0-9]{32,})["']/i) ||
+                 payload.match(/var\s+key\s*=\s*["']([a-f0-9]{32,})["']/i);
+    const passM = payload.match(/["']?pass_ticket["']?\s*[:=]\s*["']([^"']+)["']/i) ||
+                  payload.match(/var\s+pass_ticket\s*=\s*["']([^"']+)["']/i);
+    const tokenM = payload.match(/["']?appmsg_token["']?\s*[:=]\s*["']([^"']+)["']/i) ||
+                   payload.match(/var\s+appmsg_token\s*=\s*["']([^"']+)["']/i);
+    const bizM = payload.match(/["']?__?biz["']?\s*[:=]\s*["']([A-Za-z0-9+/=]{10,})["']/i) ||
+                 payload.match(/var\s+biz\s*=\s*["']([A-Za-z0-9+/=]{10,})["']/i);
+    if (keyM || passM || tokenM) {
+        const tokenMatch = reqUrl.match(/profile_ext\?([^\s]*)/);
+        const isProfileRequest = tokenMatch ? tokenMatch[0].includes("action=home") || tokenMatch[0].includes("action=getmsg") : false;
+        handleCapturedAuth({
+            key: keyM ? keyM[1] : undefined,
+            pass_ticket: passM ? passM[1] : undefined,
+            appmsg_token: tokenM ? tokenM[1] : undefined,
+            biz: bizM ? bizM[1] : undefined,
+            isProfileRequest
+        });
+    }
+}
+
 function parseResponseArticles(reqUrl, resBodyStr) {
     if (!resBodyStr) return;
 
-    sendDebugLog(`[微信嗅探] 收到响应: ${reqUrl.slice(0, 80)} (${resBodyStr.length} 字符)`, "info");
+    // 恢复 v1.0 的嗅探活动日志（限频 5 秒防刷屏）：让用户能在诊断日志里直观看到嗅探通道是否在工作
+    const sniffNow = Date.now();
+    if (!parseResponseArticles._lastLog || sniffNow - parseResponseArticles._lastLog > 5000) {
+        parseResponseArticles._lastLog = sniffNow;
+        sendDebugLog(`[微信嗅探] 收到响应: ${reqUrl.slice(0, 80)} (${resBodyStr.length} 字符)`, "info");
+    }
 
-    // 尝试从页面或响应中提取公众号名称
+    // 任何响应都可能携带新 key/pass_ticket/appmsg_token，先在响应体里抓一次凭证。
+    extractAuthFromBody(resBodyStr, reqUrl);
+
+    // 调试采样：把嗅探到的 profile_ext 响应全文保存到本地（带时间戳，永不覆盖），
+    // 供离线分析微信真实数据结构。这是定位"嗅探到主页响应却提取不到文章"的决定性手段。
+    if (reqUrl.includes("profile_ext")) {
+        try {
+            const now = new Date();
+            const ts = `${now.getHours().toString().padStart(2,"0")}${now.getMinutes().toString().padStart(2,"0")}${now.getSeconds().toString().padStart(2,"0")}_${now.getMilliseconds().toString().padStart(3,"0")}`;
+            const isGetmsg = reqUrl.includes("action=getmsg");
+            const actionTag = isGetmsg ? "getmsg" : "home";
+            const sampleFile = path.join(DATA_DIR, `debug_${actionTag}_${ts}.${isGetmsg ? "json" : "html"}`);
+            fs.writeFileSync(sampleFile, resBodyStr, "utf8");
+            // 同步保存一份当前最新副本，方便快速查看
+            const latestFile = path.join(DATA_DIR, isGetmsg ? "debug_last_getmsg.json" : "debug_last_home.html");
+            fs.writeFileSync(latestFile, resBodyStr, "utf8");
+            if (!isGetmsg) {
+                const rawMsg = extractMsgListFromHtml(resBodyStr);
+                const parsedPreview = parseMsgListRaw(rawMsg || "");
+                // 打印主页 HTML 的关键特征，并保存提取到的 msgList 原始字符串，便于定位解析失败点
+                const feat = {
+                    长度: resBodyStr.length,
+                    "var_msgList": /var\s+msgList/.test(resBodyStr),
+                    "msgList赋值": /msgList\s*=/.test(resBodyStr),
+                    "window_msgList": /window\s*\.\s*msgList/.test(resBodyStr),
+                    "含getmsg接口串": resBodyStr.includes("action=getmsg"),
+                    "文章链接数": (resBodyStr.match(/mp\.weixin\.qq\.com\/s\?__biz/g) || []).length,
+                    "含home_page_list": resBodyStr.includes("home_page_list"),
+                    "含general_msg_list": resBodyStr.includes("general_msg_list"),
+                    "是否验证页": resBodyStr.includes("请在微信客户端打开链接"),
+                    "提取rawMsg长度": rawMsg ? rawMsg.length : 0,
+                    "解析后列表长度": parsedPreview.length
+                };
+                sendDebugLog(`[主页采样] 已保存 ${sampleFile}。特征: ${JSON.stringify(feat)}`, "info");
+                if (rawMsg) {
+                    fs.writeFileSync(path.join(DATA_DIR, `debug_home_${ts}_raw.txt`), rawMsg, "utf8");
+                } else if (/msgList/i.test(resBodyStr)) {
+                    // msgList 存在但提取失败：保存其前后 600 字符片段，直接看清微信当前的赋值格式
+                    const idx = resBodyStr.search(/msgList/i);
+                    const snippet = resBodyStr.slice(Math.max(0, idx - 100), idx + 500);
+                    fs.writeFileSync(path.join(DATA_DIR, `debug_home_${ts}_snippet.txt`), snippet, "utf8");
+                    sendDebugLog(`[主页采样] msgList 提取失败，已保存上下文片段至 debug_home_${ts}_snippet.txt`, "warn");
+                }
+            } else {
+                sendDebugLog(`[分页采样] 已保存 ${sampleFile} (${resBodyStr.length} 字符)`, "info");
+            }
+        } catch(e) {}
+    }
+
+    // 尝试从页面或响应中提取公众号名称与 biz
     let detectedAuthor = wechatAuth.author || "微信公众号";
-    const nickMatch = resBodyStr.match(/var\s+nickname\s*=\s*"([^"]+)"/i) || resBodyStr.match(/<a[^>]*id="js_name"[^>]*>([\s\S]*?)<\/a>/i);
-    if (nickMatch && nickMatch[1].trim()) {
-        detectedAuthor = unescapeWechatText(nickMatch[1].replace(/<[^>]+>/g, ""));
-        wechatAuth.author = detectedAuthor;
+    
+    // 多维度智能提取公众号名称 (支持微信最新桌面版/H5/LiteApp等各种模板)
+    const nickPatterns = [
+        /var\s+nickname\s*=\s*['"]([^'"]+)['"]/i,
+        /<strong[^>]*class="[^"]*profile_nickname[^"]*"[^>]*>([\s\S]*?)<\/strong>/i,
+        /<a[^>]*id="js_name"[^>]*>([\s\S]*?)<\/a>/i,
+        /<div[^>]*class="[^"]*profile_nickname[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+        /<p[^>]*class="[^"]*profile_account_name[^"]*"[^>]*>([\s\S]*?)<\/p>/i,
+        /"nickname"\s*:\s*["']([^"']+)["']/i,
+        /"author"\s*:\s*["']([^"']+)["']/i,
+        /<meta\s+property="og:title"\s+content="([^"]+)"/i
+    ];
+
+    for (const p of nickPatterns) {
+        const m = resBodyStr.match(p);
+        if (m && m[1] && m[1].trim()) {
+            const clean = unescapeWechatText(m[1].replace(/<[^>]+>/g, "").trim());
+            if (clean && !clean.includes("微信") && !clean.includes("JavaScript") && !clean.includes("页面不存在") && clean.length <= 40) {
+                detectedAuthor = clean;
+                wechatAuth.author = clean;
+                break;
+            } else if (clean && clean !== "微信公众号" && clean.length <= 40) {
+                detectedAuthor = clean;
+                wechatAuth.author = clean;
+            }
+        }
+    }
+    if (!detectedAuthor || detectedAuthor === "微信公众号") {
+        if (wechatAuth.author && wechatAuth.author !== "微信公众号") {
+            detectedAuthor = wechatAuth.author;
+        }
+    }
+
+    const detectedBiz = extractWechatBiz(reqUrl, resBodyStr, wechatAuth.biz);
+    if (detectedBiz && isValidBiz(detectedBiz)) {
+        wechatAuth.biz = detectedBiz;
+        sendDebugLog(`[微信嗅探] 成功锁定公众号【${detectedAuthor}】(biz: ${detectedBiz})`, "success");
     }
 
     // 1. profile_ext?action=getmsg (分页历史文章列表)
     if (reqUrl.includes("profile_ext") && reqUrl.includes("action=getmsg")) {
         try {
             const data = JSON.parse(resBodyStr);
-            if (data.general_msg_list) {
-                const listObj = typeof data.general_msg_list === "string" ? JSON.parse(data.general_msg_list) : data.general_msg_list;
-                const msgList = listObj.list || [];
+            const rawList = data.general_msg_list || data.msg_list || data.app_msg_list || data.list || data.home_page_list;
+            if (rawList) {
+                const listObj = typeof rawList === "string" ? JSON.parse(rawList) : rawList;
+                const msgList = Array.isArray(listObj) ? listObj : (listObj.list || listObj.app_msg_list || []);
                 const extracted = [];
                 for (const item of msgList) {
                     const comm = item.comm_msg_info || {};
@@ -573,6 +852,27 @@ function parseResponseArticles(reqUrl, resBodyStr) {
                             status: "pending",
                             fail_reason: ""
                         });
+                    }
+                    if (appInfo.multi_app_msg_item_list && Array.isArray(appInfo.multi_app_msg_item_list)) {
+                        for (let subIdx = 0; subIdx < appInfo.multi_app_msg_item_list.length; subIdx++) {
+                            const sub = appInfo.multi_app_msg_item_list[subIdx];
+                            if (sub.title && sub.content_url) {
+                                const cleanSubUrl = sub.content_url.replace(/&amp;/g, "&");
+                                extracted.push({
+                                    id: `art_${comm.id || Date.now()}_${subIdx + 1}`,
+                                    title: sub.title.replace(/<[^>]+>/g, "").trim(),
+                                    author: detectedAuthor,
+                                    url: cleanSubUrl.startsWith("http") ? cleanSubUrl : `https://mp.weixin.qq.com${cleanSubUrl}`,
+                                    create_time,
+                                    digest: sub.digest || "",
+                                    cover: sub.cover || "",
+                                    is_original: sub.copyright_stat === 11 || sub.copyright_stat === 1,
+                                    biz: wechatAuth.biz,
+                                    status: "pending",
+                                    fail_reason: ""
+                                });
+                            }
+                        }
                     }
                 }
                 if (extracted.length > 0) {
@@ -588,11 +888,10 @@ function parseResponseArticles(reqUrl, resBodyStr) {
     // 2. profile_ext?action=home 或 authorpage (主页首屏历史文章)
     if (reqUrl.includes("profile_ext") || reqUrl.includes("authorpage") || reqUrl.includes("homepage")) {
         try {
-            const msgListMatch = resBodyStr.match(/var\s+msgList\s*=\s*'([^']+)'/i) || resBodyStr.match(/var\s+msgList\s*=\s*({[\s\S]*?});/i);
-            if (msgListMatch) {
-                const raw = msgListMatch[1].replace(/\\x26quot;/g, '"').replace(/&quot;/g, '"');
-                const listObj = JSON.parse(raw);
-                const msgList = listObj.list || [];
+            // 使用可靠的引号配对扫描提取 msgList（旧正则会把 {\"list\" 截断成 "{" 导致解析必败）
+            const rawMsg = extractMsgListFromHtml(resBodyStr);
+            if (rawMsg) {
+                const msgList = parseMsgListRaw(rawMsg);
                 const extracted = [];
                 for (const item of msgList) {
                     const comm = item.comm_msg_info || {};
@@ -614,6 +913,27 @@ function parseResponseArticles(reqUrl, resBodyStr) {
                             status: "pending",
                             fail_reason: ""
                         });
+                    }
+                    if (appInfo.multi_app_msg_item_list && Array.isArray(appInfo.multi_app_msg_item_list)) {
+                        for (let subIdx = 0; subIdx < appInfo.multi_app_msg_item_list.length; subIdx++) {
+                            const sub = appInfo.multi_app_msg_item_list[subIdx];
+                            if (sub.title && sub.content_url) {
+                                const cleanSubUrl = sub.content_url.replace(/&amp;/g, "&");
+                                extracted.push({
+                                    id: `art_${comm.id || Date.now()}_${subIdx + 1}`,
+                                    title: sub.title.replace(/<[^>]+>/g, "").trim(),
+                                    author: detectedAuthor,
+                                    url: cleanSubUrl.startsWith("http") ? cleanSubUrl : `https://mp.weixin.qq.com${cleanSubUrl}`,
+                                    create_time,
+                                    digest: sub.digest || "",
+                                    cover: sub.cover || "",
+                                    is_original: sub.copyright_stat === 11 || sub.copyright_stat === 1,
+                                    biz: wechatAuth.biz,
+                                    status: "pending",
+                                    fail_reason: ""
+                                });
+                            }
+                        }
                     }
                 }
                 if (extracted.length > 0) {
@@ -641,41 +961,49 @@ function parseResponseArticles(reqUrl, resBodyStr) {
 
     // 4. 通用微信文章流遍历扫描 (覆盖搜一搜、合集、推荐、主页历史流等所有页面)
     try {
+        const normalizedStr = resBodyStr.replace(/\\\//g, "/");
         const urlPattern = /(?:https?:)?\/\/mp\.weixin\.qq\.com\/s(?:\/|(?:\?[^"'\s<>]*))/g;
         let match;
         const autoExtracted = [];
         const seenUrls = new Set();
-        while ((match = urlPattern.exec(resBodyStr)) !== null) {
+        while ((match = urlPattern.exec(normalizedStr)) !== null) {
             let rawUrl = match[0];
             if (rawUrl.startsWith("//")) rawUrl = "https:" + rawUrl;
             const cleanUrl = rawUrl.replace(/&amp;/g, "&").replace(/\\x26/g, "&");
             if (!seenUrls.has(cleanUrl)) {
                 seenUrls.add(cleanUrl);
-                const startPos = Math.max(0, match.index - 400);
-                const endPos = Math.min(resBodyStr.length, match.index + 400);
-                const snippet = resBodyStr.slice(startPos, endPos);
+                const startPos = Math.max(0, match.index - 600);
+                const endPos = Math.min(normalizedStr.length, match.index + 600);
+                const snippet = normalizedStr.slice(startPos, endPos);
                 
                 const titleMatch = snippet.match(/"title"\s*:\s*"([^"]+)"/) ||
+                                   snippet.match(/"msg_title"\s*:\s*"([^"]+)"/) ||
                                    snippet.match(/title="([^"]+)"/) ||
-                                   snippet.match(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/) ||
+                                   snippet.match(/data-title="([^"]+)"/) ||
+                                   snippet.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/) ||
                                    snippet.match(/<a[^>]+>([\s\S]*?)<\/a>/);
                 
                 let title = titleMatch ? unescapeWechatText(titleMatch[1].replace(/<[^>]+>/g, "")) : "";
-                if (title && title.length > 2 && !title.includes("weixin.qq.com") && !title.includes("JavaScript")) {
-                    autoExtracted.push({
-                        id: `art_${Date.now()}_${autoExtracted.length}`,
-                        title,
-                        author: detectedAuthor,
-                        url: cleanUrl,
-                        create_time: "",
-                        digest: "",
-                        cover: "",
-                        is_original: true,
-                        biz: wechatAuth.biz || "",
-                        status: "pending",
-                        fail_reason: ""
-                    });
+                if (!title || title.length <= 2 || title.includes("weixin.qq.com") || title.includes("JavaScript")) {
+                    title = `推文_${autoExtracted.length + 1}`;
                 }
+
+                const timeMatch = snippet.match(/"datetime"\s*:\s*([0-9]{9,11})/) || snippet.match(/"create_time"\s*:\s*([0-9]{9,11})/);
+                const create_time = timeMatch ? new Date(parseInt(timeMatch[1], 10) * 1000).toISOString().split("T")[0] : "";
+
+                autoExtracted.push({
+                    id: `art_${Date.now()}_${autoExtracted.length}`,
+                    title,
+                    author: detectedAuthor,
+                    url: cleanUrl,
+                    create_time,
+                    digest: "",
+                    cover: "",
+                    is_original: true,
+                    biz: wechatAuth.biz || "",
+                    status: "pending",
+                    fail_reason: ""
+                });
             }
         }
         if (autoExtracted.length > 0) {
@@ -689,8 +1017,20 @@ function parseResponseArticles(reqUrl, resBodyStr) {
 
 let lastLoggedKey = "";
 function handleCapturedAuth(data) {
-    const isNewKey = data.key && data.key !== wechatAuth.key;
+    // 保存旧凭证，用于判断本次嗅探是否带来了新的会话要素
+    const prevKey = wechatAuth.key;
+    const prevPassTicket = wechatAuth.pass_ticket;
+    const prevWapSid2 = wechatAuth.wap_sid2;
+
+    const isNewKey = Boolean(data.key && data.key !== prevKey);
+    const isNewPassTicket = Boolean(data.pass_ticket && data.pass_ticket !== prevPassTicket);
+    const isNewWapSid2 = Boolean(data.wap_sid2 && data.wap_sid2 !== prevWapSid2);
+
+    // 关键修复：用展开运算符保留 mpToken/mpCookie/mpConnected/lastTrafficAt 等字段，
+    // 否则每次嗅探到新凭证都会把"官方扫码通道已连接"的状态整体抹掉，
+    // 导致界面上官方通道显示退回"未连接"、链路自检永远误报"流量未经过代理"。
     wechatAuth = {
+        ...wechatAuth,
         captured: true,
         uin: data.uin || wechatAuth.uin,
         key: data.key || wechatAuth.key,
@@ -698,25 +1038,30 @@ function handleCapturedAuth(data) {
         appmsg_token: data.appmsg_token || wechatAuth.appmsg_token,
         wap_sid2: data.wap_sid2 || wechatAuth.wap_sid2,
         biz: (data.biz && isValidBiz(data.biz)) ? data.biz : wechatAuth.biz,
-        captured_at: new Date().toLocaleTimeString()
+        author: data.author || wechatAuth.author || "",
+        captured_at: new Date().toLocaleTimeString(),
+        // 新增：毫秒级时间戳。此前只存 toLocaleTimeString()（如 "10:30:45"），
+        // 渲染层 new Date() 解析不出日期，导致 30 分钟凭证倒计时永远显示满格。
+        captured_ts: Date.now()
     };
     try {
         fs.writeFileSync(AUTH_FILE, JSON.stringify(wechatAuth, null, 2), "utf8");
     } catch(e) {}
 
-    if (isNewKey && wechatAuth.key !== lastLoggedKey) {
+    if ((isNewKey || isNewPassTicket || isNewWapSid2) && wechatAuth.key !== lastLoggedKey) {
         lastLoggedKey = wechatAuth.key;
-        sendDebugLog(`[通信状态] 成功截获并更新微信最新会话凭证 (uin: ${wechatAuth.uin || "已具备"}, key: ${wechatAuth.key ? wechatAuth.key.slice(0, 8) + "..." : "已具备"})`, "success");
+        sendDebugLog(`[通信状态] 成功截获并更新微信最新会话凭证 (uin: ${wechatAuth.uin || "已具备"}, key: ${wechatAuth.key ? wechatAuth.key.slice(0, 8) + "..." : "已具备"}, pass_ticket: ${wechatAuth.pass_ticket ? "已具备" : "缺省"})`, "success");
     }
     if (mainWindow) {
         mainWindow.webContents.send("wechat:status-change", wechatAuth);
     }
 
-    // 自动触发全量文章拉取
+    // 自动触发全量文章拉取（恢复 v1.0 可用版行为：只要嗅探到任何微信会话活动且有凭证，立即重试待办任务。
+    // 反重力版本收紧为"必须凭证更新才触发"，导致用户打开文章/主页后软件经常不自动重试，表现为"获取不到"）
     if (pendingAutoFetchTarget && (wechatAuth.key || wechatAuth.pass_ticket || wechatAuth.wap_sid2)) {
         const targetInfo = pendingAutoFetchTarget;
         pendingAutoFetchTarget = null;
-        sendDebugLog(`[自动就绪] 凭证已就绪，立即自动触发对【${targetInfo.author || "公众号"}】的全量历史文章拉取！`, "info");
+        sendDebugLog(`[自动就绪] 嗅探到微信会话活动，立即自动触发对【${targetInfo.author || "公众号"}】的全量历史文章拉取！`, "info");
         if (mainWindow) {
             mainWindow.webContents.send("wechat:auto-trigger-search", targetInfo);
         }
@@ -740,8 +1085,14 @@ function fetchPageHtml(targetUrl, maxRedirects = 5) {
         const cookieArr = [];
         if (wechatAuth.wap_sid2) cookieArr.push(`wap_sid2=${wechatAuth.wap_sid2}`);
         if (wechatAuth.pass_ticket) cookieArr.push(`pass_ticket=${wechatAuth.pass_ticket}`);
-        if (wechatAuth.uin) cookieArr.push(`wxuin=${wechatAuth.uin}`);
+        const safeUin = formatWechatUin(wechatAuth.uin);
+        if (safeUin) {
+            cookieArr.push(`wxuin=${safeUin}`);
+            cookieArr.push(`uin=${safeUin}`);
+        }
+        if (wechatAuth.key) cookieArr.push(`key=${wechatAuth.key}`);
         if (cookieArr.length > 0) options.headers["cookie"] = cookieArr.join("; ");
+        options.headers["referer"] = "https://mp.weixin.qq.com/";
 
         mod.get(options, (res) => {
             if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
@@ -845,10 +1196,174 @@ function parseSingleArticleFromHtml(html, targetUrl) {
 function formatWechatUin(uin) {
     if (!uin) return "";
     const str = uin.toString().trim();
+    // 新版微信桌面端在某些请求里会把 uin 以纯数字形式暴露出来，
+    // 而 profile_ext 接口约定参数为 base64，因此这里做兼容转换。
     if (/^\d+$/.test(str)) {
         return Buffer.from(str).toString("base64");
     }
     return str;
+}
+
+// 通用转换 msgList/app_msg_list 中为文章对象
+function parseWechatMsgList(msgList, author, biz) {
+    const result = [];
+    for (const item of msgList) {
+        const comm = item.comm_msg_info || {};
+        const appInfo = item.app_msg_ext_info;
+        if (!appInfo) continue;
+
+        const create_time = comm.datetime ? new Date(comm.datetime * 1000).toISOString().split("T")[0] : "";
+
+        // 头条文章
+        if (appInfo.title && appInfo.content_url) {
+            const cleanUrl = appInfo.content_url.replace(/&amp;/g, "&");
+            result.push({
+                id: `art_${comm.id || Date.now()}_0`,
+                title: appInfo.title.replace(/<[^>]+>/g, "").trim(),
+                author,
+                url: cleanUrl.startsWith("http") ? cleanUrl : `https://mp.weixin.qq.com${cleanUrl}`,
+                create_time,
+                digest: appInfo.digest || "",
+                cover: appInfo.cover || "",
+                is_original: appInfo.copyright_stat === 11 || appInfo.copyright_stat === 1,
+                biz,
+                status: "pending",
+                fail_reason: ""
+            });
+        }
+
+        // 次条与多图文
+        if (appInfo.multi_app_msg_item_list && Array.isArray(appInfo.multi_app_msg_item_list)) {
+            for (let subIdx = 0; subIdx < appInfo.multi_app_msg_item_list.length; subIdx++) {
+                const sub = appInfo.multi_app_msg_item_list[subIdx];
+                if (sub.title && sub.content_url) {
+                    const cleanSubUrl = sub.content_url.replace(/&amp;/g, "&");
+                    result.push({
+                        id: `art_${comm.id || Date.now()}_${subIdx + 1}`,
+                        title: sub.title.replace(/<[^>]+>/g, "").trim(),
+                        author,
+                        url: cleanSubUrl.startsWith("http") ? cleanSubUrl : `https://mp.weixin.qq.com${cleanSubUrl}`,
+                        create_time,
+                        digest: sub.digest || "",
+                        cover: sub.cover || "",
+                        is_original: sub.copyright_stat === 11 || sub.copyright_stat === 1,
+                        biz,
+                        status: "pending",
+                        fail_reason: ""
+                    });
+                }
+            }
+        }
+    }
+    return result;
+}
+
+// 从主页 HTML 中提取 msgList 原始字符串（兼容单引号转义、双引号、裸对象三种格式）。
+// 关键修复：旧正则 ['"]([^'"]+)['"] 遇到 {\"list\" 里的双引号会把内容截断成单个 "{"，
+// 导致 JSON.parse 在 position 1 报错，主页首屏文章永远解析不出来（该 bug 在 v1.0 就存在，只是被静默吞掉）。
+function extractMsgListFromHtml(html) {
+    if (!html) return null;
+    // 方式1：var msgList = '...'; —— 引号包裹，内部双引号带反斜杠转义（微信主页标准格式）
+    const startMatch = html.match(/var\s+msgList\s*=\s*(['"])/i);
+    if (startMatch) {
+        const quote = startMatch[1];
+        const startPos = startMatch.index + startMatch[0].length;
+        // 手动扫描配对的结束引号，正确跳过反斜杠转义的字符（\" 不会误判为结束），
+        // 并要求结束引号后必须是语句终结符（; , } 或换行），避免 JSON 内容里的裸引号（如标题 It's）误判
+        let end = -1;
+        for (let i = startPos; i < html.length; i++) {
+            const ch = html[i];
+            if (ch === "\\") { i++; continue; }
+            if (ch === quote) {
+                const rest = html.slice(i + 1, i + 8);
+                if (/^\s*[;,}\r\n]/.test(rest)) { end = i; break; }
+            }
+        }
+        if (end > startPos) {
+            let raw = html.slice(startPos, end);
+            // 内容是 JSON 字符串字面量（含 \" 等转义序列），按 JSON 字面量整体解码还原
+            try { raw = JSON.parse('"' + raw + '"'); } catch(e) {
+                // 解码失败则手动还原常见转义后继续
+                raw = raw.replace(/\\"/g, '"');
+            }
+            return raw;
+        }
+    }
+    // 方式2：裸 JSON 对象 var msgList = {...};
+    const objMatch = html.match(/var\s+msgList\s*=\s*([{\[][\s\S]*?[}\]])\s*;/i);
+    if (objMatch) return objMatch[1];
+    return null;
+}
+
+// 把 msgList 原始字符串解析为微信消息列表数组（清理 HTML 实体后 JSON.parse）
+function parseMsgListRaw(raw) {
+    if (!raw) return [];
+    try {
+        const cleaned = String(raw)
+            .replace(/\\x26quot;/g, '"')
+            .replace(/&quot;/g, '"')
+            .replace(/&amp;/g, "&");
+        const listObj = JSON.parse(cleaned);
+        return Array.isArray(listObj) ? listObj : (listObj.list || listObj.app_msg_list || []);
+    } catch(e) {
+        return [];
+    }
+}
+
+// 当 profile_ext?action=getmsg 返回空列表时，尝试直接请求公众号主页 HTML 并解析首屏 msgList。
+// 这是为了兼容某些场景：桌面微信的 getmsg 接口会要求"主页专属 key"，但主页 HTML 内嵌了首屏历史。
+async function fetchProfileHomeFallback(biz, author, safeUin, baseHeaders) {
+    sendDebugLog(`[Home页兜底] getmsg 接口首屏为空，尝试请求公众号主页 HTML 解析首屏历史文章...`, "info");
+
+    const homeParams = new URLSearchParams({
+        action: "home",
+        __biz: biz,
+        scene: "124",
+        uin: safeUin,
+        key: wechatAuth.key || "",
+        pass_ticket: wechatAuth.pass_ticket || "",
+        appmsg_token: wechatAuth.appmsg_token || ""
+    });
+    const homeUrl = `https://mp.weixin.qq.com/mp/profile_ext?${homeParams.toString()}#wechat_redirect`;
+
+    const headers = {
+        ...baseHeaders,
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "referer": `https://mp.weixin.qq.com/mp/profile_ext?action=home&__biz=${biz}&scene=124#wechat_redirect`
+    };
+
+    try {
+        const html = await new Promise((resolve, reject) => {
+            const req = https.get(homeUrl, { headers }, (res) => {
+                let text = "";
+                res.on("data", chunk => text += chunk);
+                res.on("end", () => resolve(text));
+            });
+            req.on("error", reject);
+            req.setTimeout(15000, () => req.destroy(new Error("主页请求超时")));
+        });
+
+        // 使用可靠的引号配对扫描提取 msgList（旧正则会把 {\"list\" 截断成 "{" 导致解析必败）
+        const rawMsg = extractMsgListFromHtml(html);
+        if (!rawMsg) {
+            // 打印主页 HTML 的关键特征，便于判断微信返回的是验证页还是正常主页
+            const isVerifyPage = html.includes("请在微信客户端打开链接") || html.includes("环境异常");
+            sendDebugLog(`[Home页兜底] 主页 HTML 中未找到 msgList 字段，兜底失败。(HTML长度: ${html.length}, 是否验证页: ${isVerifyPage ? "是——微信拒绝了本次请求" : "否"})`, "warn");
+            return { articles: [] };
+        }
+
+        const msgList = parseMsgListRaw(rawMsg);
+        const parsed = parseWechatMsgList(msgList, author, biz);
+        if (parsed.length > 0) {
+            sendDebugLog(`[Home页兜底] 成功从主页 HTML 解析到 ${parsed.length} 篇首屏文章`, "success");
+        } else {
+            sendDebugLog(`[Home页兜底] 主页 msgList 解析成功但未提取到文章 (list长度: ${msgList.length})。`, "warn");
+        }
+        return { articles: parsed };
+    } catch(err) {
+        sendDebugLog(`[Home页兜底] 主页兜底异常: ${err.message}`, "warn");
+        return { articles: [] };
+    }
 }
 
 // 多页并发/翻页抓取全部历史文章
@@ -870,6 +1385,8 @@ async function fetchWechatHistoryArticles(biz, author = "微信公众号", maxAr
     sendDebugLog(`[凭证参数] uin=${safeUin || "缺省"}, key=${wechatAuth.key ? wechatAuth.key.slice(0, 8) + "..." : "缺省"}, pass_ticket=${wechatAuth.pass_ticket ? "已具备" : "缺省"}, wap_sid2=${wechatAuth.wap_sid2 ? "已具备" : "缺省"}`, "info");
 
     while (hasMore) {
+        const articlesBeforePage = articles.length;
+
         const queryParams = new URLSearchParams({
             action: "getmsg",
             __biz: biz,
@@ -920,61 +1437,86 @@ async function fetchWechatHistoryArticles(biz, author = "微信公众号", maxAr
             req.setTimeout(12000, () => req.destroy(new Error("网络请求超时")));
         });
 
+        // 更详细的诊断输出（包含接口调用 URL 与部分响应内容），便于排查"有凭证但拿不到列表"
+        // 日志中脱敏 key/pass_ticket/appmsg_token，避免敏感凭证留在本地诊断记录中
+        if (resData.ret !== 0 || !resData.general_msg_list) {
+            let preview = String(resData.errmsg || "");
+            if (resData.ret === 0) {
+                // ret=0 却没有文章列表：打印完整响应结构（脱敏），定位微信到底返回了什么
+                try {
+                    const safeJson = JSON.stringify(resData)
+                        .replace(/"key":"[^"]+"/g, '"key":"***"')
+                        .replace(/"pass_ticket":"[^"]+"/g, '"pass_ticket":"***"')
+                        .replace(/"appmsg_token":"[^"]+"/g, '"appmsg_token":"***"');
+                    preview = `keys=[${Object.keys(resData).join(",")}] body=${safeJson.slice(0, 300)}`;
+                } catch(e) {}
+            }
+            const safeUrl = apiUrl
+                .replace(/key=[^&]+/g, "key=***")
+                .replace(/pass_ticket=[^&]+/g, "pass_ticket=***")
+                .replace(/appmsg_token=[^&]+/g, "appmsg_token=***");
+            sendDebugLog(`[接口调试] offset=${offset}, URL=${safeUrl}, 响应预览: ${preview.slice(0, 320) || "(empty)"}`, "info");
+        }
+
         sendDebugLog(`[接口返回] 偏移量 offset=${offset}, 微信响应: ret=${resData.ret}, errmsg="${resData.errmsg || "ok"}"`, resData.ret === 0 ? "success" : "warn");
 
-        if (resData.ret === 0 && resData.general_msg_list) {
+        if (resData.ret === 0) {
             rateLimitRetries = 0;
-            const listObj = typeof resData.general_msg_list === "string" ? JSON.parse(resData.general_msg_list) : resData.general_msg_list;
-            const msgList = listObj.list || [];
+            let msgList = [];
+            const rawList = resData.general_msg_list || resData.msg_list || resData.app_msg_list || resData.list || resData.home_page_list;
+            if (rawList) {
+                try {
+                    const listObj = typeof rawList === "string" ? JSON.parse(rawList) : rawList;
+                    msgList = Array.isArray(listObj) ? listObj : (listObj.list || listObj.app_msg_list || []);
+                } catch(e) {}
+            }
 
-            for (const item of msgList) {
-                const comm = item.comm_msg_info || {};
-                const appInfo = item.app_msg_ext_info;
-                if (!appInfo) continue;
-
-                const create_time = comm.datetime ? new Date(comm.datetime * 1000).toISOString().split("T")[0] : "";
-                
-                // 头条文章
-                if (appInfo.title && appInfo.content_url) {
-                    const cleanUrl = appInfo.content_url.replace(/&amp;/g, "&");
-                    articles.push({
-                        id: `art_${comm.id || Date.now()}_0`,
-                        title: appInfo.title.replace(/<[^>]+>/g, "").trim(),
-                        author,
-                        url: cleanUrl.startsWith("http") ? cleanUrl : `https://mp.weixin.qq.com${cleanUrl}`,
-                        create_time,
-                        digest: appInfo.digest || "",
-                        cover: appInfo.cover || "",
-                        is_original: appInfo.copyright_stat === 11 || appInfo.copyright_stat === 1,
-                        biz,
-                        status: "pending",
-                        fail_reason: ""
-                    });
+            // 首屏就为空时，先尝试主页 HTML 兜底解析，避免直接报错
+            if (msgList.length === 0 && offset === 0) {
+                const fallback = await fetchProfileHomeFallback(biz, author, safeUin, headers);
+                if (fallback.articles.length > 0) {
+                    articles.push(...fallback.articles);
+                    if (progressCb) progressCb(`已快速索引 ${articles.length} 篇文章目录...`, articles.length, maxArticles || articles.length, [...articles]);
+                    if (maxArticles > 0 && articles.length >= maxArticles) {
+                        articles = articles.slice(0, maxArticles);
+                    }
+                    // 主页兜底通常只有首屏，结束循环
+                    hasMore = false;
+                    break;
                 }
 
-                // 次条与多图文
-                if (appInfo.multi_app_msg_item_list && Array.isArray(appInfo.multi_app_msg_item_list)) {
-                    for (let subIdx = 0; subIdx < appInfo.multi_app_msg_item_list.length; subIdx++) {
-                        const sub = appInfo.multi_app_msg_item_list[subIdx];
-                        if (sub.title && sub.content_url) {
-                            const cleanSubUrl = sub.content_url.replace(/&amp;/g, "&");
-                            articles.push({
-                                id: `art_${comm.id || Date.now()}_${subIdx + 1}`,
-                                title: sub.title.replace(/<[^>]+>/g, "").trim(),
-                                author,
-                                url: cleanSubUrl.startsWith("http") ? cleanSubUrl : `https://mp.weixin.qq.com${cleanSubUrl}`,
-                                create_time,
-                                digest: sub.digest || "",
-                                cover: sub.cover || "",
-                                is_original: sub.copyright_stat === 11 || sub.copyright_stat === 1,
-                                biz,
-                                status: "pending",
-                                fail_reason: ""
-                            });
+                // 关键自愈：嗅探通道列表为空但已连通官方通道时，直接自动切换官方接口拉取。
+                // 官方 search_biz + appmsg 接口能拉到"发布+群发"全部记录，不受新旧号/客户端版本影响。
+                if (wechatAuth.mpConnected && wechatAuth.mpToken && author && author !== "微信公众号") {
+                    sendDebugLog(`[自动切换] 嗅探通道历史列表为空，自动切换微信公众平台官方通道拉取【${author}】...`, "info");
+                    try {
+                        const official = await fetchArticlesViaMpOfficial(author, maxArticles || 0, progressCb);
+                        if (official.articles && official.articles.length > 0) {
+                            sendDebugLog(`[自动切换成功] 官方通道已拉取【${author}】${official.articles.length} 篇文章！`, "success");
+                            return { author: official.author, articles: official.articles, biz: official.biz, lastError: "" };
                         }
+                    } catch (mpErr) {
+                        sendDebugLog(`[官方通道切换失败] ${mpErr.message}，继续按嗅探通道结果处理...`, "warn");
                     }
                 }
+
+                // 修正后的诊断（原"未关注"判断已被实测证伪——用户关注后依旧为空）：
+                // 实测证据：截获的主页响应 nickname/is_subscribed/msgList 全为空 = 服务器返回无账号上下文的空壳页。
+                // 最常见原因是 2023 年后注册的新公众号使用"发布"模式（无群发权限），
+                // 而 profile_ext 旧主页接口的 msgList 只包含"群发"记录，发布模式的文章永远不在此列表中。
+                lastErrorText = `嗅探通道确认该公众号历史列表为空（微信返回空壳主页，与是否关注无关）。👉 唯一可行路径：点击顶部【微信官方扫码连接】扫码。注意：扫码账号可以是【任意公众号账号】——不需要是目标号的号主！没有公众号可免费注册一个个人订阅号（身份证+手机号，约5分钟）。扫码成功后工具将自动继续拉取全部历史！`;
+                // 链路自检：如果超过 60 秒没有嗅探到任何微信流量，说明微信流量根本没经过工具代理，
+                // 最常见原因是"微信比工具先启动"（微信内置浏览器缓存了旧的代理配置）。
+                const trafficStale = !wechatAuth.lastTrafficAt || (Date.now() - wechatAuth.lastTrafficAt > 60000);
+                if (trafficStale) {
+                    lastErrorText += " ⚠️ 检测到微信流量未经过工具代理：请先完全退出电脑微信（任务栏右键→退出），确保本工具保持运行，再重新打开微信！";
+                    sendDebugLog(`[链路自检] 超过 60 秒未嗅探到任何微信流量，微信疑似未走工具代理（微信先于工具启动或被安全软件干扰）。`, "warn");
+                }
+                sendDebugLog(`[全量历史拉取受限] 微信响应 ret=0 且列表为空；主页 HTML 兜底也未解析到文章。`, "warn");
+                break;
             }
+
+            articles.push(...parseWechatMsgList(msgList, author, biz));
 
             if (progressCb) progressCb(`已快速索引 ${articles.length} 篇文章目录...`, articles.length, maxArticles || articles.length, [...articles]);
 
@@ -983,32 +1525,58 @@ async function fetchWechatHistoryArticles(biz, author = "微信公众号", maxAr
                 break;
             }
 
-            const canContinue = resData.can_msg_continue == 1 || resData.can_msg_continue === true || (msgList && msgList.length >= count);
-            if (canContinue && msgList.length > 0) {
-                if (resData.next_offset !== undefined && resData.next_offset !== null && Number(resData.next_offset) > offset) {
+            // 防死循环：只有本页确实拿到新文章，且服务端明确还有更多数据时才翻页
+            const addedThisPage = articles.length - articlesBeforePage;
+            const hasNextFlag = resData.can_msg_continue == 1 || resData.can_msg_continue === true;
+            const hasNextOffset = resData.next_offset !== undefined && resData.next_offset !== null && Number(resData.next_offset) > offset;
+            const likelyMore = (msgList && msgList.length >= count) && !(resData.can_msg_continue === 0 || resData.can_msg_continue === false);
+            const serverMore = hasNextFlag || hasNextOffset || likelyMore;
+
+            if (addedThisPage > 0 && serverMore) {
+                if (hasNextOffset) {
                     offset = Number(resData.next_offset);
                 } else {
                     offset += count;
                 }
                 sendDebugLog(`[多页拉取] 正在自动翻页 (offset=${offset})，已索引 ${articles.length} 篇...`, "info");
-                // 拟人化随机安全延迟 (600ms~1000ms)，完美模拟正常微信滑动浏览，坚决杜绝风控
-                const sleepTime = 600 + Math.floor(Math.random() * 400);
-                await new Promise(r => setTimeout(r, sleepTime));
+
+                // 1. 主动防风控批次冷却：每连续拉取 100 篇，主动沉睡 3.5 秒，彻底清空服务端滑动突发计数器
+                if (articles.length > 0 && articles.length % 100 === 0) {
+                    sendDebugLog(`[主动防风控] 已连续拉取 ${articles.length} 篇，工具自动进入 3.5 秒静默安全降温期...`, "info");
+                    if (progressCb) progressCb(`已索引 ${articles.length} 篇，工具自动进行防风控安全降温 (3秒)...`, articles.length, maxArticles || 0, [...articles]);
+                    await new Promise(r => setTimeout(r, 3500));
+                } else {
+                    // 拟人化动态安全延迟 (800ms~1300ms)
+                    const sleepTime = 800 + Math.floor(Math.random() * 500);
+                    await new Promise(r => setTimeout(r, sleepTime));
+                }
+                rateLimitRetries = 0; // 只要拉取成功，重置限流重试计数器
             } else {
+                if (addedThisPage === 0 && serverMore) {
+                    sendDebugLog(`[翻页终止] 本页未拿到新文章，防止空转死循环，结束拉取。`, "warn");
+                }
                 hasMore = false;
             }
         } else if (resData.ret === -3) {
             lastErrorText = "微信会话已过期 (ret=-3, no session)。请在电脑微信中打开任意一篇公众号推文以激活最新会话凭证。";
             break;
         } else if (resData.ret === -6) {
-            if (offset > 0 && rateLimitRetries < 2) {
+            // 被动自愈机制：绝不中断甩给用户，工具自动逐秒倒计时降温后全自动重新请求
+            if (offset > 0 && rateLimitRetries < 5) {
                 rateLimitRetries++;
-                sendDebugLog(`[频控保护] 正在翻页中遭遇短时限流，等待 2 秒继续拉取...`, "warn");
-                if (progressCb) progressCb(`翻页遇到限流，稍候继续...`, articles.length, maxArticles || 0, [...articles]);
-                await new Promise(r => setTimeout(r, 2000));
+                const backoffSeconds = rateLimitRetries === 1 ? 8 : (rateLimitRetries === 2 ? 15 : (rateLimitRetries === 3 ? 25 : 35));
+                sendDebugLog(`[自动自愈冷却] 触发微信频控保护(ret=-6)，工具启动第 ${rateLimitRetries}/5 级静默安全降温，自动倒计时 ${backoffSeconds} 秒后继续...`, "warn");
+
+                for (let s = backoffSeconds; s > 0; s--) {
+                    if (progressCb) {
+                        progressCb(`触发微信频控保护，工具正在自动静默降温(${s}秒)，倒计时结束后全自动继续，无需手动操作...`, articles.length, maxArticles || 0, [...articles]);
+                    }
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+                sendDebugLog(`[自动自愈冷却完成] 静默降温结束，工具全自动重新发起请求...`, "info");
                 continue;
             } else {
-                lastErrorText = "微信安全频控限制 (ret=-6)。请稍后重试，或在电脑微信中打开该公众号主页。";
+                lastErrorText = "微信安全频控限制 (ret=-6)。该公众号单次拉取篇数已达微信服务器安全阈值，已为您妥善保留并展示当前所有已拉取的文章。";
                 break;
             }
         } else {
@@ -1038,7 +1606,7 @@ async function fetchWechatHistoryArticles(biz, author = "微信公众号", maxAr
 }
 
 // 微信公众平台官方后台快速扫码登录窗口 (官方渠道，零风控秒级全量历史拉取)
-function openMpLoginWindow() {
+async function openMpLoginWindow() {
     if (mpLoginWindow && !mpLoginWindow.isDestroyed()) {
         mpLoginWindow.focus();
         return;
@@ -1051,9 +1619,16 @@ function openMpLoginWindow() {
         autoHideMenuBar: true,
         webPreferences: {
             nodeIntegration: false,
-            contextIsolation: true
+            contextIsolation: true,
+            // 关键修复：扫码登录窗使用独立会话分区（下方强制直连）。
+            // 此前登录窗走系统代理，会穿过工具自己的 MITM 代理(127.0.0.1:8899)，
+            // 登录流量被自家代理截获/转发存在干扰风险——这可能是"扫码连不上"的隐患之一。
+            partition: "mp-login-direct"
         }
     });
+
+    // 强制扫码窗直连网络，彻底绕开本地代理链路，保证登录环境干净稳定
+    await session.fromPartition("mp-login-direct").setProxy({ mode: "direct" });
 
     mpLoginWindow.loadURL("https://mp.weixin.qq.com/");
 
@@ -1081,6 +1656,15 @@ function openMpLoginWindow() {
                 mainWindow.webContents.send("wechat:mp-status-change", { connected: true, token });
             }
 
+            // 官方通道就绪联动：若此前有检索任务因嗅探通道受限而挂起（pendingAutoFetchTarget），
+            // 立即通知渲染层自动重试——用户扫码后无需任何手动操作，工具自动继续拉取全部历史。
+            if (pendingAutoFetchTarget && mainWindow && !mainWindow.isDestroyed()) {
+                const targetInfo = pendingAutoFetchTarget;
+                pendingAutoFetchTarget = null;
+                sendDebugLog(`[官方通道就绪] 自动重试对【${targetInfo.author || "公众号"}】的全量历史拉取...`, "info");
+                mainWindow.webContents.send("wechat:auto-trigger-search", targetInfo);
+            }
+
             setTimeout(() => {
                 if (mpLoginWindow && !mpLoginWindow.isDestroyed()) {
                     mpLoginWindow.close();
@@ -1097,6 +1681,190 @@ function openMpLoginWindow() {
     });
 }
 
+// =========================================================================
+// 知乎官方扫码登录窗口 (Zhihu Official Login Window)
+// =========================================================================
+let zhihuLoginWindow = null;
+function openZhihuLoginWindow() {
+    if (zhihuLoginWindow && !zhihuLoginWindow.isDestroyed()) {
+        zhihuLoginWindow.focus();
+        return;
+    }
+    zhihuLoginWindow = new BrowserWindow({
+        width: 1020,
+        height: 760,
+        title: "知乎官方快速扫码登录 (zhihu.com)",
+        autoHideMenuBar: true,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            partition: "persist:zhihu-direct"
+        }
+    });
+
+    zhihuLoginWindow.loadURL("https://www.zhihu.com/signin");
+
+    let checkInterval = null;
+    const pollZhihuCookies = async () => {
+        if (!zhihuLoginWindow || zhihuLoginWindow.isDestroyed()) {
+            if (checkInterval) clearInterval(checkInterval);
+            return;
+        }
+        try {
+            const cookies = await zhihuLoginWindow.webContents.session.cookies.get({ domain: ".zhihu.com" });
+            const zc0 = cookies.find(c => c.name === "z_c0");
+            if (zc0 && zc0.value) {
+                if (checkInterval) clearInterval(checkInterval);
+                const cookieDict = {};
+                cookies.forEach(c => { cookieDict[c.name] = c.value; });
+                const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join("; ");
+
+                // 写入数据持久化文件
+                const projectRoot = localPythonManager ? localPythonManager.getProjectRoot() : process.cwd();
+                const sessionFileProject = path.join(projectRoot, "data", "zhihu_session.json");
+                const sessionFileDataDir = path.join(DATA_DIR, "zhihu_session.json");
+                try {
+                    fs.mkdirSync(path.dirname(sessionFileProject), { recursive: true });
+                    fs.writeFileSync(sessionFileProject, JSON.stringify(cookieDict, null, 2), "utf8");
+                } catch(e) {}
+                try {
+                    fs.writeFileSync(sessionFileDataDir, JSON.stringify(cookieDict, null, 2), "utf8");
+                } catch(e) {}
+
+                // 同步至本地 Python 后端
+                const port = (localPythonManager && localPythonManager.port) || 8000;
+                try {
+                    const postData = JSON.stringify({ cookie: cookieStr });
+                    const req = http.request({
+                        hostname: "127.0.0.1",
+                        port: port,
+                        path: "/api/zhihu/set-cookie",
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Content-Length": Buffer.byteLength(postData)
+                        }
+                    });
+                    req.on("error", () => {});
+                    req.write(postData);
+                    req.end();
+                } catch(e) {}
+
+                sendDebugLog("[知乎登录] 知乎官方登录成功，登录凭证 (z_c0) 已同步至本地引擎！", "success");
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send("zhihu:login-success", { success: true });
+                }
+
+                setTimeout(() => {
+                    if (zhihuLoginWindow && !zhihuLoginWindow.isDestroyed()) {
+                        zhihuLoginWindow.close();
+                    }
+                }, 1200);
+            }
+        } catch(e) {}
+    };
+
+    checkInterval = setInterval(pollZhihuCookies, 1200);
+    zhihuLoginWindow.webContents.on("did-navigate", () => pollZhihuCookies());
+    zhihuLoginWindow.webContents.on("did-navigate-in-page", () => pollZhihuCookies());
+    zhihuLoginWindow.on("closed", () => {
+        if (checkInterval) clearInterval(checkInterval);
+        zhihuLoginWindow = null;
+    });
+}
+
+// =========================================================================
+// 新浪微博官方扫码登录窗口 (Weibo Official Login Window)
+// =========================================================================
+let weiboLoginWindow = null;
+function openWeiboLoginWindow() {
+    if (weiboLoginWindow && !weiboLoginWindow.isDestroyed()) {
+        weiboLoginWindow.focus();
+        return;
+    }
+    weiboLoginWindow = new BrowserWindow({
+        width: 1020,
+        height: 760,
+        title: "新浪微博官方快速扫码登录 (weibo.com)",
+        autoHideMenuBar: true,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            partition: "persist:weibo-direct"
+        }
+    });
+
+    weiboLoginWindow.loadURL("https://weibo.com/login.php");
+
+    let checkInterval = null;
+    const pollWeiboCookies = async () => {
+        if (!weiboLoginWindow || weiboLoginWindow.isDestroyed()) {
+            if (checkInterval) clearInterval(checkInterval);
+            return;
+        }
+        try {
+            const cookies = await weiboLoginWindow.webContents.session.cookies.get({ domain: ".weibo.com" });
+            const sub = cookies.find(c => c.name === "SUB");
+            if (sub && sub.value) {
+                if (checkInterval) clearInterval(checkInterval);
+                const cookieDict = {};
+                cookies.forEach(c => { cookieDict[c.name] = c.value; });
+                const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join("; ");
+
+                // 写入数据持久化文件
+                const projectRoot = localPythonManager ? localPythonManager.getProjectRoot() : process.cwd();
+                const sessionFileProject = path.join(projectRoot, "data", "weibo_session.json");
+                const sessionFileDataDir = path.join(DATA_DIR, "weibo_session.json");
+                try {
+                    fs.mkdirSync(path.dirname(sessionFileProject), { recursive: true });
+                    fs.writeFileSync(sessionFileProject, JSON.stringify(cookieDict, null, 2), "utf8");
+                } catch(e) {}
+                try {
+                    fs.writeFileSync(sessionFileDataDir, JSON.stringify(cookieDict, null, 2), "utf8");
+                } catch(e) {}
+
+                // 同步至本地 Python 后端
+                const port = (localPythonManager && localPythonManager.port) || 8000;
+                try {
+                    const postData = JSON.stringify({ cookies: cookieDict, cookie: cookieStr });
+                    const req = http.request({
+                        hostname: "127.0.0.1",
+                        port: port,
+                        path: "/api/weibo/set-cookie",
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Content-Length": Buffer.byteLength(postData)
+                        }
+                    });
+                    req.on("error", () => {});
+                    req.write(postData);
+                    req.end();
+                } catch(e) {}
+
+                sendDebugLog("[微博登录] 微博官方登录成功，登录凭证 (SUB) 已同步至本地引擎！", "success");
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send("weibo:login-success", { success: true });
+                }
+
+                setTimeout(() => {
+                    if (weiboLoginWindow && !weiboLoginWindow.isDestroyed()) {
+                        weiboLoginWindow.close();
+                    }
+                }, 1200);
+            }
+        } catch(e) {}
+    };
+
+    checkInterval = setInterval(pollWeiboCookies, 1200);
+    weiboLoginWindow.webContents.on("did-navigate", () => pollWeiboCookies());
+    weiboLoginWindow.webContents.on("did-navigate-in-page", () => pollWeiboCookies());
+    weiboLoginWindow.on("closed", () => {
+        if (checkInterval) clearInterval(checkInterval);
+        weiboLoginWindow = null;
+    });
+}
+
 // 官方公众平台 search_biz + appmsg 接口拉取全部历史文章 (100% 官方通道，无 ret=-6)
 async function fetchArticlesViaMpOfficial(targetName, maxArticles = 0, progressCb = null) {
     const token = wechatAuth.mpToken;
@@ -1108,7 +1876,47 @@ async function fetchArticlesViaMpOfficial(targetName, maxArticles = 0, progressC
     sendDebugLog(`[官方直连] 正在通过公众平台官方接口检索公众号【${targetName}】...`, "info");
     if (progressCb) progressCb(`正在通过官方后台检索【${targetName}】全部历史...`, 0, 0);
 
+    // 官方接口统一 GET + JSON 解析小工具（search_biz 与 appmsg 共用）
+    const mpGetJson = (url) => new Promise((resolve, reject) => {
+        https.get(url, { headers }, (res) => {
+            let data = "";
+            res.on("data", c => data += c);
+            res.on("end", () => {
+                try { resolve(JSON.parse(data)); } catch(e) { resolve({ base_resp: { ret: -1 } }); }
+            });
+        }).on("error", reject);
+    });
+
+    // 频控统一处理：返回 true 表示已冷却应重试，抛错表示不可恢复
+    const COOLDOWN_RETS = [200013, 200011, 200012]; // 微信频控相关返回码
+    const handleRetOrThrow = async (ret, label, attempt) => {
+        if (COOLDOWN_RETS.includes(ret)) {
+            if (attempt >= 4) {
+                throw new Error(`官方接口连续 4 次触发频控（ret=${ret}）。\n\n当前扫码账号权限较低（新注册/未认证个人号额度最小）。建议：① 等待 10 分钟后重试；② 换用已认证的公众号账号扫码，额度更大。`);
+            }
+            const waitSec = 20 * attempt; // 指数退避：20s → 40s → 60s → 80s
+            sendDebugLog(`[官方直连频控] ${label} 触发频控(ret=${ret})，第 ${attempt}/4 次自动冷却 ${waitSec} 秒后重试...`, "warn");
+            for (let s = waitSec; s > 0; s--) {
+                if (progressCb) progressCb(`官方接口限流，自动冷却降温中(${s}秒)，第 ${attempt}/4 次重试...`, 0, 0);
+                await new Promise(r => setTimeout(r, 1000));
+            }
+            return true; // 应重试
+        }
+        if (ret === -6 || ret === 200002) {
+            // 登录态失效：清空官方通道状态并广播，让界面回到"未连接"
+            wechatAuth.mpConnected = false;
+            wechatAuth.mpToken = "";
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send("wechat:mp-status-change", { connected: false });
+            }
+            throw new Error("公众平台登录状态已过期（ret=-6），请点击顶部【微信官方扫码连接】重新扫码！");
+        }
+        return false;
+    };
+
     // 1. 搜索目标公众号获取 fakeid 与全称
+    //    关键修复：search_biz 此前完全没做频控处理——一旦被限流就误报"搜索不到公众号"，
+    //    这正是当初官方通道被判"不能用"而弃用的根本原因。现在加入指数退避重试。
     const searchUrl = `https://mp.weixin.qq.com/cgi-bin/searchbiz?action=search_biz&begin=0&count=5&query=${encodeURIComponent(targetName)}&token=${token}&lang=zh_CN&f=json&ajax=1`;
     const headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -1116,19 +1924,17 @@ async function fetchArticlesViaMpOfficial(targetName, maxArticles = 0, progressC
         "Referer": `https://mp.weixin.qq.com/cgi-bin/appmsg?t=media/appmsg_edit_v2&action=edit&isNew=1&type=77&createType=0&token=${token}&lang=zh_CN`
     };
 
-    const searchRes = await new Promise((resolve, reject) => {
-        https.get(searchUrl, { headers }, (res) => {
-            let data = "";
-            res.on("data", c => data += c);
-            res.on("end", () => {
-                try { resolve(JSON.parse(data)); } catch(e) { resolve({ base_resp: { ret: -1 }, list: [] }); }
-            });
-        }).on("error", reject);
-    });
+    let searchRes = null;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+        searchRes = await mpGetJson(searchUrl);
+        const ret = (searchRes.base_resp && searchRes.base_resp.ret) || 0;
+        if (await handleRetOrThrow(ret, "搜索接口", attempt)) continue; // 频控冷却后重试
+        break; // 正常返回（含业务层空结果），跳出
+    }
 
     const bizList = searchRes.list || [];
     if (bizList.length === 0) {
-        throw new Error(`未在微信平台搜索到公众号【${targetName}】，请核对公众号名称！`);
+        throw new Error(`未在微信平台搜索到公众号【${targetName}】，请核对公众号名称（若刚扫码成功，请等 1 分钟后再试，新号搜索接口有延迟）！`);
     }
 
     const fakeid = bizList[0].fakeid;
@@ -1143,15 +1949,20 @@ async function fetchArticlesViaMpOfficial(targetName, maxArticles = 0, progressC
 
     while (true) {
         const listUrl = `https://mp.weixin.qq.com/cgi-bin/appmsg?action=list_ex&begin=${begin}&count=${count}&fakeid=${fakeid}&type=9&query=&token=${token}&lang=zh_CN&f=json&ajax=1`;
-        const listRes = await new Promise((resolve, reject) => {
-            https.get(listUrl, { headers }, (res) => {
-                let data = "";
-                res.on("data", c => data += c);
-                res.on("end", () => {
-                    try { resolve(JSON.parse(data)); } catch(e) { resolve({ app_msg_list: [] }); }
-                });
-            }).on("error", reject);
-        });
+
+        // 单页请求 + 统一频控退避（替代旧版"15秒无限冷却"——旧版频控持续时会死循环）
+        let listRes = null;
+        let pageAttempt = 1;
+        while (true) {
+            listRes = await mpGetJson(listUrl);
+            const ret = (listRes.base_resp && listRes.base_resp.ret) || 0;
+            if (ret === 0) break; // 本页正常
+            if (await handleRetOrThrow(ret, "文章列表接口", pageAttempt)) { pageAttempt++; continue; }
+            // 其他未知错误码：不再硬性中断整个任务，保留已拉到的文章结算
+            sendDebugLog(`[官方直连] 文章列表接口返回异常(ret=${ret})，停止翻页，以已获取的 ${articles.length} 篇结算。`, "warn");
+            break;
+        }
+        if (listRes.base_resp && listRes.base_resp.ret !== 0) break; // 异常页：跳出翻页循环，走结算
 
         const appMsgList = listRes.app_msg_list || [];
         if (appMsgList.length === 0) break;
@@ -1184,7 +1995,12 @@ async function fetchArticlesViaMpOfficial(targetName, maxArticles = 0, progressC
         begin += count;
         if (begin >= totalCount) break;
 
-        await new Promise(r => setTimeout(r, 400));
+        // 拟人化动态随机延迟与批次降温
+        if (articles.length > 0 && articles.length % 80 === 0) {
+            await new Promise(r => setTimeout(r, 2500));
+        } else {
+            await new Promise(r => setTimeout(r, 650 + Math.floor(Math.random() * 350)));
+        }
     }
 
     sendDebugLog(`[官方直连] 成功全量获取【${nickname}】全部 ${articles.length} 篇历史文章！`, "success");
@@ -1361,6 +2177,24 @@ async function generatePdfFromHtml(htmlContent, pdfPath) {
             }
         });
 
+        pdfWin.webContents.on("render-process-gone", (_event, details) => {
+            if (!isDone) {
+                isDone = true;
+                clearTimeout(timer);
+                cleanup();
+                reject(new Error(`PDF 渲染进程异常退出 (${details && details.reason ? details.reason : '内存超限'})`));
+            }
+        });
+
+        pdfWin.webContents.on("crashed", () => {
+            if (!isDone) {
+                isDone = true;
+                clearTimeout(timer);
+                cleanup();
+                reject(new Error("PDF 渲染内核崩溃 (可能超出系统内存限制)"));
+            }
+        });
+
         pdfWin.webContents.on("did-fail-load", (err) => {
             if (!isDone) {
                 isDone = true;
@@ -1375,10 +2209,11 @@ async function generatePdfFromHtml(htmlContent, pdfPath) {
 }
 
 // 构建对齐网页端 100% 一模一样的优雅 HTML 离线电子书模板
-function buildPremiumHtmlDocument(author, fullArticles, isPdf = false) {
+function buildPremiumHtmlDocument(author, fullArticles, isPdf = false, volumeSubTitle = "") {
     const nowStr = new Date().toLocaleString();
-    const coverTitle = author.includes("公众号") ? `【${escapeHtml(author)}文章合集】` : `【${escapeHtml(author)}公众号合集】`;
-    const coverSub = `共 ${fullArticles.length} 篇文章 · 微信公众号`;
+    const volSuffix = volumeSubTitle ? ` - ${escapeHtml(volumeSubTitle)}` : "";
+    const coverTitle = (author.includes("公众号") ? `【${escapeHtml(author)}文章合集】` : `【${escapeHtml(author)}公众号合集】`) + volSuffix;
+    const coverSub = `共 ${fullArticles.length} 篇文章 ${volumeSubTitle ? '· ' + escapeHtml(volumeSubTitle) : ''} · 微信公众号`;
 
     const tocItems = fullArticles.map((art, idx) => `
         <a href="#art-${idx + 1}" class="toc-link" onclick="highlightToc(this)">
@@ -1827,27 +2662,37 @@ function buildPremiumHtmlDocument(author, fullArticles, isPdf = false) {
 </html>`;
 }
 
-// 本地下载微信高清图片助手 (带防盗链 Referer、自动重定向与 3 次重试支持)
-async function downloadImageLocal(imgUrl, saveFilePath) {
+// 本地下载微信图片助手 (支持高清原图 / 智能缩减图，带防盗链 Referer、自动重定向与 3 次重试支持)
+async function downloadImageLocal(imgUrl, saveFilePath, quality = "reduced") {
     if (!imgUrl || !imgUrl.startsWith("http")) return false;
     if (fs.existsSync(saveFilePath) && fs.statSync(saveFilePath).size > 200) return true;
+
+    // 针对微信 CDN 调整 URL 请求
+    let targetUrl = imgUrl;
+    if (quality === "original") {
+        // 高清原图：替换 /640? 或 /300? 为 /0? 获取无损原始母图
+        targetUrl = targetUrl.replace(/\/640\?/, "/0?").replace(/\/300\?/, "/0?").replace(/\/200\?/, "/0?");
+    } else {
+        // 缩减优化图：确保请求轻量压缩版本 /640?，避免拉取数MB大图
+        targetUrl = targetUrl.replace(/\/0\?/, "/640?");
+    }
 
     for (let retry = 0; retry < 3; retry++) {
         try {
             const success = await new Promise((resolve) => {
-                const parsed = new URL(imgUrl);
+                const parsed = new URL(targetUrl);
                 const client = parsed.protocol === "https:" ? https : http;
-                const req = client.get(imgUrl, {
+                const req = client.get(targetUrl, {
                     headers: {
                         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 MicroMessenger/7.0.20",
                         "referer": "https://mp.weixin.qq.com/",
                         "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
                     },
-                    timeout: 10000
+                    timeout: 12000
                 }, (res) => {
                     // 处理 301/302 重定向
                     if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                        return downloadImageLocal(res.headers.location, saveFilePath).then(resolve);
+                        return downloadImageLocal(res.headers.location, saveFilePath, quality).then(resolve);
                     }
                     if (res.statusCode >= 200 && res.statusCode < 300) {
                         const chunks = [];
@@ -1856,6 +2701,24 @@ async function downloadImageLocal(imgUrl, saveFilePath) {
                             try {
                                 const buf = Buffer.concat(chunks);
                                 if (buf.length > 100) {
+                                    // 缩减图模式下，通过 nativeImage 智能降维与轻量压缩 (节省70%+空间，极大防止内存溢出)
+                                    if (quality === "reduced") {
+                                        try {
+                                            const img = nativeImage.createFromBuffer(buf);
+                                            if (!img.isEmpty()) {
+                                                const size = img.getSize();
+                                                let processed = img;
+                                                if (size.width > 1080) {
+                                                    processed = img.resize({ width: 1080, quality: "better" });
+                                                }
+                                                const compBuf = saveFilePath.endsWith(".png") ? processed.toPNG() : processed.toJPEG(75);
+                                                if (compBuf && compBuf.length > 0 && compBuf.length < buf.length) {
+                                                    fs.writeFileSync(saveFilePath, compBuf);
+                                                    return resolve(true);
+                                                }
+                                            }
+                                        } catch(e) {}
+                                    }
                                     fs.writeFileSync(saveFilePath, buf);
                                     resolve(true);
                                 } else {
@@ -1878,8 +2741,207 @@ async function downloadImageLocal(imgUrl, saveFilePath) {
     return false;
 }
 
+// 生成单份排版级 Word (.docx) 文档助手 (支持单本或按卷导出)
+async function generateSingleDocxFile(docxPath, author, articlesList, saveDir, volumeTag = "") {
+    const volSuffix = volumeTag ? ` - ${volumeTag}` : "";
+    const children = [
+        new docx.Paragraph({
+            text: `【${author}】微信公众号文章合集${volSuffix}`,
+            heading: docx.HeadingLevel.TITLE,
+            spacing: { before: 200, after: 120 }
+        }),
+        new docx.Paragraph({
+            text: `文章总数：共计 ${articlesList.length} 篇   |   整理排版：微信公众号【艺杯羹】   |   导出时间：${new Date().toLocaleString()}`,
+            spacing: { after: 240 }
+        }),
+        new docx.Paragraph({
+            text: `【免责声明】本文档内容均摘取自公开网络免费内容，仅供个人学习交流与知识归档使用，严禁用于任何商业营利用途。原文知识产权归原作者所有。`,
+            spacing: { after: 360 }
+        }),
+        new docx.Paragraph({
+            children: [new docx.PageBreak()]
+        })
+    ];
+
+    const cleanTextForDocx = (str) => {
+        if (!str) return "";
+        return String(str).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim();
+    };
+
+    const imgRegex = /!\[(.*?)\]\((.*?)\)/;
+
+    for (let i = 0; i < articlesList.length; i++) {
+        const art = articlesList[i];
+        
+        // 1. 文章大标题与元数据
+        children.push(
+            new docx.Paragraph({
+                text: cleanTextForDocx(`${i + 1}. ${art.title}`),
+                heading: docx.HeadingLevel.HEADING_1,
+                spacing: { before: 280, after: 100 }
+            }),
+            new docx.Paragraph({
+                text: cleanTextForDocx(`作者：${art.author || author}   |   发布时间：${art.create_time || '未知'}   |   来源：微信公众号`),
+                spacing: { after: 80 }
+            }),
+            new docx.Paragraph({
+                text: cleanTextForDocx(`原文链接：${art.url}`),
+                spacing: { after: 200 }
+            })
+        );
+
+        // 2. 逐行解析 Markdown 正文并内嵌真实图片
+        const mdContent = art.content_markdown || "";
+        const lines = mdContent.replace(/\r\n/g, "\n").split("\n");
+        let inCode = false;
+        let codeLines = [];
+
+        for (const line of lines) {
+            const trimmed = line.trim();
+
+            // 代码块处理
+            if (trimmed.startsWith("```")) {
+                if (inCode) {
+                    if (codeLines.length > 0) {
+                        children.push(new docx.Paragraph({
+                            text: cleanTextForDocx(codeLines.join("\n")),
+                            spacing: { before: 80, after: 80 }
+                        }));
+                    }
+                    codeLines = [];
+                    inCode = false;
+                } else {
+                    inCode = true;
+                }
+                continue;
+            }
+
+            if (inCode) {
+                codeLines.push(line);
+                continue;
+            }
+
+            if (!trimmed) continue;
+
+            // 图片处理 (真实内嵌 ImageRun)
+            const imgMatch = imgRegex.exec(trimmed);
+            if (imgMatch) {
+                const altText = imgMatch[1] || "";
+                const imgSrc = imgMatch[2];
+                let localImgPath = "";
+                if (imgSrc.startsWith("./images/")) {
+                    localImgPath = path.join(saveDir, imgSrc);
+                } else if (imgSrc.startsWith("../images/")) {
+                    localImgPath = path.join(saveDir, imgSrc.replace("../", ""));
+                } else if (imgSrc.startsWith("images/")) {
+                    localImgPath = path.join(saveDir, imgSrc);
+                }
+
+                let inserted = false;
+                if (localImgPath && fs.existsSync(localImgPath)) {
+                    try {
+                        const imgBuf = fs.readFileSync(localImgPath);
+                        if (imgBuf.length > 200) {
+                            let width = 480;
+                            let height = 280;
+                            try {
+                                const dim = imageSize(imgBuf);
+                                if (dim && dim.width && dim.height) {
+                                    if (dim.width > 500) {
+                                        const ratio = 500 / dim.width;
+                                        width = 500;
+                                        height = Math.round(dim.height * ratio);
+                                    } else {
+                                        width = dim.width;
+                                        height = dim.height;
+                                    }
+                                }
+                            } catch(e) {}
+
+                            children.push(new docx.Paragraph({
+                                alignment: docx.AlignmentType.CENTER,
+                                spacing: { before: 140, after: 80 },
+                                children: [
+                                    new docx.ImageRun({
+                                        data: imgBuf,
+                                        transformation: { width, height }
+                                    })
+                                ]
+                            }));
+
+                            if (altText && altText !== "图片" && altText !== "img") {
+                                children.push(new docx.Paragraph({
+                                    alignment: docx.AlignmentType.CENTER,
+                                    text: cleanTextForDocx(`▲ ${altText}`),
+                                    spacing: { after: 120 }
+                                }));
+                            }
+                            inserted = true;
+                        }
+                    } catch(e) {}
+                }
+
+                if (!inserted && altText && altText !== "图片") {
+                    children.push(new docx.Paragraph({
+                        alignment: docx.AlignmentType.CENTER,
+                        text: cleanTextForDocx(`[图片: ${altText}]`),
+                        spacing: { before: 80, after: 80 }
+                    }));
+                }
+                continue;
+            }
+
+            // 标题处理
+            if (trimmed.startsWith("### ")) {
+                children.push(new docx.Paragraph({
+                    text: cleanTextForDocx(trimmed.replace(/^###\s+/, "")),
+                    heading: docx.HeadingLevel.HEADING_3,
+                    spacing: { before: 160, after: 80 }
+                }));
+            } else if (trimmed.startsWith("## ")) {
+                children.push(new docx.Paragraph({
+                    text: cleanTextForDocx(trimmed.replace(/^##\s+/, "")),
+                    heading: docx.HeadingLevel.HEADING_2,
+                    spacing: { before: 180, after: 90 }
+                }));
+            } else if (trimmed.startsWith("# ")) {
+                children.push(new docx.Paragraph({
+                    text: cleanTextForDocx(trimmed.replace(/^#\s+/, "")),
+                    heading: docx.HeadingLevel.HEADING_1,
+                    spacing: { before: 200, after: 100 }
+                }));
+            } else if (trimmed.startsWith("> ")) {
+                children.push(new docx.Paragraph({
+                    text: cleanTextForDocx(trimmed.replace(/^>\s+/, "")),
+                    spacing: { before: 60, after: 60 }
+                }));
+            } else {
+                children.push(new docx.Paragraph({
+                    text: cleanTextForDocx(trimmed),
+                    spacing: { after: 100 }
+                }));
+            }
+        }
+
+        // 每篇文章之间插入分页符
+        if (i < articlesList.length - 1) {
+            children.push(new docx.Paragraph({
+                children: [new docx.PageBreak()]
+            }));
+        }
+    }
+
+    const doc = new docx.Document({
+        sections: [{ properties: {}, children }]
+    });
+
+    const buffer = await docx.Packer.toBuffer(doc);
+    fs.writeFileSync(docxPath, buffer);
+    return docxPath;
+}
+
 async function exportArticlesLocal(exportOptions, progressCb, statusCb) {
-    const { articles, author, formats, outputDir, biz } = exportOptions;
+    const { articles, author, formats, outputDir, biz, imageQuality = "reduced" } = exportOptions;
     const baseDir = outputDir || DEFAULT_EXPORT_DIR;
     
     // 自动以当前公众号名称创建专属合集子文件夹，避免文件混乱
@@ -1898,6 +2960,30 @@ async function exportArticlesLocal(exportOptions, progressCb, statusCb) {
     const cachedMap = biz ? ArticleCacheManager.loadCache(biz) : {};
 
     sendDebugLog(`[全量导出] 开始导出选中的 ${articles.length} 篇文章到专属合集目录: ${saveDir}，导出格式: ${formats.join(", ").toUpperCase()}`, "info");
+
+    // ------------------------------------------
+    // 快速路径：仅导出链接清单
+    // ------------------------------------------
+    // 当用户只选择 links 格式时，没有必要逐篇抓取正文、下载配图，
+    // 直接根据已经拿到的文章元数据生成链接文件即可，上千篇也能秒出。
+    if (formats.length === 1 && formats[0] === "links") {
+        const linksPrefix = `【${author}】文章链接清单`;
+
+        // 文件 1：带标题、发布时间的完整清单，方便人工核对
+        const detailLines = [
+            "序号\t标题\t发布时间\t原文链接",
+            ...articles.map((a, i) => `${i + 1}\t${a.title || ""}\t${a.create_time || ""}\t${a.url || ""}`)
+        ];
+        const detailPath = path.join(saveDir, `${linksPrefix}.txt`);
+        fs.writeFileSync(detailPath, detailLines.join("\n"), "utf8");
+
+        // 文件 2：仅 URL，一行一个，方便交给下载器/脚本批量处理
+        const urlOnlyPath = path.join(saveDir, `${linksPrefix}_仅链接.txt`);
+        fs.writeFileSync(urlOnlyPath, articles.map(a => a.url || "").filter(Boolean).join("\n"), "utf8");
+
+        sendDebugLog(`[链接清单] 已为 ${articles.length} 篇文章生成链接文件：${path.basename(detailPath)}`, "success");
+        return { success: true, savedFiles: [detailPath, urlOnlyPath], saveDir };
+    }
 
     for (let i = 0; i < articles.length; i++) {
         const art = articles[i];
@@ -1947,7 +3033,14 @@ async function exportArticlesLocal(exportOptions, progressCb, statusCb) {
             }
 
             if (statusCb) statusCb({ index: i, id: art.id, status, failReason });
-            await new Promise(r => setTimeout(r, 40));
+            
+            // 拟人化动态随机延迟 (180ms~380ms) + 40 篇批次安全冷却缓冲，防止触发微信单 IP 频率风控
+            let crawlDelay = 180 + Math.floor(Math.random() * 200);
+            if (i > 0 && i % 40 === 0) {
+                sendDebugLog(`[防频控保护] 已连续抓取 40 篇正文，进入 2 秒拟人化安全冷却缓冲...`, "info");
+                crawlDelay = 2000;
+            }
+            await new Promise(r => setTimeout(r, crawlDelay));
         }
 
         fullArticles.push({
@@ -1987,24 +3080,32 @@ async function exportArticlesLocal(exportOptions, progressCb, statusCb) {
 
     if (imageDownloadQueue.length > 0) {
         sendDebugLog(`[配图下载] 正在并发下载 ${imageDownloadQueue.length} 张高清离线配图...`, "info");
-        const CONCURRENT = 8;
+        const CONCURRENT = 5;
         for (let b = 0; b < imageDownloadQueue.length; b += CONCURRENT) {
             const batch = imageDownloadQueue.slice(b, b + CONCURRENT);
             if (progressCb) {
                 progressCb(`正在下载离线配图 (${b + 1}/${imageDownloadQueue.length})...`, b + 1, imageDownloadQueue.length);
             }
-            await Promise.all(batch.map(item => downloadImageLocal(item.rawUrl, item.imgLocalPath)));
+            await Promise.all(batch.map(item => downloadImageLocal(item.rawUrl, item.imgLocalPath, imageQuality)));
+            await new Promise(r => setTimeout(r, 40));
         }
-        sendDebugLog(`[配图下载] 全部 ${imageDownloadQueue.length} 张高清离线配图下载完成！`, "success");
+        sendDebugLog(`[配图下载] 全部 ${imageDownloadQueue.length} 张离线配图下载处理完成！`, "success");
 
-        // 统一替换文章正文中的图片为本地相对路径
+        // 统一替换文章正文中的图片为本地相对路径 (兼顾 HTML & Markdown，处理特殊转义)
         for (const item of imageDownloadQueue) {
             const art = fullArticles[item.artIndex];
             const relRoot = `./images/${item.imgFileName}`;
             const relSingle = `../images/${item.imgFileName}`;
-            art.content_html = art.content_html.replaceAll(item.rawUrl, relRoot);
-            art.content_markdown = art.content_markdown.replaceAll(item.rawUrl, relRoot);
-            art.single_markdown = art.single_markdown.replaceAll(item.rawUrl, relSingle);
+            const rawUrl = item.rawUrl;
+            const decodedUrl = rawUrl.replaceAll("&amp;", "&");
+            const encodedUrl = rawUrl.replaceAll("&", "&amp;");
+
+            const urlVariants = Array.from(new Set([rawUrl, decodedUrl, encodedUrl]));
+            for (const u of urlVariants) {
+                art.content_html = art.content_html.replaceAll(u, relRoot);
+                art.content_markdown = art.content_markdown.replaceAll(u, relRoot);
+                art.single_markdown = art.single_markdown.replaceAll(u, relSingle);
+            }
         }
     }
 
@@ -2079,224 +3180,83 @@ async function exportArticlesLocal(exportOptions, progressCb, statusCb) {
         }
     }
 
-    // 3. PDF 导出 (基于内置 Chromium 矢量排版引擎)
+    // 3. PDF 导出 (基于内置 Chromium 矢量排版引擎，支持大批量智能分卷防卡死)
     if (formats.includes("pdf")) {
         try {
-            if (progressCb) progressCb(`正在生成高清矢量 PDF 文档...`, fullArticles.length, fullArticles.length);
-            const pdfPath = path.join(saveDir, `${prefix}.pdf`);
-            const pdfHtmlContent = buildPremiumHtmlDocument(author, fullArticles, true);
-            await generatePdfFromHtml(pdfHtmlContent, pdfPath);
-            results.push(pdfPath);
-            sendDebugLog(`[文件生成] PDF 高清矢量电子书已生成: ${path.basename(pdfPath)}`, "success");
+            const CHUNK_SIZE = 100;
+            if (fullArticles.length > 80) {
+                const totalVolumes = Math.ceil(fullArticles.length / CHUNK_SIZE);
+                sendDebugLog(`[PDF导出] 当前篇数较多(${fullArticles.length}篇)，已启动智能分卷生成（共 ${totalVolumes} 卷，每卷约 ${CHUNK_SIZE} 篇），彻底防止 Chromium 渲染内存溢出与整机卡死`, "info");
+                for (let v = 0; v < totalVolumes; v++) {
+                    const startIdx = v * CHUNK_SIZE;
+                    const endIdx = Math.min(startIdx + CHUNK_SIZE, fullArticles.length);
+                    const chunkArticles = fullArticles.slice(startIdx, endIdx);
+                    const volNum = String(v + 1).padStart(2, '0');
+                    const volTag = `第${volNum}卷 (${startIdx + 1}-${endIdx}篇)`;
+                    const volName = `【${author}】文章合集_${volTag}.pdf`;
+                    const pdfPath = path.join(saveDir, volName);
+                    
+                    if (progressCb) progressCb(`正在生成 PDF ${volTag} (${v + 1}/${totalVolumes} 卷)...`, v + 1, totalVolumes);
+                    try {
+                        const pdfHtmlContent = buildPremiumHtmlDocument(author, chunkArticles, true, volTag);
+                        await generatePdfFromHtml(pdfHtmlContent, pdfPath);
+                        results.push(pdfPath);
+                        sendDebugLog(`[文件生成] PDF ${volTag} 已生成: ${volName}`, "success");
+                    } catch(volErr) {
+                        console.error(`PDF ${volTag} 生成异常:`, volErr);
+                        sendDebugLog(`[PDF分卷异常] ${volTag} 生成异常: ${volErr.message}，已自动跳过并继续`, "error");
+                    }
+                }
+            } else {
+                if (progressCb) progressCb(`正在生成高清矢量 PDF 文档...`, fullArticles.length, fullArticles.length);
+                const pdfPath = path.join(saveDir, `${prefix}.pdf`);
+                const pdfHtmlContent = buildPremiumHtmlDocument(author, fullArticles, true);
+                await generatePdfFromHtml(pdfHtmlContent, pdfPath);
+                results.push(pdfPath);
+                sendDebugLog(`[文件生成] PDF 高清矢量电子书已生成: ${path.basename(pdfPath)}`, "success");
+            }
         } catch(e) {
             console.error("PDF export error:", e);
             sendDebugLog(`[文件生成失败] PDF 生成异常: ${e.message}`, "error");
         }
     }
 
-    // 4. Word (.docx) 导出 (真图内嵌、出版级字阶排版，对齐网页版 Word 模板)
+    // 4. Word (.docx) 导出 (真图内嵌、出版级字阶排版，支持大批量智能分卷防内存溢出)
     if (formats.includes("docx")) {
         try {
-            const docxPath = path.join(saveDir, `${prefix}.docx`);
-            const children = [
-                new docx.Paragraph({
-                    text: `【${author}】微信公众号文章合集`,
-                    heading: docx.HeadingLevel.TITLE,
-                    spacing: { before: 200, after: 120 }
-                }),
-                new docx.Paragraph({
-                    text: `文章总数：共计 ${fullArticles.length} 篇   |   整理排版：微信公众号【艺杯羹】   |   导出时间：${new Date().toLocaleString()}`,
-                    spacing: { after: 240 }
-                }),
-                new docx.Paragraph({
-                    text: `【免责声明】本文档内容均摘取自公开网络免费内容，仅供个人学习交流与知识归档使用，严禁用于任何商业营利用途。原文知识产权归原作者所有。`,
-                    spacing: { after: 360 }
-                }),
-                new docx.Paragraph({
-                    children: [new docx.PageBreak()]
-                })
-            ];
+            const CHUNK_SIZE = 100;
+            if (fullArticles.length > 80) {
+                const totalVolumes = Math.ceil(fullArticles.length / CHUNK_SIZE);
+                sendDebugLog(`[Word导出] 当前篇数较多(${fullArticles.length}篇)，已启动智能分卷生成（共 ${totalVolumes} 卷，每卷约 ${CHUNK_SIZE} 篇），防止内存溢出`, "info");
+                for (let v = 0; v < totalVolumes; v++) {
+                    const startIdx = v * CHUNK_SIZE;
+                    const endIdx = Math.min(startIdx + CHUNK_SIZE, fullArticles.length);
+                    const chunkArticles = fullArticles.slice(startIdx, endIdx);
+                    const volNum = String(v + 1).padStart(2, '0');
+                    const volTag = `第${volNum}卷 (${startIdx + 1}-${endIdx}篇)`;
+                    const volName = `【${author}】文章合集_${volTag}.docx`;
+                    const docxPath = path.join(saveDir, volName);
 
-            const cleanTextForDocx = (str) => {
-                if (!str) return "";
-                return String(str).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim();
-            };
-
-            const imgRegex = /!\[(.*?)\]\((.*?)\)/;
-
-            for (let i = 0; i < fullArticles.length; i++) {
-                const art = fullArticles[i];
-                
-                // 1. 文章大标题与元数据
-                children.push(
-                    new docx.Paragraph({
-                        text: cleanTextForDocx(`${i + 1}. ${art.title}`),
-                        heading: docx.HeadingLevel.HEADING_1,
-                        spacing: { before: 280, after: 100 }
-                    }),
-                    new docx.Paragraph({
-                        text: cleanTextForDocx(`作者：${art.author || author}   |   发布时间：${art.create_time || '未知'}   |   来源：微信公众号`),
-                        spacing: { after: 80 }
-                    }),
-                    new docx.Paragraph({
-                        text: cleanTextForDocx(`原文链接：${art.url}`),
-                        spacing: { after: 200 }
-                    })
-                );
-
-                // 2. 逐行解析 Markdown 正文并内嵌真实图片
-                const mdContent = art.content_markdown || "";
-                const lines = mdContent.replace(/\r\n/g, "\n").split("\n");
-                let inCode = false;
-                let codeLines = [];
-
-                for (const line of lines) {
-                    const trimmed = line.trim();
-
-                    // 代码块处理
-                    if (trimmed.startsWith("```")) {
-                        if (inCode) {
-                            if (codeLines.length > 0) {
-                                children.push(new docx.Paragraph({
-                                    text: cleanTextForDocx(codeLines.join("\n")),
-                                    spacing: { before: 80, after: 80 }
-                                }));
-                            }
-                            codeLines = [];
-                            inCode = false;
-                        } else {
-                            inCode = true;
-                        }
-                        continue;
-                    }
-
-                    if (inCode) {
-                        codeLines.push(line);
-                        continue;
-                    }
-
-                    if (!trimmed) continue;
-
-                    // 图片处理 (真实内嵌 ImageRun)
-                    const imgMatch = imgRegex.exec(trimmed);
-                    if (imgMatch) {
-                        const altText = imgMatch[1] || "";
-                        const imgSrc = imgMatch[2];
-                        let localImgPath = "";
-                        if (imgSrc.startsWith("./images/")) {
-                            localImgPath = path.join(saveDir, imgSrc);
-                        } else if (imgSrc.startsWith("../images/")) {
-                            localImgPath = path.join(saveDir, imgSrc.replace("../", ""));
-                        } else if (imgSrc.startsWith("images/")) {
-                            localImgPath = path.join(saveDir, imgSrc);
-                        }
-
-                        let inserted = false;
-                        if (localImgPath && fs.existsSync(localImgPath)) {
-                            try {
-                                const imgBuf = fs.readFileSync(localImgPath);
-                                if (imgBuf.length > 200) {
-                                    let width = 480;
-                                    let height = 280;
-                                    try {
-                                        const dim = imageSize(imgBuf);
-                                        if (dim && dim.width && dim.height) {
-                                            if (dim.width > 500) {
-                                                const ratio = 500 / dim.width;
-                                                width = 500;
-                                                height = Math.round(dim.height * ratio);
-                                            } else {
-                                                width = dim.width;
-                                                height = dim.height;
-                                            }
-                                        }
-                                    } catch(e) {}
-
-                                    children.push(new docx.Paragraph({
-                                        alignment: docx.AlignmentType.CENTER,
-                                        spacing: { before: 140, after: 80 },
-                                        children: [
-                                            new docx.ImageRun({
-                                                data: imgBuf,
-                                                transformation: { width, height }
-                                            })
-                                        ]
-                                    }));
-
-                                    if (altText && altText !== "图片" && altText !== "img") {
-                                        children.push(new docx.Paragraph({
-                                            alignment: docx.AlignmentType.CENTER,
-                                            text: cleanTextForDocx(`▲ ${altText}`),
-                                            spacing: { after: 120 }
-                                        }));
-                                    }
-                                    inserted = true;
-                                }
-                            } catch(e) {
-                                console.error("Docx ImageRun error:", e);
-                            }
-                        }
-
-                        if (!inserted && altText && altText !== "图片") {
-                            children.push(new docx.Paragraph({
-                                alignment: docx.AlignmentType.CENTER,
-                                text: cleanTextForDocx(`[图片: ${altText}]`),
-                                spacing: { before: 80, after: 80 }
-                            }));
-                        }
-                        continue;
-                    }
-
-                    // 标题处理
-                    if (trimmed.startsWith("### ")) {
-                        children.push(new docx.Paragraph({
-                            text: cleanTextForDocx(trimmed.replace(/^###\s+/, "")),
-                            heading: docx.HeadingLevel.HEADING_3,
-                            spacing: { before: 160, after: 80 }
-                        }));
-                    } else if (trimmed.startsWith("## ")) {
-                        children.push(new docx.Paragraph({
-                            text: cleanTextForDocx(trimmed.replace(/^##\s+/, "")),
-                            heading: docx.HeadingLevel.HEADING_2,
-                            spacing: { before: 180, after: 90 }
-                        }));
-                    } else if (trimmed.startsWith("# ")) {
-                        children.push(new docx.Paragraph({
-                            text: cleanTextForDocx(trimmed.replace(/^#\s+/, "")),
-                            heading: docx.HeadingLevel.HEADING_1,
-                            spacing: { before: 200, after: 100 }
-                        }));
-                    } else if (trimmed.startsWith("> ")) {
-                        children.push(new docx.Paragraph({
-                            text: cleanTextForDocx(trimmed.replace(/^>\s+/, "")),
-                            spacing: { before: 60, after: 60 }
-                        }));
-                    } else {
-                        children.push(new docx.Paragraph({
-                            text: cleanTextForDocx(trimmed),
-                            spacing: { after: 100 }
-                        }));
+                    if (progressCb) progressCb(`正在生成 Word ${volTag} (${v + 1}/${totalVolumes} 卷)...`, v + 1, totalVolumes);
+                    try {
+                        await generateSingleDocxFile(docxPath, author, chunkArticles, saveDir, volTag);
+                        results.push(docxPath);
+                        sendDebugLog(`[文件生成] Word ${volTag} 已生成: ${volName}`, "success");
+                    } catch(volErr) {
+                        console.error(`Word ${volTag} 生成异常:`, volErr);
+                        sendDebugLog(`[Word分卷异常] ${volTag} 生成异常: ${volErr.message}，已自动跳过并继续`, "error");
                     }
                 }
-
-                // 每篇文章之间插入分页符
-                if (i < fullArticles.length - 1) {
-                    children.push(new docx.Paragraph({
-                        children: [new docx.PageBreak()]
-                    }));
-                }
+            } else {
+                if (progressCb) progressCb(`正在生成排版级 Word 文档...`, fullArticles.length, fullArticles.length);
+                const docxPath = path.join(saveDir, `${prefix}.docx`);
+                await generateSingleDocxFile(docxPath, author, fullArticles, saveDir);
+                results.push(docxPath);
+                sendDebugLog(`[文件生成] Word 文档已生成 (真图高清内嵌): ${path.basename(docxPath)}`, "success");
             }
-
-            const doc = new docx.Document({
-                sections: [{ properties: {}, children }]
-            });
-
-            const buffer = await docx.Packer.toBuffer(doc);
-            fs.writeFileSync(docxPath, buffer);
-            results.push(docxPath);
-            sendDebugLog(`[文件生成] Word 文档已生成 (真图高清内嵌): ${path.basename(docxPath)}`, "success");
         } catch (e) {
             console.error("DOCX export error:", e);
+            sendDebugLog(`[文件生成失败] Word 生成异常: ${e.message}`, "error");
         }
     }
 
@@ -2368,9 +3328,237 @@ async function exportArticlesLocal(exportOptions, progressCb, statusCb) {
 }
 
 // =========================================================================
-// 6. 窗口创建与主进程调度
+// 6. 本地 Python 引擎生命周期管理 (LocalPythonManager)
 // =========================================================================
-function createMainWindow() {
+class LocalPythonManager {
+    constructor(electronApp) {
+        this.app = electronApp;
+        this.child = null;
+        this.port = 8000;
+        this.running = false;
+        this.lastError = null;
+        this.stdoutLogs = [];
+    }
+
+    async findFreePort(startPort = 8000, maxPort = 8050) {
+        return new Promise((resolve) => {
+            let currentPort = startPort;
+            const tryPort = () => {
+                if (currentPort > maxPort) {
+                    const server = net.createServer();
+                    server.listen(0, "127.0.0.1", () => {
+                        const assigned = server.address().port;
+                        server.close(() => resolve(assigned));
+                    });
+                    return;
+                }
+                const server = net.createServer();
+                server.once("error", (err) => {
+                    currentPort++;
+                    tryPort();
+                });
+                server.once("listening", () => {
+                    server.close(() => resolve(currentPort));
+                });
+                server.listen(currentPort, "127.0.0.1");
+            };
+            tryPort();
+        });
+    }
+
+    getProjectRoot() {
+        if (this.app && this.app.isPackaged) {
+            if (fs.existsSync(path.join(process.resourcesPath, "run.py"))) {
+                return process.resourcesPath;
+            }
+            if (fs.existsSync(path.join(process.resourcesPath, "app", "run.py"))) {
+                return path.join(process.resourcesPath, "app");
+            }
+        }
+        const devRoot = path.resolve(__dirname, "..");
+        if (fs.existsSync(path.join(devRoot, "run.py"))) {
+            return devRoot;
+        }
+        return process.cwd();
+    }
+
+    getPythonPath() {
+        const root = this.getProjectRoot();
+        const candidates = [
+            path.join(process.resourcesPath, "python", "python.exe"),
+            path.join(process.resourcesPath, "python", "bin", "python"),
+            path.join(root, ".venv", "Scripts", "python.exe"),
+            path.join(root, "venv", "Scripts", "python.exe"),
+            path.join(root, ".venv", "bin", "python"),
+            path.join(__dirname, "..", ".venv", "Scripts", "python.exe"),
+            path.join(process.cwd(), ".venv", "Scripts", "python.exe"),
+            path.join(__dirname, ".venv", "Scripts", "python.exe"),
+            process.platform === "win32" ? "python.exe" : "python3"
+        ];
+        for (const c of candidates) {
+            if (path.isAbsolute(c) && fs.existsSync(c)) {
+                return c;
+            }
+        }
+        return process.platform === "win32" ? "python.exe" : "python3";
+    }
+
+    getRunScriptPath() {
+        const root = this.getProjectRoot();
+        return path.join(root, "run.py");
+    }
+
+    checkHealth(port, timeoutMs = 1500) {
+        return new Promise((resolve) => {
+            const req = http.get(`http://127.0.0.1:${port}/api/health`, { timeout: timeoutMs }, (res) => {
+                if (res.statusCode === 200) {
+                    resolve(true);
+                } else {
+                    resolve(false);
+                }
+            });
+            req.on("error", () => resolve(false));
+            req.on("timeout", () => {
+                req.destroy();
+                resolve(false);
+            });
+        });
+    }
+
+    async waitForReady(port, maxAttempts = 30, intervalMs = 300) {
+        for (let i = 0; i < maxAttempts; i++) {
+            const ok = await this.checkHealth(port);
+            if (ok) return true;
+            await new Promise(r => setTimeout(r, intervalMs));
+        }
+        return false;
+    }
+
+    async start() {
+        if (this.running && this.child) {
+            const ok = await this.checkHealth(this.port);
+            if (ok) {
+                return this.getStatus();
+            }
+        }
+
+        const port = await this.findFreePort(8000, 8050);
+        this.port = port;
+        const pythonPath = this.getPythonPath();
+        const projectRoot = this.getProjectRoot();
+        const runScript = this.getRunScriptPath();
+
+        console.log(`[LocalPython] 正在启动本地 Python 服务...`);
+        console.log(`[LocalPython] Python 解释器: ${pythonPath}`);
+        console.log(`[LocalPython] 项目根目录: ${projectRoot}`);
+        console.log(`[LocalPython] 启动脚本: ${runScript}, 监听端口: ${port}`);
+
+        if (!fs.existsSync(runScript)) {
+            const err = `未找到 run.py 启动脚本: ${runScript}`;
+            console.error(`[LocalPython] ${err}`);
+            this.lastError = err;
+            return this.getStatus();
+        }
+
+        try {
+            const args = [runScript, "--port", String(port), "--host", "127.0.0.1", "--no-reload"];
+            const childEnv = {
+                ...process.env,
+                PYTHONUNBUFFERED: "1"
+            };
+
+            this.child = spawn(pythonPath, args, {
+                cwd: projectRoot,
+                stdio: ["ignore", "pipe", "pipe"],
+                windowsHide: true,
+                env: childEnv
+            });
+
+            this.child.stdout.on("data", (data) => {
+                const text = data.toString();
+                this.stdoutLogs.push(text);
+                if (this.stdoutLogs.length > 200) this.stdoutLogs.shift();
+                process.stdout.write(`[LocalPython STDOUT] ${text}`);
+            });
+
+            this.child.stderr.on("data", (data) => {
+                const text = data.toString();
+                process.stderr.write(`[LocalPython STDERR] ${text}`);
+            });
+
+            this.child.on("error", (err) => {
+                console.error(`[LocalPython] 进程发生错误:`, err);
+                this.lastError = err.message;
+                this.running = false;
+            });
+
+            this.child.on("exit", (code, signal) => {
+                console.log(`[LocalPython] 进程退出 code=${code}, signal=${signal}`);
+                this.running = false;
+                this.child = null;
+            });
+
+            // 等待健康检查响应
+            console.log(`[LocalPython] 正在等待端口 ${port} 服务就绪...`);
+            const ready = await this.waitForReady(port);
+            if (ready) {
+                console.log(`[LocalPython] 本地 Python 服务就绪! PID: ${this.child.pid}, Port: ${port}`);
+                this.running = true;
+                this.lastError = null;
+            } else {
+                console.warn(`[LocalPython] 服务未在预期时间内响应健康检查，但进程已创建 (PID: ${this.child ? this.child.pid : '未知'})`);
+                this.running = true;
+            }
+        } catch (err) {
+            console.error(`[LocalPython] 启动失败:`, err);
+            this.lastError = err.message;
+            this.running = false;
+        }
+
+        return this.getStatus();
+    }
+
+    stop() {
+        if (!this.child) {
+            this.running = false;
+            return;
+        }
+        const pid = this.child.pid;
+        console.log(`[LocalPython] 正在关闭本地 Python 进程树 (PID: ${pid})...`);
+        try {
+            if (process.platform === "win32") {
+                execSync(`taskkill /pid ${pid} /T /F`, { stdio: "ignore" });
+            } else {
+                this.child.kill("SIGTERM");
+            }
+        } catch (e) {
+            try { this.child.kill("SIGKILL"); } catch (_) {}
+        }
+        this.child = null;
+        this.running = false;
+    }
+
+    async restart() {
+        this.stop();
+        await new Promise(r => setTimeout(r, 600));
+        return await this.start();
+    }
+
+    getStatus() {
+        return {
+            running: this.running,
+            port: this.port,
+            pid: this.child ? this.child.pid : null,
+            error: this.lastError,
+            url: `http://127.0.0.1:${this.port}`
+        };
+    }
+}
+
+// =========================================================================
+// 7. 窗口创建与主进程调度
+// =========================================================================
+function createMainWindow(port = 8000) {
     mainWindow = new BrowserWindow({
         width: 1280,
         height: 840,
@@ -2384,11 +3572,49 @@ function createMainWindow() {
         webPreferences: {
             preload: path.join(__dirname, "preload.js"),
             nodeIntegration: false,
-            contextIsolation: true
+            contextIsolation: true,
+            webSecurity: false,
+            allowRunningInsecureContent: true
         }
     });
 
-    mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+    const clientModePort = port || 8000;
+    const localUrl = `http://127.0.0.1:${clientModePort}/app?client_mode=1&port=${clientModePort}`;
+    const builtinRendererPath = path.join(__dirname, "renderer", "index.html");
+
+    console.log(`[BlogDistiller] 准备加载本地桌面界面: ${localUrl}`);
+
+    // 本地优先自治：直接加载本地 Python 服务渲染界面，零云端依赖与网络延迟
+    let retryCount = 0;
+    const maxRetries = 10;
+    const loadLocalInterface = () => {
+        mainWindow.loadURL(localUrl).catch((err) => {
+            console.warn(`[BlogDistiller] 正在等待本地服务启动就绪... (${err.message}) [${retryCount + 1}/${maxRetries}]`);
+            if (retryCount < maxRetries) {
+                retryCount++;
+                setTimeout(loadLocalInterface, 800);
+            } else {
+                console.warn("[BlogDistiller] 本地服务就绪超时，回退至内置渲染模版");
+                mainWindow.loadFile(builtinRendererPath);
+            }
+        });
+    };
+    loadLocalInterface();
+
+    // 快捷键支持：F5 / Ctrl+R 刷新界面，F12 / Ctrl+Shift+I 开启开发者调试工具
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        if (input.type === 'keyDown') {
+            if (input.key === 'F5' || ((input.control || input.meta) && input.key.toLowerCase() === 'r')) {
+                mainWindow.webContents.reload();
+                event.preventDefault();
+            }
+            if (input.key === 'F12' || ((input.control || input.meta) && input.shift && input.key.toLowerCase() === 'i')) {
+                mainWindow.webContents.toggleDevTools();
+                event.preventDefault();
+            }
+        }
+    });
+
     mainWindow.show();
     mainWindow.focus();
 
@@ -2405,7 +3631,15 @@ app.on("second-instance", () => {
 });
 
 app.whenReady().then(async () => {
-    createMainWindow();
+    localPythonManager = new LocalPythonManager(app);
+    let pythonStatus = { port: 8000 };
+    try {
+        pythonStatus = await localPythonManager.start();
+    } catch (err) {
+        console.error("[BlogDistiller] 本地 Python 引擎启动异常:", err);
+    }
+
+    createMainWindow(pythonStatus.port);
 
     let proxyPort = 8899;
     try {
@@ -2552,16 +3786,53 @@ app.whenReady().then(async () => {
             return { author: authorName, articles, biz: articles[0] ? articles[0].biz : "" };
         }
 
-        // 场景 2: 单篇推文链接 (自动提取文章信息，并尝试拉取该号历史文章)
+        // 场景 2: 单篇推文链接 (自动提取文章信息，并尝试拉取该号全量历史文章)
         if (urls.length === 1) {
             const cleanUrl = urls[0];
             if (mainWindow) mainWindow.webContents.send("wechat:fetch-progress", { message: "正在解析推文与公众号信息...", current: 1, total: 1 });
-            const pageHtml = await fetchPageHtml(cleanUrl);
-            const singleArt = parseSingleArticleFromHtml(pageHtml, cleanUrl);
-            authorName = singleArt.author || authorName;
+            let pageHtml = "";
+            try {
+                pageHtml = await fetchPageHtml(cleanUrl);
+            } catch(fetchErr) {
+                sendDebugLog(`[推文拉取异常] ${fetchErr.message}`, "warn");
+            }
+            const singleArt = pageHtml ? parseSingleArticleFromHtml(pageHtml, cleanUrl) : {
+                id: `art_${Date.now()}_0`,
+                title: "微信推文",
+                author: authorName,
+                url: cleanUrl,
+                create_time: new Date().toISOString().split("T")[0],
+                digest: "",
+                is_original: true,
+                biz: wechatAuth.biz || "",
+                status: "pending",
+                fail_reason: ""
+            };
+            authorName = (singleArt.author && singleArt.author !== "微信公众号") ? singleArt.author : (wechatAuth.author || authorName);
             targetBiz = (singleArt.biz && isValidBiz(singleArt.biz)) ? singleArt.biz : (wechatAuth.biz || "");
+            if (authorName && authorName !== "微信公众号") wechatAuth.author = authorName;
+            if (targetBiz && isValidBiz(targetBiz)) wechatAuth.biz = targetBiz;
 
             if (targetBiz && isValidBiz(targetBiz)) {
+                // 关键增强：若已扫码连接公众平台官方通道，优先走官方 search_biz + appmsg 接口。
+                // 原因：微信服务端对"电脑微信未关注"的公众号，profile_ext 历史接口会直接返回
+                // 空列表（ret=0 但 home_page_list:[]，连微信客户端自己主页都刷不出历史），
+                // 嗅探通道对此无解；只有官方通道不受"是否关注"限制，可拉全网任意号全量历史。
+                if (wechatAuth.mpConnected && wechatAuth.mpToken && authorName && authorName !== "微信公众号") {
+                    sendDebugLog(`[官方直连优先] 已连通公众平台，跳过受限的嗅探通道，直接按名称【${authorName}】官方全量拉取...`, "info");
+                    try {
+                        const officialRes = await fetchArticlesViaMpOfficial(authorName, maxArticles || 0, (msg, cur, total, currentList) => {
+                            if (mainWindow) mainWindow.webContents.send("wechat:fetch-progress", { message: msg, current: cur, total, articles: currentList || [], author: authorName });
+                        });
+                        if (officialRes.articles && officialRes.articles.length > 0) {
+                            return { author: officialRes.author, articles: officialRes.articles, biz: officialRes.biz };
+                        }
+                        sendDebugLog(`[官方直连] 按名称未拉到结果，回退到嗅探通道继续尝试...`, "warn");
+                    } catch (mpErr) {
+                        sendDebugLog(`[官方直连异常] ${mpErr.message}，回退到嗅探通道...`, "warn");
+                    }
+                }
+
                 sendDebugLog(`[锁定公众号] 已锁定【${authorName}】(biz: ${targetBiz})，正在拉取全量历史文章...`, "info");
                 try {
                     const historyRes = await fetchWechatHistoryArticles(targetBiz, authorName, maxArticles || 0, (msg, cur, tot, currentList) => {
@@ -2575,9 +3846,29 @@ app.whenReady().then(async () => {
                     }
                 } catch (err) {
                     sendDebugLog(`[全量历史拉取受限] ${err.message}`, "warn");
-                    pendingAutoFetchTarget = { target: cleanUrl, maxArticles, biz: targetBiz, author: authorName };
-                    throw new Error(`未能获取公众号【${authorName}】的历史文章：${err.message}\n\n👉 解决建议：请在电脑微信中打开任意一篇公众号文章或该号主页，软件将自动刷新会话并秒级拉取全部历史！`);
+                    // 记录待自动补全目标：一旦用户在电脑微信打开主页或更新凭证，立即自动补拉全量历史
+                    pendingAutoFetchTarget = { target: cleanUrl, maxArticles: maxArticles || 0, biz: targetBiz, author: authorName };
+
+                    // 零操作引导：嗅探通道拿不到时，若官方通道未连接，自动打开扫码窗口。
+                    // 用户扫码成功后由 checkNavigation 触发 pendingAutoFetchTarget 自动重试，全程无需手动再点。
+                    if (!wechatAuth.mpConnected) {
+                        sendDebugLog(`[自动引导] 嗅探通道受限，已自动为您打开微信公众平台扫码窗口，扫码成功后工具将自动继续拉取全部历史...`, "info");
+                        try { openMpLoginWindow(); } catch(e) {}
+                    }
+
+                    // 降级兜底：如果拉取全部历史受限，但当前单篇解析成功，优雅返回该单篇，绝不中断甩错
+                    if (singleArt.title && singleArt.title !== "未知标题") {
+                        sendDebugLog(`[单篇就绪] 已成功解析单篇推文《${singleArt.title}》，可直接勾选导出！(如需全部历史，请在电脑微信点开该号主页)`, "info");
+                        return { author: authorName, articles: [singleArt], biz: targetBiz, fallbackSingle: true };
+                    }
+                    throw new Error(`未能获取公众号【${authorName}】的历史文章：${err.message}\n\n👉 已为您自动打开微信官方扫码窗口，扫码成功后工具将自动继续拉取（官方通道可无视新旧号/客户端版本限制）。`);
                 }
+            }
+
+            // 如果暂未捕获到历史翻页 biz，但单篇解析成功：优雅呈现该推文
+            if (singleArt.title && singleArt.title !== "未知标题") {
+                sendDebugLog(`[单篇解析] 成功获取单篇推文: 《${singleArt.title}》 (作者: 【${authorName}】)`, "success");
+                return { author: authorName, articles: [singleArt], biz: "", fallbackSingle: true };
             }
 
             pendingAutoFetchTarget = { target: cleanUrl, maxArticles, biz: targetBiz, author: authorName };
@@ -2592,7 +3883,18 @@ app.whenReady().then(async () => {
             });
         }
 
-        throw new Error(`请输入有效的微信公众号推文链接（例如：https://mp.weixin.qq.com/s/...）！`);
+        // 场景 4: 用户输入了公众号名称（纯文本）。
+        // 关键修复：官方扫码通道函数 fetchArticlesViaMpOfficial 此前定义了却从未被调用（死代码），
+        // 导致用户扫码连接后按名称检索仍报"请输入有效链接"。这里正式接入官方通道：
+        // 已扫码连接 → 走 search_biz + appmsg 官方接口秒级全量拉取；未连接 → 给出明确引导。
+        if (wechatAuth.mpConnected && wechatAuth.mpToken) {
+            sendDebugLog(`[官方直连] 检测到已扫码连接公众平台，按名称【${cleanTarget}】走官方通道全量拉取...`, "info");
+            return await fetchArticlesViaMpOfficial(cleanTarget, maxArticles || 0, (msg, cur, total, currentList) => {
+                if (mainWindow) mainWindow.webContents.send("wechat:fetch-progress", { message: msg, current: cur, total, articles: currentList || [], author: cleanTarget });
+            });
+        }
+
+        throw new Error(`请输入有效的微信公众号推文链接（例如：https://mp.weixin.qq.com/s/...）或公众号名称！\n\n💡 提示：点击上方【微信官方扫码连接】后，可直接输入公众号名称秒级拉取全部历史文章。`);
     });
 
     // 一键逆向解析推文并生成公众号专属历史主页直达链接 (对齐 Zoro/三刀原版规范)
@@ -2876,12 +4178,124 @@ app.whenReady().then(async () => {
         fs.writeFileSync(settingsFile, JSON.stringify(updated, null, 2), "utf8");
         return updated;
     });
+
+    // 本地磁盘持久化公众号历史档案库 IPC
+    ipcMain.handle("history:get-all", () => {
+        return AccountHistoryManager.getAll();
+    });
+
+    ipcMain.handle("history:save-account", (_, accountData) => {
+        return AccountHistoryManager.saveAccount(accountData);
+    });
+
+    ipcMain.handle("history:delete-account", (_, key) => {
+        return AccountHistoryManager.deleteAccount(key);
+    });
+
+    ipcMain.handle("history:get-info", () => {
+        return {
+            dataDir: DATA_DIR,
+            historyFile: HISTORY_FILE,
+            exportDir: DEFAULT_EXPORT_DIR
+        };
+    });
+
+    ipcMain.handle("history:open-dir", () => {
+        shell.openPath(DATA_DIR);
+        return true;
+    });
+
+    // 链接提取与文本文件保存 IPC
+    ipcMain.handle("fs:save-text", async (_, { filename, content, defaultPath }) => {
+        try {
+            const res = await dialog.showSaveDialog(mainWindow, {
+                title: "保存文章链接文件",
+                defaultPath: defaultPath || path.join(DEFAULT_EXPORT_DIR, filename || `文章链接提取_${Date.now()}.txt`),
+                filters: [
+                    { name: "文本/表格文件", extensions: ["txt", "csv", "md"] }
+                ]
+            });
+            if (!res.canceled && res.filePath) {
+                fs.writeFileSync(res.filePath, content, "utf8");
+                return { success: true, filePath: res.filePath };
+            }
+            return { success: false, canceled: true };
+        } catch(e) {
+            return { success: false, error: e.message };
+        }
+    });
+
+    // =========================================================================
+    // 本地优先桌面客户端自治 IPC (Local-First Autonomy)
+    // =========================================================================
+    ipcMain.handle("local-service:start", async () => {
+        return localPythonManager ? await localPythonManager.start() : { running: false };
+    });
+
+    ipcMain.handle("local-service:stop", () => {
+        if (localPythonManager) localPythonManager.stop();
+        return { running: false };
+    });
+
+    ipcMain.handle("local-service:status", () => {
+        return localPythonManager ? localPythonManager.getStatus() : { running: false, port: 8000 };
+    });
+
+    ipcMain.handle("local-service:restart", async () => {
+        if (!localPythonManager) return { running: false };
+        return await localPythonManager.restart();
+    });
+
+    ipcMain.handle("fs:reveal-file", (_, filePath) => {
+        try {
+            if (filePath && fs.existsSync(filePath)) {
+                shell.showItemInFolder(filePath);
+                return true;
+            } else if (filePath) {
+                shell.openPath(filePath);
+                return true;
+            }
+        } catch(e) {}
+        return false;
+    });
+
+    ipcMain.handle("fs:get-downloads-path", () => {
+        try {
+            const root = localPythonManager ? localPythonManager.getProjectRoot() : process.cwd();
+            const dl = path.join(root, "downloads");
+            if (fs.existsSync(dl)) return dl;
+        } catch(e) {}
+        return DEFAULT_EXPORT_DIR;
+    });
+
+    ipcMain.handle("fs:show-open-dialog", async (_, options) => {
+        return await dialog.showOpenDialog(mainWindow, options || {});
+    });
+
+    ipcMain.handle("auth:open-zhihu-login", () => {
+        openZhihuLoginWindow();
+        return { success: true };
+    });
+
+    ipcMain.handle("auth:open-weibo-login", () => {
+        openWeiboLoginWindow();
+        return { success: true };
+    });
+
+    ipcMain.on("app:restart", () => {
+        cleanup();
+        app.relaunch();
+        app.exit(0);
+    });
 });
 
 function cleanup() {
     applyWindowsPac(8899, false);
     if (proxyInstance) {
         try { proxyInstance.close(); } catch (e) {}
+    }
+    if (localPythonManager) {
+        try { localPythonManager.stop(); } catch (e) {}
     }
 }
 

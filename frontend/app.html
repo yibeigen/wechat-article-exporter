@@ -108,6 +108,22 @@
         .icon-lg { width: 22px; height: 22px; }
         .icon-sm { width: 14px; height: 14px; }
 
+        /* 文件夹选择弹窗：目录行样式（线性图标 + 名称，悬停高亮提示可点击进入） */
+        .folder-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+            transition: background 0.12s ease;
+            user-select: none;
+        }
+        .folder-row:hover { background: rgba(2, 132, 199, 0.07); }
+        .folder-row:last-child { border-bottom: none; }
+
         /* 顶部导航 */
         .navbar {
             height: 64px;
@@ -166,15 +182,9 @@
         .nav-right {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
             flex-wrap: nowrap;
-            overflow-x: auto;
-            scrollbar-width: none;
-            -webkit-overflow-scrolling: touch;
             padding: 4px 0;
-        }
-        .nav-right::-webkit-scrollbar {
-            display: none;
         }
         .nav-btn {
             background: var(--bg-surface);
@@ -1224,6 +1234,22 @@
             color: var(--text-primary);
         }
 
+        .spinner {
+            width: 22px;
+            height: 22px;
+            min-width: 22px;
+            min-height: 22px;
+            max-width: 22px;
+            max-height: 22px;
+            aspect-ratio: 1 / 1;
+            border: 2.5px solid rgba(16, 185, 129, 0.2);
+            border-top-color: var(--accent-emerald);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            flex-shrink: 0;
+            box-sizing: border-box;
+            display: inline-block;
+        }
         .spin { animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
@@ -1248,43 +1274,29 @@
                 <span>📜 历史记录</span>
                 <span id="historyNavBadge" style="display:none; background: var(--accent-primary); color: #fff; font-size: 0.68rem; font-weight: 800; padding: 1px 6px; border-radius: 999px; margin-left: 2px;">0</span>
             </button>
-            <!-- 平台支持矩阵与版本更新日志入口 -->
-            <button type="button" class="nav-btn" onclick="openChangelogModal()" style="font-weight: 700; color: #6366f1; border-color: rgba(99, 102, 241, 0.35); background: rgba(99, 102, 241, 0.08);" title="查看 9 大平台支持矩阵与最新版本更新日志">
-                <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                <span>📢 更新日志</span>
-                <span style="background: #e11d48; color: #fff; font-size: 0.64rem; font-weight: 800; padding: 1px 5px; border-radius: 999px; margin-left: 2px;">NEW</span>
-            </button>
-            <!-- 桌面离线客户端 (100%本地运算) -->
-            <button type="button" class="nav-btn" onclick="openDesktopModal()" style="font-weight: 700; color: var(--accent-gold); border-color: rgba(245, 158, 11, 0.35); background: var(--accent-gold-subtle);" title="下载 Windows 本地桌面版客户端，零服务器消耗">
-                <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-                <span>💻 桌面客户端</span>
-            </button>
-            <!-- 关于作者与生态 -->
-            <button type="button" class="nav-btn" onclick="openAuthorModal()" style="font-weight: 700; color: var(--accent-gold); border-color: rgba(180, 83, 9, 0.35); background: var(--accent-gold-subtle);" title="了解博主与更多精品项目">
-                <span>💖 关于作者</span>
-            </button>
-            <!-- 安装浏览器扩展 -->
-            <a href="/api/extension/download" class="nav-btn" style="font-weight: 700; color: var(--accent-emerald); border-color: rgba(16, 185, 129, 0.35); background: rgba(16, 185, 129, 0.08);" title="下载浏览器扩展以无感同步凭证">
-                <span>🧩 浏览器扩展</span>
-            </a>
             <!-- 激活状态按钮 -->
             <button type="button" class="nav-btn" id="activationNavBtn" onclick="openActivationModal()" style="font-weight: 700; color: var(--accent-emerald);" title="查看或输入软件激活口令">
                 <span id="activationNavText">🔑 软件授权</span>
             </button>
-            <!-- GitHub 链接入口 (小屏可自动折叠) -->
-            <a href="https://github.com/yibeigen/wechat-article-exporter" target="_blank" rel="noopener noreferrer" class="nav-btn nav-hide-tablet" title="查看 GitHub 仓库">
+            <!-- 关于作者与生态 -->
+            <button type="button" class="nav-btn" onclick="openAuthorModal()" style="font-weight: 700; color: var(--accent-gold); border-color: rgba(180, 83, 9, 0.35); background: var(--accent-gold-subtle);" title="了解博主、更新日志与官方交流群">
+                <span>💖 关于作者</span>
+            </button>
+            <!-- GitHub 开源仓库入口 -->
+            <a href="https://github.com/yibeigen/wechat-article-exporter" target="_blank" rel="noopener noreferrer" class="nav-btn" title="查看 GitHub 开源仓库与源码" style="text-decoration: none; font-weight: 700; color: var(--text-primary); display: inline-flex; align-items: center; gap: 6px;">
                 <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
                 <span>GitHub</span>
             </a>
+            <!-- 刷新界面 -->
+            <button type="button" class="nav-btn" id="pageReloadBtn" title="刷新页面 (快捷键: F5 或 Ctrl+R)" onclick="window.location.reload()" style="font-weight: 600; color: var(--text-secondary);">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                <span>刷新</span>
+            </button>
             <!-- 主题切换 -->
             <button class="nav-btn theme-toggle-btn icon-btn" id="themeToggleBtn" title="切换明暗主题" onclick="toggleTheme()">
                 <svg id="themeIconSun" class="icon icon-sm" viewBox="0 0 24 24" style="display:none;"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
                 <svg id="themeIconMoon" class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
             </button>
-            <!-- 返回官网 -->
-            <a href="/" class="nav-btn">
-                <span>返回介绍页</span>
-            </a>
         </div>
     </nav>
 
@@ -1310,7 +1322,7 @@
             <div class="metric-item">
                 <div class="metric-content">
                     <span class="metric-label">官网累计服务人次</span>
-                    <span class="metric-value"><span id="siteVisitorCount">100</span> 人次</span>
+                    <span class="metric-value"><span id="siteVisitorCount">200</span> 人次</span>
                 </div>
             </div>
             <div class="metric-divider"></div>
@@ -1460,6 +1472,100 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     </div>
                 </div>
 
+                <!-- 知乎专用登录状态与凭证管理卡片 -->
+                <div id="zhihuAuthBox" style="display: none; margin-bottom: 12px; padding: 14px 16px; background: var(--bg-subtle); border: 1.5px solid rgba(59, 130, 246, 0.35); border-radius: 10px; box-shadow: var(--shadow-sm);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px; min-width: 240px; flex: 1;">
+                            <div id="zhihuStatusDot" style="width: 10px; height: 10px; border-radius: 50%; background: #9ca3af; flex-shrink: 0; box-shadow: 0 0 6px rgba(0,0,0,0.15);"></div>
+                            <div>
+                                <div id="zhihuStatusTitle" style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary);">知乎连接状态检测中...</div>
+                                <div id="zhihuStatusDesc" style="font-size: 0.74rem; color: var(--text-muted); margin-top: 2px;">支持从本机 Edge/Chrome 一键同步、官方弹窗扫码登录或手动填写 Cookie</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <!-- 方式 1：一键同步本机浏览器 (DPAPI 解密 Edge / Chrome) -->
+                            <button type="button" class="nav-btn" id="btnZhihuSyncBrowser" onclick="syncZhihuBrowser()" style="font-size: 0.78rem; height: 30px; padding: 0 10px; color: #0284c7; border-color: rgba(2, 132, 199, 0.4); background: rgba(2, 132, 199, 0.08); font-weight: 700;" title="直接从本机 Edge / Chrome 浏览器读取已登录的知乎 Cookie，无需手机扫码">
+                                <span>🌐 一键同步本机浏览器</span>
+                            </button>
+                            <!-- 方式 2：官方扫码登录 (桌面弹窗) -->
+                            <button type="button" class="nav-btn" id="btnZhihuQrLogin" onclick="triggerZhihuQrLogin()" style="font-size: 0.78rem; height: 30px; padding: 0 10px; color: #4338ca; border-color: rgba(99, 102, 241, 0.4); background: rgba(99, 102, 241, 0.08); font-weight: 700;" title="弹出知乎官方登录窗口，手机知乎 App 扫码登录后自动识别保存并关闭窗口">
+                                <span>📱 官方扫码登录</span>
+                            </button>
+                            <!-- 方式 3：手动输入 Cookie -->
+                            <button type="button" class="nav-btn" onclick="toggleZhihuCookieInput()" style="font-size: 0.78rem; height: 30px; padding: 0 10px; color: var(--text-secondary); background: var(--bg-surface);" title="手动展开输入框粘贴知乎 Cookie 字符串">
+                                <span>📋 手动 Cookie</span>
+                            </button>
+                            <!-- 退出登录 (已登录时显示) -->
+                            <button type="button" class="nav-btn" id="btnZhihuLogout" onclick="logoutZhihu()" style="display: none; font-size: 0.78rem; height: 30px; padding: 0 10px; color: #ef4444; border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.06); font-weight: 700;" title="清除本地保存的知乎登录态并退出当前账号">
+                                <span>🚪 退出</span>
+                            </button>
+                            <!-- 刷新状态 -->
+                            <button type="button" class="nav-btn icon-btn" onclick="checkZhihuAuth()" style="height: 30px; width: 30px;" title="重新探活检测知乎连接状态">
+                                <span>🔄</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 折叠的手动输入 Cookie 区域 -->
+                    <div id="zhihuManualCookieBox" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-main);">
+                        <div style="font-size: 0.76rem; color: var(--text-secondary); margin-bottom: 6px;">
+                            💡 请在已登录知乎的浏览器打开开发者工具 (F12) ➔ Console 输入 <code>document.cookie</code>，复制整段内容（必须包含 <code>z_c0</code> 字段）粘贴到下方：
+                        </div>
+                        <textarea id="manualZhihuCookieInput" class="multi-textarea" style="min-height: 60px; font-size: 0.78rem; font-family: monospace;" placeholder="粘贴包含 z_c0 的知乎 Cookie 字符串..."></textarea>
+                        <div style="display: flex; justify-content: flex-end; margin-top: 8px; gap: 8px;">
+                            <button type="button" class="nav-btn" onclick="toggleZhihuCookieInput()" style="font-size: 0.76rem; height: 28px;">取消</button>
+                            <button type="button" class="action-btn" onclick="submitManualZhihuCookie()" style="font-size: 0.76rem; height: 28px; padding: 0 16px;">保存 Cookie</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 微博专用登录状态与凭证管理卡片 -->
+                <div id="weiboAuthBox" style="display: none; margin-bottom: 12px; padding: 14px 16px; background: var(--bg-subtle); border: 1.5px solid rgba(245, 158, 11, 0.35); border-radius: 10px; box-shadow: var(--shadow-sm);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px; min-width: 240px; flex: 1;">
+                            <div id="weiboStatusDot" style="width: 10px; height: 10px; border-radius: 50%; background: #9ca3af; flex-shrink: 0; box-shadow: 0 0 6px rgba(0,0,0,0.15);"></div>
+                            <div>
+                                <div id="weiboStatusTitle" style="font-size: 0.88rem; font-weight: 700; color: var(--text-primary);">新浪微博连接状态检测中...</div>
+                                <div id="weiboStatusDesc" style="font-size: 0.74rem; color: var(--text-muted); margin-top: 2px;">支持从本机 Edge/Chrome 一键同步、官方弹窗扫码登录或手动填写 Cookie</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <!-- 方式 1：一键同步本机浏览器 (DPAPI 解密 Edge / Chrome) -->
+                            <button type="button" class="nav-btn" id="btnWeiboSyncBrowser" onclick="syncWeiboBrowser()" style="font-size: 0.78rem; height: 30px; padding: 0 10px; color: #ea580c; border-color: rgba(234, 88, 12, 0.4); background: rgba(234, 88, 12, 0.08); font-weight: 700;" title="直接从本机 Edge / Chrome 浏览器读取已登录的微博 Cookie，无需手机扫码">
+                                <span>🌐 一键同步本机浏览器</span>
+                            </button>
+                            <!-- 方式 2：官方扫码登录 (桌面弹窗) -->
+                            <button type="button" class="nav-btn" id="btnWeiboQrLogin" onclick="triggerWeiboQrLogin()" style="font-size: 0.78rem; height: 30px; padding: 0 10px; color: #4338ca; border-color: rgba(99, 102, 241, 0.4); background: rgba(99, 102, 241, 0.08); font-weight: 700;" title="弹出微博官方登录窗口，手机微博 App 扫码登录后自动识别保存并关闭窗口">
+                                <span>📱 官方扫码登录</span>
+                            </button>
+                            <!-- 方式 3：手动输入 Cookie -->
+                            <button type="button" class="nav-btn" onclick="toggleWeiboCookieInput()" style="font-size: 0.78rem; height: 30px; padding: 0 10px; color: var(--text-secondary); background: var(--bg-surface);" title="手动展开输入框粘贴微博 Cookie 字符串">
+                                <span>📋 手动 Cookie</span>
+                            </button>
+                            <!-- 退出登录 (已登录时显示) -->
+                            <button type="button" class="nav-btn" id="btnWeiboLogout" onclick="logoutWeibo()" style="display: none; font-size: 0.78rem; height: 30px; padding: 0 10px; color: #ef4444; border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.06); font-weight: 700;" title="清除本地保存的微博登录态并退出当前账号">
+                                <span>🚪 退出</span>
+                            </button>
+                            <!-- 刷新状态 -->
+                            <button type="button" class="nav-btn icon-btn" onclick="checkWeiboAuth()" style="height: 30px; width: 30px;" title="重新探活检测微博连接状态">
+                                <span>🔄</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 折叠的手动输入 Cookie 区域 -->
+                    <div id="weiboManualCookieBox" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-main);">
+                        <div style="font-size: 0.76rem; color: var(--text-secondary); margin-bottom: 6px;">
+                            💡 请在已登录微博的浏览器打开开发者工具 (F12) ➔ Console 输入 <code>document.cookie</code>，复制整段内容（必须包含 <code>SUB</code> 字段）粘贴到下方：
+                        </div>
+                        <textarea id="manualWeiboCookieInput" class="multi-textarea" style="min-height: 60px; font-size: 0.78rem; font-family: monospace;" placeholder="粘贴包含 SUB 的微博 Cookie 字符串..."></textarea>
+                        <div style="display: flex; justify-content: flex-end; margin-top: 8px; gap: 8px;">
+                            <button type="button" class="nav-btn" onclick="toggleWeiboCookieInput()" style="font-size: 0.76rem; height: 28px;">取消</button>
+                            <button type="button" class="action-btn" onclick="submitManualWeiboCookie()" style="font-size: 0.76rem; height: 28px; padding: 0 16px;">保存 Cookie</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 其他平台的多行输入框 (默认隐藏，切换到其他平台时显示) -->
                 <div id="targetInputWrapper" style="display: none; position: relative;">
                     <textarea id="targetInput" class="multi-textarea" placeholder="输入博主主页链接，如 https://blog.csdn.net/dog250 或单篇文章链接..."></textarea>
@@ -1480,9 +1586,6 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                         <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="14" y1="2" x2="14" y2="8" x2="20" y2="8"></line><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                         <span>3. 选择导出格式 (支持多选，一键并行打包)</span>
-                        <span id="originalHtmlExclusiveTip" style="display: none; align-items: center; gap: 4px; font-size: 0.76rem; color: #d97706; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; padding: 2px 8px;">
-                            <span>🏮 新浪/简书专属：已为您启用 1:1 电脑端原版经典排版</span>
-                        </span>
                     </div>
                     <button type="button" onclick="openChangelogModal()" style="background: none; border: none; font-size: 0.74rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 4px; text-decoration: underline;" title="查看各平台原版 HTML 支持现状与排期">
                         <span>📋 平台支持与更新日志 ↗</span>
@@ -1604,33 +1707,50 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     </label>
                 </div>
 
-                <div class="switch-card">
+                <div class="switch-card" style="flex-direction:column; align-items:stretch; gap:10px;">
                     <div>
-                        <div class="switch-title">
+                        <div class="switch-title" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                             <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-                            <span>本地化下载文章配图</span>
+                            <span>本地化下载文章配图 (三选一)</span>
+                            <span style="background:rgba(2,132,199,0.12); color:#0284c7; font-size:10px; padding:1px 6px; border-radius:10px; font-weight:700;">推荐</span>
                         </div>
-                        <div class="switch-desc">下载图片至 images/，断网或删帖也能看</div>
+                        <div class="switch-desc">按需选择配图方案：压缩图体积小加载快（推荐）；高清原图完整保留但下载与打开耗时较长；不配图则全文保留在线链接、速度最快。</div>
                     </div>
-                    <label class="toggle">
-                        <input type="checkbox" id="downloadImagesSwitch" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
+                    <div style="display:flex; flex-direction:column; gap:8px;">
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.85rem;">
+                            <input type="radio" name="imageMode" value="compressed" checked>
+                            <svg class="icon icon-sm" viewBox="0 0 24 24" style="color:#f59e0b; flex-shrink:0;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                            <span><b>压缩图（推荐）</b> — 体积减小 85%+，毫秒秒开极省内存</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.85rem;">
+                            <input type="radio" name="imageMode" value="original">
+                            <svg class="icon icon-sm" viewBox="0 0 24 24" style="color:#0284c7; flex-shrink:0;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                            <span>高清原图 — <span style="color:#dc2626;">下载与打开耗时较长</span>，适合追求画质的场景</span>
+                        </label>
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.85rem;">
+                            <input type="radio" name="imageMode" value="none">
+                            <svg class="icon icon-sm" viewBox="0 0 24 24" style="color:#ef4444; flex-shrink:0;"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+                            <span>不配图 — 不下载图片，全文保留在线链接，速度最快</span>
+                        </label>
+                    </div>
                 </div>
 
-                <div class="switch-card">
-                    <div>
+                <!-- 默认保存文件夹设置卡 (仅本地模式显示；与归档区工具条同源同步) -->
+                <div class="switch-card" id="saveDirSettingCard" style="display:none; align-items:flex-start;">
+                    <div style="flex:1;">
                         <div class="switch-title">
-                            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                            <span>完成后自动保存至电脑</span>
+                            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            <span>默认保存文件夹</span>
                         </div>
-                        <div class="switch-desc">服务端打包完成自动拉起浏览器下载，无需守候点击</div>
+                        <div class="switch-desc">导出产物自动保存到你选择的文件夹；未设置时点击下载会先弹出文件夹选择</div>
+                        <div id="saveDirSettingText" style="margin-top:8px; font-size:0.8rem; color:var(--text-secondary); word-break:break-all;">未设置</div>
+                        <div style="display:flex; gap:8px; margin-top:10px;">
+                            <button type="button" class="nav-btn" onclick="pickDefaultDirNative()" style="font-size: 0.76rem; height: 28px; padding: 0 12px;">选择文件夹</button>
+                            <button type="button" class="nav-btn" onclick="clearSavedDefaultDirNative()" style="font-size: 0.76rem; height: 28px; padding: 0 12px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);">清除</button>
+                        </div>
                     </div>
-                    <label class="toggle">
-                        <input type="checkbox" id="autoDownloadSwitch" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
                 </div>
+
             </div>
 
             <!-- 6. 导出文档设置 -->
@@ -1669,7 +1789,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     <div style="display: flex; justify-content: space-between; width: 100%; align-items: center; flex-wrap: wrap; gap: 8px;">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <div class="spinner" id="taskSpinner"></div>
-                            <span id="taskStatusText" style="font-weight: 700; color: var(--text-primary);">正在连接服务器准备抓取...</span>
+                            <span id="taskStatusText" style="font-weight: 700; color: var(--text-primary);">正在准备本地引擎抓取...</span>
                         </div>
                         <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                             <span style="font-size: 0.78rem; font-family: monospace; background: var(--bg-subtle); padding: 4px 8px; border-radius: 4px; color: var(--text-secondary);" id="taskTimerDisplay">⏱️ 00:00</span>
@@ -1724,6 +1844,31 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     </div>
                     <div class="terminal-box" id="terminalLogBox">
                         <div class="terminal-line"><span class="log-time">[系统]</span> 工作台初始化就绪，等待启动指令...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 🔄 检测到上次未完成的导出任务：询问是否从中断处继续 -->
+        <div id="resumePromptModal" class="modal-overlay" style="display: none;">
+            <div class="modal-card" style="max-width: 500px;">
+                <div class="modal-header" style="background: rgba(245, 158, 11, 0.08); border-bottom: 1px solid rgba(245, 158, 11, 0.2);">
+                    <div class="modal-title" style="color: var(--accent-gold); display: flex; align-items: center; gap: 8px;">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+                        <span>检测到上次未完成的导出任务</span>
+                    </div>
+                </div>
+                <div class="modal-body" style="padding: 24px;">
+                    <div style="font-size: 0.9rem; color: var(--text-primary); line-height: 1.7;">
+                        上次在下载 <b id="resumeTargetText">...</b> 的内容时，任务因关闭页面、断网或重启等原因中途停止了。
+                    </div>
+                    <div id="resumeProgressText" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px;"></div>
+                    <div style="font-size: 0.76rem; color: var(--accent-gold); margin-top: 12px; background: rgba(245,158,11,0.06); padding: 10px 12px; border-radius: 6px;">
+                        💡 选择「继续」会从断点接着抓取剩余篇目，<b>已抓取成功的内容直接命中缓存、不会重复下载</b>。
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                        <button type="button" class="btn" style="background: transparent; border: 1px solid var(--border-main); color: var(--text-secondary);" onclick="doDiscardIncomplete()">不继续，放弃</button>
+                        <button type="button" class="btn" style="background: var(--accent-gold); color: var(--bg-base); font-weight: 800;" onclick="doResumeIncomplete()">🔄 继续上次任务</button>
                     </div>
                 </div>
             </div>
@@ -1803,10 +1948,10 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     <p style="font-size: 0.84rem; color: var(--text-muted); margin: 0 0 10px;" id="resultSummaryText">本次共处理 0 篇文章，已自动去除广告水印并完成排版。</p>
                 </div>
 
-                <!-- 存储与及时下载提示条 -->
-                <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.78rem; line-height: 1.5; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
-                    <svg class="icon icon-sm" viewBox="0 0 24 24" style="color: #f59e0b; flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                    <span><b>温馨提示：</b>公网服务器会定期自动清理过期文章产物，请立即点击下方按钮下载保存至您的电脑本地妥善收藏！</span>
+                <!-- 本地存储就绪提示条 -->
+                <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 0.78rem; line-height: 1.5; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24" style="color: #10b981; flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    <span><b>完成提示：</b>电子书与归档包已直接保存在您本地电脑的 <b>downloads/</b> 目录中，可随时在下方点击打开或另存！</span>
                 </div>
 
                 <!-- 格式下载按钮矩阵 -->
@@ -1816,7 +1961,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
 
                 <!-- 打包 ZIP 大礼包下载主按钮 (最核心推荐) -->
                 <div id="zipDownloadContainer" style="margin-top: 8px;">
-                    <a id="zipDownloadBtn" href="#" class="action-card-btn primary-action-btn" style="width: 100%; justify-content: center; text-decoration: none; padding: 14px 20px;">
+                    <a id="zipDownloadBtn" href="#" class="action-card-btn primary-action-btn" onclick="return handleDownloadClick(this, 'ZIP 归档包')" style="width: 100%; justify-content: center; text-decoration: none; padding: 14px 20px; cursor: pointer;">
                         <div style="display: flex; align-items: center; gap: 12px;">
                             <svg class="icon icon-md" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                             <div style="text-align: left;">
@@ -1844,16 +1989,22 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 </div>
             </div>
 
-            <!-- 存储与清理机制详细说明提示条 -->
-            <div style="background: rgba(59, 130, 246, 0.05); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px; padding: 10px 14px; margin: 0 0 14px; font-size: 0.78rem; line-height: 1.6; color: var(--text-secondary);">
-                <div style="font-weight: 700; color: var(--accent-primary); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                    <svg class="icon icon-sm" viewBox="0 0 24 24" style="color: var(--accent-primary);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                    <span>💡 文件存储与定期清理说明：</span>
+            <!-- 默认保存文件夹工具条 (仅本地模式显示；设置后下载产物直接复制到该文件夹) -->
+            <div id="saveDirBar" style="display:none; align-items:center; gap:8px; flex-wrap:wrap; background: rgba(2,132,199,0.06); border: 1px solid rgba(2,132,199,0.2); border-radius: 8px; padding: 8px 12px; margin: 0 0 14px; font-size: 0.78rem; color: var(--text-secondary);">
+                <svg class="icon icon-sm" viewBox="0 0 24 24" style="color: #0284c7;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                <span style="font-weight: 700; color: var(--text-primary);">默认保存文件夹：</span>
+                <span id="saveDirBarText" style="word-break: break-all;">未设置</span>
+                <button type="button" class="nav-btn" onclick="pickDefaultDirNative()" style="font-size: 0.76rem; height: 26px; padding: 0 10px; margin-left: 4px;">选择文件夹</button>
+                <button type="button" class="nav-btn" onclick="clearSavedDefaultDirNative()" style="font-size: 0.76rem; height: 26px; padding: 0 10px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);">清除</button>
+            </div>
+
+            <!-- 本地文件存储说明提示条 -->
+            <div style="background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 10px 14px; margin: 0 0 14px; font-size: 0.78rem; line-height: 1.6; color: var(--text-secondary);">
+                <div style="font-weight: 700; color: var(--accent-emerald); margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24" style="color: var(--accent-emerald);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    <span>💡 本地持久化归档说明：</span>
                 </div>
-                <div style="display: flex; flex-direction: column; gap: 3px;">
-                    <div>• <b>公网云端使用：</b>提取排版生成的压缩包暂时存放在服务器端，<b>服务器会定期自动清理过期文章产物</b>。下方的归档卡片为您的专属提货凭据，请务必<b>及时点击按钮下载保存至您的电脑本地</b>（也可在上方开启「完成后自动保存至电脑」免去手动点击）。</div>
-                    <div>• <b>本地电脑运行：</b>若在您个人电脑本地启动（localhost），生成的全部文件会直接永久保存在您的电脑 <code>downloads/</code> 文件夹中，不受任何服务器清理影响。</div>
-                </div>
+                <div>所有导出的电子书和原始文档均已直接保存在您电脑本地 <code>downloads/</code> 文件夹中，支持随时在此检索回看、点击打开或重新导出，永久有效，不受任何服务器清理限制。</div>
             </div>
             <div id="historyListContainer" class="history-list">
                 <!-- 动态填充历史记录 -->
@@ -2010,6 +2161,43 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             </div>
             <div class="modal-footer" style="display: flex; justify-content: flex-end; padding: 12px 24px;">
                 <button type="button" class="btn-cancel" onclick="closeDesktopModal()">关闭窗口</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 文件夹选择弹窗 (本地版：把导出产物保存到指定文件夹) -->
+    <div id="folderModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card" style="max-width: 560px;">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    <span>选择保存文件夹</span>
+                </div>
+                <button class="modal-close-btn" onclick="closeFolderModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- 当前路径 + 上级按钮 -->
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button type="button" id="folderModalParentBtn" class="nav-btn" onclick="enterFolder(_folderParent)" style="font-size: 0.76rem; height: 28px; padding: 0 10px; flex-shrink: 0;" title="返回上级目录">← 上级</button>
+                    <div id="folderModalCurrentPath" style="flex: 1; font-size: 0.8rem; color: var(--text-secondary); word-break: break-all; background: var(--bg-subtle); border: 1px solid var(--border-main); border-radius: 6px; padding: 6px 10px;"></div>
+                </div>
+                <!-- 快速切换磁盘栏（Windows 本地版生成；点一下直达对应盘根目录，不再是死守 C:\） -->
+                <div id="folderModalDrives" style="display:none; gap:6px; flex-wrap:wrap;"></div>
+                <!-- 可滚动的目录列表 -->
+                <div id="folderModalList" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-main); border-radius: 8px; background: var(--bg-surface);"></div>
+                <!-- 新建文件夹 -->
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <input type="text" id="folderModalNewName" placeholder="输入新文件夹名称" style="flex: 1; font-size: 0.8rem; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-main); background: var(--bg-subtle); color: var(--text-primary);" onkeydown="if(event.key==='Enter')createFolderInModal()">
+                    <button type="button" class="nav-btn" onclick="createFolderInModal()" style="font-size: 0.76rem; height: 30px; padding: 0 12px; flex-shrink: 0;">＋ 新建文件夹</button>
+                </div>
+                <label style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--text-secondary); cursor: pointer;">
+                    <input type="checkbox" id="folderModalRemember" checked>
+                    <span>记住为默认保存文件夹（之后下载自动保存到这里，可在归档区随时修改或清除）</span>
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel" onclick="closeFolderModal()">取消</button>
+                <button type="button" class="btn-confirm" onclick="confirmFolderPick()">保存到此文件夹</button>
             </div>
         </div>
     </div>
@@ -2182,8 +2370,12 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         </div>
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        <a href="https://yibeigen.pages.dev/" target="_blank" rel="noopener noreferrer" class="nav-btn" style="font-size: 0.76rem; height: 30px; padding: 0 10px;">个人主页 ↗</a>
-                        <a href="https://blog.csdn.net/qq_46987323?spm=1000.2115.3001.5343" target="_blank" rel="noopener noreferrer" class="nav-btn" style="font-size: 0.76rem; height: 30px; padding: 0 10px;">CSDN ↗</a>
+                        <a href="https://github.com/yibeigen/wechat-article-exporter" target="_blank" rel="noopener noreferrer" class="nav-btn" style="font-size: 0.76rem; height: 30px; padding: 0 10px; display: inline-flex; align-items: center; gap: 4px; color: var(--accent-emerald); font-weight: 700; text-decoration: none;">
+                            <svg class="icon icon-sm" viewBox="0 0 24 24" style="width: 14px; height: 14px;"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+                            GitHub ↗
+                        </a>
+                        <a href="https://yibeigen.pages.dev/" target="_blank" rel="noopener noreferrer" class="nav-btn" style="font-size: 0.76rem; height: 30px; padding: 0 10px; text-decoration: none;">个人主页 ↗</a>
+                        <a href="https://blog.csdn.net/qq_46987323?spm=1000.2115.3001.5343" target="_blank" rel="noopener noreferrer" class="nav-btn" style="font-size: 0.76rem; height: 30px; padding: 0 10px; text-decoration: none;">CSDN ↗</a>
                     </div>
                 </div>
 
@@ -2280,6 +2472,16 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                                 <span style="color: var(--text-primary); font-weight: 600;">yibeigen.pages.dev</span>
                             </div>
                             <a href="https://yibeigen.pages.dev/" target="_blank" rel="noopener noreferrer" class="nav-btn" style="font-size: 0.7rem; height: 24px; padding: 0 6px;">访问 ↗</a>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; grid-column: span 2; background: rgba(16, 185, 129, 0.06); padding: 8px 12px; border-radius: 6px; border: 1px dashed rgba(16, 185, 129, 0.3);">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <svg class="icon icon-sm" viewBox="0 0 24 24" style="width: 16px; height: 16px; color: var(--accent-emerald); flex-shrink: 0;"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+                                <div>
+                                    <span style="color: var(--text-muted); font-size: 0.76rem; font-weight: 600;">GitHub 开源仓库：</span>
+                                    <span style="font-family: monospace; font-size: 0.78rem; font-weight: 700; color: var(--text-primary);">yibeigen/wechat-article-exporter</span>
+                                </div>
+                            </div>
+                            <a href="https://github.com/yibeigen/wechat-article-exporter" target="_blank" rel="noopener noreferrer" class="nav-btn" style="font-size: 0.72rem; height: 26px; padding: 0 10px; color: var(--accent-emerald); font-weight: 700; text-decoration: none;">访问开源仓库 ↗</a>
                         </div>
                     </div>
                 </div>
@@ -2663,19 +2865,19 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
     <!-- 4. 全平台通用动态流式文章检索进度看板 (针对全网博主海量文章检索设计) -->
     <div id="streamProgressModal" class="modal-overlay" style="display: none; z-index: 999999;">
         <div class="modal-card" style="max-width: 600px; width: 92vw; text-align: left; padding: 22px 24px; box-shadow: 0 25px 60px rgba(0,0,0,0.5);">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="width: 24px; height: 24px; border: 3px solid rgba(16,185,129,0.2); border-top-color: var(--accent-emerald); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
-                    <div>
-                        <div style="font-size: 1.05rem; font-weight: 800; color: var(--text-primary);" id="streamProgressTitle">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1;">
+                    <div class="spinner" style="width: 24px; height: 24px; min-width: 24px; min-height: 24px; max-width: 24px; max-height: 24px; aspect-ratio: 1 / 1; border-width: 3px; border-radius: 50%; flex-shrink: 0; box-sizing: border-box;"></div>
+                    <div style="min-width: 0; flex: 1;">
+                        <div style="font-size: 1.05rem; font-weight: 800; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" id="streamProgressTitle">
                             ⚡ 正在全量检索博主公开文章目录
                         </div>
-                        <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 2px;" id="streamProgressSub">
+                        <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" id="streamProgressSub">
                             正在建立通信通道，突破反爬策略并平滑读取文章索引...
                         </div>
                     </div>
                 </div>
-                <div style="text-align: right;">
+                <div style="text-align: right; flex-shrink: 0;">
                     <div id="streamProgressPercent" style="font-size: 1.25rem; font-weight: 900; color: var(--accent-emerald);">0%</div>
                     <div style="font-size: 0.72rem; color: var(--text-muted);">⏱️ 耗时 <b id="streamElapsedDisplay" style="color:var(--accent-primary); font-family: monospace;">00:00</b></div>
                 </div>
@@ -2687,8 +2889,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             </div>
 
             <!-- 统计标签栏 -->
-            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 14px; background: var(--bg-subtle); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-main);">
-                <div>已检索：<b id="streamCountDisplay" style="color: var(--accent-emerald); font-size: 0.92rem;">0</b> / <span id="streamTotalDisplay">计算中...</span></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 14px; background: var(--bg-subtle); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-main);">
+                <div>已检索：<b id="streamCountDisplay" style="color: var(--accent-emerald); font-size: 0.92rem;">0</b> 篇 / <span id="streamTotalDisplay" style="color: var(--text-muted); font-size: 0.78rem;">翻页检索中...</span></div>
                 <div>状态：<span id="streamStatusBadge" style="color: var(--accent-primary); font-weight: 700;">正在建立安全连接...</span></div>
             </div>
 
@@ -2808,9 +3010,12 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         <button type="button" class="nav-btn" onclick="toggleSelectAllLinks(false)" style="font-size: 0.75rem; height: 28px; padding: 0 10px;">取消全选</button>
                         <span id="linksCountBadge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); padding: 3px 10px; border-radius: 20px; font-weight: 700; font-size: 0.78rem;">已选 0 / 0 篇</span>
                     </div>
-                    <div style="display: flex; gap: 8px;">
-                        <button type="button" class="nav-btn" onclick="exportLinksTxt()" style="font-size: 0.75rem; height: 28px; padding: 0 10px;">
-                            💾 导出为 links.txt
+                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <button type="button" class="nav-btn" onclick="exportOnlyUrls()" style="font-size: 0.75rem; height: 28px; padding: 0 10px; display: inline-flex; align-items: center; gap: 4px;" title="仅导出已选文章的原文链接URL（纯文本TXT）">
+                            🔗 导出链接
+                        </button>
+                        <button type="button" class="nav-btn" onclick="exportTitlesAndUrls()" style="font-size: 0.75rem; height: 28px; padding: 0 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: var(--accent-emerald);" title="导出文章名字加链接（纯文本TXT）">
+                            📝 导出文章名+链接
                         </button>
                         <button type="button" class="btn-confirm" onclick="downloadSelectedArticles()" style="height: 28px; font-size: 0.78rem; padding: 0 12px; border-radius: 6px;">
                             🚀 立即下载已选文章
@@ -2857,13 +3062,21 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     </table>
                 </div>
             </div>
-            <div class="modal-footer" style="padding: 12px 20px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+            <div class="modal-footer" style="padding: 12px 20px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <button type="button" class="btn-cancel" onclick="closeLinksModal()" style="height: 36px; font-size: 0.84rem; padding: 0 16px;">
                     关闭
                 </button>
-                <button type="button" class="btn-confirm" onclick="downloadSelectedArticles()" style="height: 36px; font-size: 0.86rem; padding: 0 20px; background: var(--accent-primary); color: var(--bg-base); font-weight: 800; border-radius: 8px;">
-                    ⬇️ 一键批量打包下载选中文档
-                </button>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <button type="button" class="nav-btn" onclick="exportOnlyUrls()" style="height: 36px; padding: 0 12px; font-size: 0.82rem; display: inline-flex; align-items: center; gap: 4px;" title="仅导出已选文章的原文链接URL（纯文本TXT）">
+                        🔗 导出链接
+                    </button>
+                    <button type="button" class="nav-btn" onclick="exportTitlesAndUrls()" style="height: 36px; padding: 0 12px; font-size: 0.82rem; font-weight: 700; color: var(--accent-emerald); display: inline-flex; align-items: center; gap: 4px;" title="导出文章名字加链接（纯文本TXT）">
+                        📝 导出文章名+链接
+                    </button>
+                    <button type="button" class="btn-confirm" onclick="downloadSelectedArticles()" style="height: 36px; font-size: 0.86rem; padding: 0 20px; background: var(--accent-primary); color: var(--bg-base); font-weight: 800; border-radius: 8px;">
+                        ⬇️ 一键批量打包下载选中文档
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -2944,7 +3157,6 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
 
         function updatePlatformFormatOptions() {
             const origBadge = document.getElementById('originalHtmlFormatBadge');
-            const origTip = document.getElementById('originalHtmlExclusiveTip');
             if (!origBadge) return;
 
             // 目前已支持 1:1 原版电脑端 HTML 的平台：新浪博客 / 简书 / 知乎
@@ -2952,12 +3164,10 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 origBadge.style.display = 'flex';
                 // 切换到对应平台时自动勾选原版，提供更佳的原版阅读体验
                 origBadge.classList.add('active');
-                if (origTip) origTip.style.display = 'inline-flex';
             } else {
-                // 其他平台尚未实现原版排版模板，为了避免误导用户，自动隐藏该选项并不予勾选
+                // 其他平台尚未实现原版排版模板，自动隐藏该选项
                 origBadge.style.display = 'none';
                 origBadge.classList.remove('active');
-                if (origTip) origTip.style.display = 'none';
             }
         }
 
@@ -2988,6 +3198,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             }
             renderPlatforms();
             updateZhihuAuthUI();
+            updateWeiboAuthUI();
             checkZhihuSmartHint();
             updatePlatformFormatOptions();
             saveFormState();
@@ -3137,10 +3348,182 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             }
         }
 
+        // =========================================================================
+        // 知乎账号登录与凭证管理 (Zhihu Auth & Cookie Management)
+        // =========================================================================
+
+        async function checkZhihuAuth() {
+            const dot = document.getElementById('zhihuStatusDot');
+            const title = document.getElementById('zhihuStatusTitle');
+            const desc = document.getElementById('zhihuStatusDesc');
+            const logoutBtn = document.getElementById('btnZhihuLogout');
+            if (!dot || !title || !desc) return;
+
+            try {
+                const res = await fetch('/api/zhihu/status');
+                const data = await res.json();
+                if (data.is_logged_in || data.authenticated) {
+                    dot.style.background = '#10b981'; // 绿色
+                    const uname = data.user_name || data.username || '已登录用户';
+                    const handle = data.url_token ? ` (@${data.url_token})` : '';
+                    title.innerHTML = `知乎账号已连接: <b style="color:var(--accent-emerald);">${uname}</b>${handle}`;
+                    desc.innerText = '已激活全量权限，可批量抓取全网任意博主历史所有回答、专栏长文与想法';
+                    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+                } else if (data.has_cookie) {
+                    dot.style.background = '#f59e0b'; // 黄色
+                    title.innerText = '知乎基础凭证有效 (游客/临时会话)';
+                    desc.innerText = '可抓取公开内容，建议点击【🌐 一键同步本机浏览器】或【📱 官方扫码登录】激活全量权限';
+                    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+                } else {
+                    dot.style.background = '#9ca3af'; // 灰色
+                    title.innerText = '知乎未连接登录态 (仅可抓取前少量公开内容)';
+                    desc.innerText = '知乎限制未登录访问。推荐点击【🌐 一键同步本机浏览器】或【📱 官方扫码登录】一键解锁全量内容';
+                    if (logoutBtn) logoutBtn.style.display = 'none';
+                }
+            } catch (e) {
+                dot.style.background = '#ef4444';
+                title.innerText = '知乎服务状态异常';
+                if (logoutBtn) logoutBtn.style.display = 'none';
+            }
+        }
+
+        async function syncZhihuBrowser() {
+            const desc = document.getElementById('zhihuStatusDesc');
+            const btn = document.getElementById('btnZhihuSyncBrowser');
+            const orig = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `<svg class="icon spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> <span>同步中...</span>`;
+            }
+            if (desc) desc.innerHTML = `<b style="color:var(--accent-primary);">正在从本机 Edge / Chrome 浏览器读取知乎已登录凭证...</b>`;
+
+            try {
+                const res = await fetch('/api/zhihu/sync-browser', { method: 'POST' });
+                const data = await res.json();
+                alert(data.message || (data.success ? '成功从本机浏览器同步知乎登录凭证！' : '同步未完成'));
+                await checkZhihuAuth();
+            } catch (e) {
+                alert('同步知乎登录态失败: ' + e.message);
+                await checkZhihuAuth();
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = orig;
+                }
+            }
+        }
+
+        async function triggerZhihuQrLogin() {
+            const btn = document.getElementById('btnZhihuQrLogin');
+            const desc = document.getElementById('zhihuStatusDesc');
+            const orig = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `<svg class="icon spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> <span>等待扫码...</span>`;
+            }
+            if (desc) desc.innerHTML = `<b style="color:var(--accent-gold);">📱 登录窗口已弹出！请在知乎官方窗口使用手机扫码，登录后窗口将自动关闭并保存凭证。</b>`;
+
+            try {
+                if (window.electronAPI && typeof window.electronAPI.openZhihuLogin === 'function') {
+                    await window.electronAPI.openZhihuLogin();
+                    let attempts = 0;
+                    const interval = setInterval(async () => {
+                        attempts++;
+                        const res = await fetch('/api/zhihu/status');
+                        const data = await res.json();
+                        if (data.is_logged_in || attempts > 60) {
+                            clearInterval(interval);
+                            checkZhihuAuth();
+                            if (btn) {
+                                btn.disabled = false;
+                                btn.innerHTML = orig;
+                            }
+                        }
+                    }, 1500);
+                    return;
+                } else if (window.blogDistiller && typeof window.blogDistiller.openZhihuLogin === 'function') {
+                    await window.blogDistiller.openZhihuLogin();
+                    let attempts = 0;
+                    const interval = setInterval(async () => {
+                        attempts++;
+                        const res = await fetch('/api/zhihu/status');
+                        const data = await res.json();
+                        if (data.is_logged_in || attempts > 60) {
+                            clearInterval(interval);
+                            checkZhihuAuth();
+                            if (btn) {
+                                btn.disabled = false;
+                                btn.innerHTML = orig;
+                            }
+                        }
+                    }, 1500);
+                    return;
+                }
+
+                // 纯浏览器环境：调用后台 Playwright 弹窗接口
+                const res = await fetch('/api/zhihu/qr-login', { method: 'POST' });
+                const data = await res.json();
+                alert(data.message || (data.success ? '知乎扫码登录成功！' : '登录未完成'));
+                await checkZhihuAuth();
+            } catch (e) {
+                alert('拉起知乎扫码登录异常: ' + e.message + '\n\n提示：您也可以点击【手动 Cookie】直接粘贴凭证。');
+                await checkZhihuAuth();
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = orig;
+                }
+            }
+        }
+
+        function toggleZhihuCookieInput() {
+            const box = document.getElementById('zhihuManualCookieBox');
+            if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function submitManualZhihuCookie() {
+            const input = document.getElementById('manualZhihuCookieInput');
+            const cookie = input ? input.value.trim() : '';
+            if (!cookie) {
+                alert('请先输入知乎 Cookie 内容');
+                return;
+            }
+            try {
+                const res = await fetch('/api/zhihu/set-cookie', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cookie })
+                });
+                const data = await res.json();
+                alert(data.warning || '知乎 Cookie 保存成功！');
+                const box = document.getElementById('zhihuManualCookieBox');
+                if (box) box.style.display = 'none';
+                await checkZhihuAuth();
+            } catch (e) {
+                alert('保存知乎 Cookie 失败: ' + e.message);
+            }
+        }
+
+        async function logoutZhihu() {
+            if (!confirm('确定要清除本地保存的知乎登录态并退出当前账号吗？\n退出后可随时点击「🌐 一键同步本机浏览器」或「📱 官方扫码登录」重新连接。')) return;
+            try {
+                await fetch('/api/zhihu/logout', { method: 'POST' });
+                await checkZhihuAuth();
+                showToast('已清除本地保存的知乎登录凭证');
+            } catch (e) {
+                alert('退出知乎登录失败: ' + e.message);
+            }
+        }
+
+        // =========================================================================
+        // 新浪微博账号登录与凭证管理 (Weibo Auth & Cookie Management)
+        // =========================================================================
+
         async function checkWeiboAuth() {
             const dot = document.getElementById('weiboStatusDot');
             const title = document.getElementById('weiboStatusTitle');
             const desc = document.getElementById('weiboStatusDesc');
+            const logoutBtn = document.getElementById('btnWeiboLogout');
             if (!dot || !title || !desc) return;
 
             try {
@@ -3149,131 +3532,147 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 if (data.authenticated) {
                     dot.style.background = '#10b981'; // 绿色
                     title.innerHTML = `新浪微博已连接: <b style="color:var(--accent-emerald);">${data.username || '已认证用户'}</b>`;
-                    desc.innerText = '已通过浏览器/插件同步微博登录态，支持全量爬取博主历史全部博文！';
+                    desc.innerText = '已激活微博登录态，支持全量爬取博主历史全部原创博文与头条文章！';
+                    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
                 } else {
                     dot.style.background = '#9ca3af'; // 灰色
-                    title.innerText = '新浪微博未登录 (公开只读模式)';
-                    desc.innerText = '微博限制未登录访问频次。建议点击右上角【🧩 插件自动同步】或手动输入 Cookie。';
+                    title.innerText = '新浪微博未登录 (公开模式受限)';
+                    desc.innerText = '微博强制要求登录 (SUB凭证)。推荐点击【🌐 一键同步本机浏览器】或【📱 官方扫码登录】快速连接';
+                    if (logoutBtn) logoutBtn.style.display = 'none';
                 }
             } catch (e) {
                 dot.style.background = '#ef4444';
                 title.innerText = '微博状态检测异常';
+                if (logoutBtn) logoutBtn.style.display = 'none';
             }
         }
 
-        async function checkZhihuAuth() {
-            const dot = document.getElementById('zhihuStatusDot');
-            const title = document.getElementById('zhihuStatusTitle');
-            const desc = document.getElementById('zhihuStatusDesc');
-            if (!dot || !title || !desc) return;
+        async function syncWeiboBrowser() {
+            const desc = document.getElementById('weiboStatusDesc');
+            const btn = document.getElementById('btnWeiboSyncBrowser');
+            const orig = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `<svg class="icon spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> <span>同步中...</span>`;
+            }
+            if (desc) desc.innerHTML = `<b style="color:var(--accent-primary);">正在从本机 Edge / Chrome 浏览器读取微博已登录凭证...</b>`;
 
             try {
-                const res = await fetch('/api/zhihu/status');
+                const res = await fetch('/api/weibo/sync-browser', { method: 'POST' });
                 const data = await res.json();
-                if (data.authenticated) {
-                    dot.style.background = '#10b981'; // 绿色
-                    title.innerHTML = `知乎平台已连接: <b style="color:var(--accent-emerald);">${data.username || '已登录用户'}</b>`;
-                    desc.innerText = '已通过浏览器/插件同步知乎登录态，支持全量深度抓取！';
-                } else {
-                    dot.style.background = '#9ca3af'; // 灰色
-                    title.innerText = '知乎平台未登录 (仅可抓取前少量公开回答)';
-                    desc.innerText = '知乎限制未登录访问。建议点击右上角【🧩 插件自动同步】或手动输入 Cookie。';
-                }
+                alert(data.message || (data.success ? '成功从本机浏览器同步微博登录凭证！' : '同步未完成'));
+                await checkWeiboAuth();
             } catch (e) {
-                dot.style.background = '#ef4444';
-                title.innerText = '知乎状态检测异常';
+                alert('同步微博登录态失败: ' + e.message);
+                await checkWeiboAuth();
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = orig;
+                }
             }
         }
 
-        function triggerExtensionSync() {
-            window.dispatchEvent(new CustomEvent("TriggerBlogDistillerExtensionSync", {
-                detail: { platform: currentPlatform }
-            }));
-            toggleExtensionGuideModal();
-        }
-
-        function triggerZhihuExtensionSync() {
-            window.dispatchEvent(new CustomEvent("TriggerBlogDistillerExtensionSync", {
-                detail: { platform: "zhihu" }
-            }));
-            toggleExtensionGuideModal();
-            setTimeout(checkZhihuAuth, 600);
-            setTimeout(checkZhihuAuth, 1800);
-        }
-
-        function triggerWeiboExtensionSync() {
-            window.dispatchEvent(new CustomEvent("TriggerBlogDistillerExtensionSync", {
-                detail: { platform: "weibo" }
-            }));
-            toggleExtensionGuideModal();
-            setTimeout(checkWeiboAuth, 600);
-            setTimeout(checkWeiboAuth, 1800);
-        }
-
-        function saveManualZhihuCookie() {
-            const cookieVal = (document.getElementById('manualZhihuCookieInput').value || '').trim();
-            if (!cookieVal) {
-                alert('请先输入知乎 Cookie 内容');
-                return;
+        async function triggerWeiboQrLogin() {
+            const btn = document.getElementById('btnWeiboQrLogin');
+            const desc = document.getElementById('weiboStatusDesc');
+            const orig = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = `<svg class="icon spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> <span>等待扫码...</span>`;
             }
+            if (desc) desc.innerHTML = `<b style="color:var(--accent-gold);">📱 登录窗口已弹出！请使用手机微博 App 扫码，扫码完成后窗口将自动关闭并保存凭证。</b>`;
+
             try {
-                let cookies = {};
-                if (cookieVal.startsWith('{') || cookieVal.startsWith('[')) {
-                    const parsed = JSON.parse(cookieVal);
-                    if (Array.isArray(parsed)) {
-                        parsed.forEach(c => { if(c.name && c.value) cookies[c.name] = c.value; });
-                    } else {
-                        cookies = parsed;
-                    }
-                } else {
-                    cookieVal.split(';').forEach(pair => {
-                        const idx = pair.indexOf('=');
-                        if (idx > -1) {
-                            const k = pair.slice(0, idx).trim();
-                            const v = pair.slice(idx + 1).trim();
-                            if (k) cookies[k] = v;
+                if (window.electronAPI && typeof window.electronAPI.openWeiboLogin === 'function') {
+                    await window.electronAPI.openWeiboLogin();
+                    let attempts = 0;
+                    const interval = setInterval(async () => {
+                        attempts++;
+                        const res = await fetch('/api/weibo/status');
+                        const data = await res.json();
+                        if (data.authenticated || attempts > 60) {
+                            clearInterval(interval);
+                            checkWeiboAuth();
+                            if (btn) {
+                                btn.disabled = false;
+                                btn.innerHTML = orig;
+                            }
                         }
-                    });
+                    }, 1500);
+                    return;
+                } else if (window.blogDistiller && typeof window.blogDistiller.openWeiboLogin === 'function') {
+                    await window.blogDistiller.openWeiboLogin();
+                    let attempts = 0;
+                    const interval = setInterval(async () => {
+                        attempts++;
+                        const res = await fetch('/api/weibo/status');
+                        const data = await res.json();
+                        if (data.authenticated || attempts > 60) {
+                            clearInterval(interval);
+                            checkWeiboAuth();
+                            if (btn) {
+                                btn.disabled = false;
+                                btn.innerHTML = orig;
+                            }
+                        }
+                    }, 1500);
+                    return;
                 }
-                saveZhihuCookies(cookies);
-                alert('知乎 Cookie 保存成功！');
-                setTimeout(checkZhihuAuth, 600);
-                setTimeout(checkZhihuAuth, 1800);
+
+                // 纯浏览器环境：调用后台 Playwright 弹窗接口
+                const res = await fetch('/api/weibo/qr-login', { method: 'POST' });
+                const data = await res.json();
+                alert(data.message || (data.success ? '微博扫码登录成功！' : '登录未完成'));
+                await checkWeiboAuth();
             } catch (e) {
-                alert('Cookie 格式解析失败: ' + e.message);
+                alert('拉起微博扫码登录异常: ' + e.message + '\n\n提示：您也可以点击【手动 Cookie】直接粘贴凭证。');
+                await checkWeiboAuth();
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = orig;
+                }
             }
         }
 
-        function submitManualWeiboCookie() {
-            const cookieVal = (document.getElementById('manualWeiboCookieInput').value || '').trim();
-            if (!cookieVal) {
+        function toggleWeiboCookieInput() {
+            const box = document.getElementById('weiboManualCookieBox');
+            if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function submitManualWeiboCookie() {
+            const input = document.getElementById('manualWeiboCookieInput');
+            const cookie = input ? input.value.trim() : '';
+            if (!cookie) {
                 alert('请先输入微博 Cookie 内容');
                 return;
             }
             try {
-                let cookies = {};
-                if (cookieVal.startsWith('{') || cookieVal.startsWith('[')) {
-                    const parsed = JSON.parse(cookieVal);
-                    if (Array.isArray(parsed)) {
-                        parsed.forEach(c => { if(c.name && c.value) cookies[c.name] = c.value; });
-                    } else {
-                        cookies = parsed;
-                    }
-                } else {
-                    cookieVal.split(';').forEach(pair => {
-                        const idx = pair.indexOf('=');
-                        if (idx > -1) {
-                            const k = pair.slice(0, idx).trim();
-                            const v = pair.slice(idx + 1).trim();
-                            if (k) cookies[k] = v;
-                        }
-                    });
-                }
-                saveWeiboCookies(cookies);
+                const res = await fetch('/api/weibo/set-cookie', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cookie })
+                });
+                const data = await res.json();
                 alert('微博 Cookie 保存成功！');
-                setTimeout(checkWeiboAuth, 600);
-                setTimeout(checkWeiboAuth, 1800);
-            } catch (e) {}
+                const box = document.getElementById('weiboManualCookieBox');
+                if (box) box.style.display = 'none';
+                await checkWeiboAuth();
+            } catch (e) {
+                alert('保存微博 Cookie 失败: ' + e.message);
+            }
+        }
+
+        async function logoutWeibo() {
+            if (!confirm('确定要清除本地保存的微博登录态并退出当前账号吗？\n退出后可随时点击「🌐 一键同步本机浏览器」或「📱 官方扫码登录」重新连接。')) return;
+            try {
+                await fetch('/api/weibo/logout', { method: 'POST' });
+                await checkWeiboAuth();
+                showToast('已清除本地保存的微博登录凭证');
+            } catch (e) {
+                alert('退出微博登录失败: ' + e.message);
+            }
         }
 
         function escapeHtml(str) {
@@ -3596,57 +3995,149 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 const platLabel = platformNames[currentPlatform] || currentPlatform;
                 openStreamProgressModal(target, platLabel);
 
-                // 启动通用平台模拟进度演进 (与实际后端检索并行)
-                let simPercent = 10;
-                const simInterval = setInterval(() => {
-                    if (simPercent < 90) {
-                        simPercent += Math.floor(Math.random() * 8) + 4;
-                        if (simPercent > 92) simPercent = 92;
-                        const pb = document.getElementById('streamProgressBar');
-                        const pp = document.getElementById('streamProgressPercent');
-                        const badge = document.getElementById('streamStatusBadge');
-                        const t1 = document.getElementById('tickerItem1');
-                        const t2 = document.getElementById('tickerItem2');
-                        const t3 = document.getElementById('tickerItem3');
-
-                        if (pb) pb.style.width = simPercent + '%';
-                        if (pp) pp.innerText = simPercent + '%';
-                        
-                        if (simPercent >= 30 && t1) {
-                            t1.innerHTML = `✓ [已建立连接] 成功接入 <b style="color:var(--accent-emerald);">${platLabel}</b> 数据服务节点`;
-                            t1.style.opacity = '1';
-                        }
-                        if (simPercent >= 55 && t2) {
-                            t2.innerHTML = `🔄 [分页解析中] 正在逐页检索【${target}】的全部历史博文并穿透反爬...`;
-                            t2.style.opacity = '1';
-                            if (badge) badge.innerText = `正在分页读取博文目录 (进度约 ${simPercent}%)...`;
-                        }
-                        if (simPercent >= 80 && t3) {
-                            t3.innerHTML = `⏳ [清单生成中] 正在校验博文标题、文章唯一ID与发布时间戳...`;
-                            t3.style.opacity = '1';
-                            if (badge) badge.innerText = '即将完成，正在构建文章选择列表...';
-                        }
-                    }
-                }, 800);
+                // 如果用户选定了检索范围（如最新前 N 篇），将 max_articles 传至后端提前结束翻页
+                let maxArticlesParam = undefined;
+                if (currentRangeMode === 'recent') {
+                    const c = parseInt(document.getElementById('recentCountInput')?.value) || 20;
+                    maxArticlesParam = c;
+                } else if (currentRangeMode === 'custom') {
+                    const e = parseInt(document.getElementById('endIndexInput')?.value);
+                    if (e && e > 0) maxArticlesParam = e;
+                }
 
                 const payload = {
                     platform: currentPlatform,
                     target: target,
+                    max_articles: maxArticlesParam,
                     cookie: document.getElementById('wechatCookieInput')?.value.trim() || undefined,
-                    token: document.getElementById('wechatTokenInput')?.value.trim() || undefined
+                    token: document.getElementById('wechatTokenInput')?.value.trim() || undefined,
+                    async_mode: true
                 };
+
+                const extractAbortController = new AbortController();
+                window._activeExtractAbortController = extractAbortController;
+                window._extractOrigBtnHTML = origHTML;
 
                 let res, data;
                 try {
-                    // 关键改动：改用带重试的请求助手，网络瞬时失败（如代理掐断、CDN 抖动）自动重试 2 次
+                    // 初始化连接看板与轻量握手动画
+                    let initialPercent = 10;
+                    const pb = document.getElementById('streamProgressBar');
+                    const pp = document.getElementById('streamProgressPercent');
+                    const badge = document.getElementById('streamStatusBadge');
+                    if (pb) pb.style.width = '10%';
+                    if (pp) pp.innerText = '10%';
+                    if (badge) badge.innerText = `正在连接 ${platLabel} 节点，准备扫描博文...`;
+
                     res = await fetchWithRetry('/api/extract-links', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
+                        body: JSON.stringify(payload),
+                        signal: extractAbortController.signal
                     });
                     data = await res.json();
+
+                    if (!res.ok) {
+                        throw new Error(data.detail || '提取文章链接失败');
+                    }
+
+                    // 核心改进：若后端返回 job_id（异步任务模式），实时轮询真实抓取进度与篇数，彻底告别“已检索：0”假死
+                    if (data.job_id) {
+                        const jobId = data.job_id;
+                        let lastKnownCount = 0;
+                        while (!extractAbortController.signal.aborted) {
+                            await new Promise(r => setTimeout(r, 400));
+                            if (extractAbortController.signal.aborted) break;
+
+                            let progData;
+                            try {
+                                const progRes = await fetch(`/api/extract-links/progress?job_id=${encodeURIComponent(jobId)}`, {
+                                    signal: extractAbortController.signal
+                                });
+                                if (!progRes.ok) continue;
+                                progData = await progRes.json();
+                            } catch (pErr) {
+                                if (extractAbortController.signal.aborted) break;
+                                continue;
+                            }
+
+                            const current = Number(progData.current) || 0;
+                            const msg = progData.message || '';
+                            const status = progData.status;
+                            lastKnownCount = current;
+
+                            // 1. 实时刷新已检索篇数！绝不卡 0
+                            const countDisp = document.getElementById('streamCountDisplay');
+                            if (countDisp) countDisp.innerText = String(current);
+
+                            // 2. 实时更新状态提示文本
+                            const badge = document.getElementById('streamStatusBadge');
+                            if (badge) {
+                                if (msg) {
+                                    badge.innerText = msg;
+                                } else if (current > 0) {
+                                    badge.innerText = `已检索 ${current} 篇博文，正在继续翻页读取...`;
+                                } else {
+                                    badge.innerText = `正在建立安全直连，连接 ${platLabel} 主页...`;
+                                }
+                            }
+
+                            // 3. 动态平滑推进真实进度百分比与进度条
+                            const pb = document.getElementById('streamProgressBar');
+                            const pp = document.getElementById('streamProgressPercent');
+                            if (pb && pp) {
+                                const curPct = parseInt(pp.innerText) || 0;
+                                let targetPct;
+                                if (status === 'completed') {
+                                    targetPct = 100;
+                                } else if (current > 0) {
+                                    // 根据已扫描文章数平滑对数递增：10篇~45%, 50篇~65%, 200篇~80%, 1000篇+~92%
+                                    targetPct = Math.min(94, Math.max(curPct, Math.floor(25 + Math.log10(current + 1) * 21)));
+                                } else {
+                                    // 握手阶段平缓前进至 25%
+                                    targetPct = Math.min(25, curPct + 2);
+                                }
+                                if (targetPct > curPct) {
+                                    pb.style.width = targetPct + '%';
+                                    pp.innerText = targetPct + '%';
+                                }
+                            }
+
+                            // 4. 实时滚动更新阶段状态与跑马灯看板
+                            const t1 = document.getElementById('tickerItem1');
+                            const t2 = document.getElementById('tickerItem2');
+                            const t3 = document.getElementById('tickerItem3');
+                            if (t1) {
+                                t1.innerHTML = `✓ [已建立连接] 成功接入 <b style="color:var(--accent-emerald);">${platLabel}</b> 数据服务节点`;
+                                t1.style.opacity = '1';
+                            }
+                            if (t2) {
+                                t2.innerHTML = current > 0
+                                    ? `🔄 [分页解析中] ${msg || `已获取 ${current} 篇博文索引并持续向后检索...`}`
+                                    : `🔄 [分页解析中] 正在逐页检索【${target}】的历史博文并穿透反爬...`;
+                                t2.style.opacity = '1';
+                            }
+                            if (t3 && current > 0) {
+                                t3.innerHTML = `⏳ [清单生成中] 累计已校对 <b>${current}</b> 篇博文，正在校验博文唯一ID与发布时间戳...`;
+                                t3.style.opacity = '1';
+                            }
+
+                            if (status === 'completed') {
+                                data = progData.result || {};
+                                break;
+                            } else if (status === 'failed') {
+                                throw new Error(progData.error || '检索博文列表失败');
+                            }
+                        }
+                    }
+                } catch (fetchErr) {
+                    if (fetchErr.name === 'AbortError' || extractAbortController.signal.aborted) {
+                        console.log('文章目录提取已由用户主动中断');
+                        return;
+                    }
+                    throw fetchErr;
                 } finally {
-                    clearInterval(simInterval);
+                    window._activeExtractAbortController = null;
                 }
 
                 if (!res.ok) {
@@ -3720,7 +4211,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             document.getElementById('streamProgressPercent').innerText = '0%';
             document.getElementById('streamProgressBar').style.width = '0%';
             document.getElementById('streamCountDisplay').innerText = '0';
-            document.getElementById('streamTotalDisplay').innerText = '计算中...';
+            document.getElementById('streamTotalDisplay').innerText = '翻页检索中...';
             document.getElementById('streamStatusBadge').innerText = '正在建立安全直连通道...';
             
             const t1 = document.getElementById('tickerItem1');
@@ -3794,10 +4285,40 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         }
 
         function stopStreamFetchAndShowCurrent() {
+            // 微信扩展流式抓取通道中断通知
             window.postMessage({ type: "BLOGDISTILLER_STOP_WECHAT_FETCH" }, "*");
             window.dispatchEvent(new CustomEvent('BlogDistillerStopWechatFetch'));
-            const badge = document.getElementById('streamStatusBadge');
-            if (badge) badge.innerText = '⏹️ 正在结算当前已抓取的文章篇目...';
+
+            // 终止正在进行的通用后端 HTTP 检索请求
+            if (window._activeExtractAbortController) {
+                try {
+                    window._activeExtractAbortController.abort();
+                } catch (e) {}
+                window._activeExtractAbortController = null;
+            }
+            if (window._extractSimInterval) {
+                clearInterval(window._extractSimInterval);
+                window._extractSimInterval = null;
+            }
+
+            // 立即关闭加载弹窗，不再卡住
+            closeStreamProgressModal();
+
+            // 恢复主检索按钮可用状态
+            const btn = document.getElementById('extractLinksBtn') || document.getElementById('startBtn');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = window._extractOrigBtnHTML || `
+                    <div style="display: flex; align-items: center; gap: 10px; justify-content: center;">
+                        <svg class="icon icon-md" viewBox="0 0 24 24" style="color: var(--bg-base); flex-shrink: 0;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                        <div style="display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;">
+                            <span style="font-size: 0.98rem; font-weight: 800; letter-spacing: 0.5px;">🚀 检索文章列表目录并挑选导出</span>
+                            <span style="font-size: 0.76rem; opacity: 0.85; font-weight: 500;">(全量提取文章列表 · 勾选后一键合并下载)</span>
+                        </div>
+                    </div>
+                `;
+            }
+            showToast('已停止抓取');
         }
 
         function renderLinksModal(author, articles, channel = 'official', meta = {}, checkedUrls = null) {
@@ -3879,9 +4400,20 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         noticeTag.innerText = `全部分页深度穿透完成 · 无遗漏`;
                     }
                     if (noticeContent) {
-                        let exp = meta.explanation 
-                            ? escapeHtml(meta.explanation).replace(/\n/g, '<br>') 
-                            : `源网页标称<strong>${categoryName ? `「${escapeHtml(categoryName)}」` : '该专栏'}</strong>含 <b>${declaredCount}</b> 篇博文，系统已全部分页深度遍历，<b>100% 完整收录公网当前所有可访问的 ${actualCount} 篇有效博文</b>。<br>差额 <b>${diff} 篇</b> 通常为博主多年间自行删除、设为私密或平台系统下架屏蔽所致（公网已无对应访问页面），并非系统抓取遗漏，请放心导出使用！`;
+                        const targetDesc = categoryName ? `「${escapeHtml(categoryName)}」` : (author ? `「${escapeHtml(author)}」` : '该作者主页');
+                        const defaultDiffExp = `源网页标称 <b>${targetDesc}</b> 共含 <b>${declaredCount}</b> 篇博文，系统已全部分页深度遍历，<b>100% 完整收录公网当前所有可访问的 ${actualCount} 篇有效博文</b>。<br>差额 <b>${diff} 篇</b> 通常为博主多年间自行删除、设为私密或平台系统下架屏蔽所致（公网已无对应访问页面），并非系统抓取遗漏，请放心导出使用！`;
+                        
+                        let exp = '';
+                        // 如果后端已有完整的差额自洽说明（包含差额、标称或公网说明）
+                        if (meta.explanation && (meta.explanation.includes('差额') || meta.explanation.includes('并非系统') || meta.explanation.includes('有效博文'))) {
+                            exp = meta.explanation.replace(/\n/g, '<br>');
+                        } else {
+                            // 后端未提供篇数差异原因（例如仅传了字数统计或提示），必须展示核心差额自洽解答，避免“提了为什么却没回答为什么”
+                            exp = defaultDiffExp;
+                            if (meta.explanation) {
+                                exp += `<div style="margin-top: 6px; padding-top: 4px; border-top: 1px dashed rgba(245, 158, 11, 0.25); font-size: 0.73rem; color: var(--text-muted);">📊 <b>附加说明</b>：${escapeHtml(meta.explanation).replace(/\n/g, '<br>')}</div>`;
+                            }
+                        }
                         if (rangeNoticeHtml) {
                             exp += rangeNoticeHtml;
                         }
@@ -3904,6 +4436,34 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     }
                     if (noticeContent) {
                         let exp = `已 100% 完整全量同步收录全部 <b>${actualCount}</b> 篇博文，与源平台标称数量完全吻合。`;
+                        if (meta.explanation && !meta.explanation.includes('100%')) {
+                            exp += `<div style="margin-top: 4px; font-size: 0.73rem; color: var(--text-muted);">📊 <b>附加说明</b>：${escapeHtml(meta.explanation).replace(/\n/g, '<br>')}</div>`;
+                        }
+                        if (rangeNoticeHtml) {
+                            exp += rangeNoticeHtml;
+                        }
+                        noticeContent.innerHTML = exp;
+                    }
+                } else if (declaredCount && actualCount > declaredCount) {
+                    noticeBox.style.display = 'block';
+                    noticeBox.style.background = 'rgba(16, 185, 129, 0.08)';
+                    noticeBox.style.border = '1px solid rgba(16, 185, 129, 0.25)';
+                    
+                    if (noticeIcon) noticeIcon.innerText = '🎉';
+                    if (noticeTitle) {
+                        noticeTitle.style.color = 'var(--accent-emerald)';
+                        noticeTitle.innerText = `深度穿透完成 · 超额收录 (标称 ${declaredCount} 篇，实收 ${actualCount} 篇)`;
+                    }
+                    if (noticeTag) {
+                        noticeTag.style.background = 'rgba(16, 185, 129, 0.15)';
+                        noticeTag.style.color = 'var(--accent-emerald)';
+                        noticeTag.innerText = `超越标称`;
+                    }
+                    if (noticeContent) {
+                        let exp = `系统已深度遍历抓取到全部 <b>${actualCount}</b> 篇公开有效博文，超出源平台页面静态标称数（可能存在近期新发或平台计数延迟），已全部完整收录！`;
+                        if (meta.explanation && !meta.explanation.includes('深度遍历')) {
+                            exp += `<div style="margin-top: 4px; font-size: 0.73rem; color: var(--text-muted);">📊 <b>附加说明</b>：${escapeHtml(meta.explanation).replace(/\n/g, '<br>')}</div>`;
+                        }
                         if (rangeNoticeHtml) {
                             exp += rangeNoticeHtml;
                         }
@@ -4127,18 +4687,72 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             document.getElementById('linksModal').style.display = 'none';
         }
 
-        function exportLinksTxt() {
+        async function exportOnlyUrls() {
             const checkedBoxes = document.querySelectorAll('.link-item-checkbox:checked');
             if (checkedBoxes.length === 0) {
                 alert('请至少勾选一篇文章！');
                 return;
             }
             const urls = Array.from(checkedBoxes).map(b => b.getAttribute('data-url')).filter(Boolean);
-            const blob = new Blob([urls.join('\n')], { type: 'text/plain;charset=utf-8' });
+            const author = (window._lastRenderedLinks?.author || '博主').replace(/[\\/:*?"<>|]/g, '_');
+            const content = urls.join('\n');
+            const filename = `${author}_文章纯链接_${checkedBoxes.length}篇_${Date.now()}.txt`;
+
+            if (window.blogDistiller && window.blogDistiller.saveTextFile) {
+                try {
+                    const res = await window.blogDistiller.saveTextFile({ filename, content, filterType: 'txt' });
+                    if (res && res.success) {
+                        showToast(`✓ 已成功保存 ${urls.length} 条纯链接至：${res.savedPath}`);
+                        return;
+                    }
+                } catch(e) {}
+            }
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `article_links_${Date.now()}.txt`;
+            a.download = filename;
             a.click();
+            URL.revokeObjectURL(a.href);
+            showToast(`✓ 已成功导出 ${urls.length} 条纯文章链接！`);
+        }
+        window.exportLinksTxt = exportOnlyUrls;
+
+        async function exportTitlesAndUrls() {
+            const checkedBoxes = document.querySelectorAll('.link-item-checkbox:checked');
+            if (checkedBoxes.length === 0) {
+                alert('请至少勾选一篇文章！');
+                return;
+            }
+            const allArticles = window._lastRenderedLinks?.articles || [];
+            const lines = Array.from(checkedBoxes).map((b, i) => {
+                const idx = parseInt(b.getAttribute('data-idx'), 10);
+                const item = allArticles[idx];
+                const title = (item?.title || b.closest('tr')?.querySelector('td:nth-child(3) a')?.innerText?.trim() || `第${i+1}篇`).trim();
+                const url = b.getAttribute('data-url') || item?.url || '';
+                const time = item?.publish_time || item?.create_time || '';
+                const timeStr = time ? ` (${time})` : '';
+                return `${i + 1}. ${title}${timeStr}\n   ${url}`;
+            });
+            const author = (window._lastRenderedLinks?.author || '博主').replace(/[\\/:*?"<>|]/g, '_');
+            const content = lines.join('\n\n');
+            const filename = `${author}_文章名称与链接清单_${checkedBoxes.length}篇_${Date.now()}.txt`;
+
+            if (window.blogDistiller && window.blogDistiller.saveTextFile) {
+                try {
+                    const res = await window.blogDistiller.saveTextFile({ filename, content, filterType: 'txt' });
+                    if (res && res.success) {
+                        showToast(`✓ 已成功保存 ${lines.length} 篇标题与链接至：${res.savedPath}`);
+                        return;
+                    }
+                } catch(e) {}
+            }
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            showToast(`✓ 已成功导出 ${lines.length} 篇文章名称与链接清单！`);
         }
 
         function downloadSelectedArticles() {
@@ -4210,32 +4824,6 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 hint.style.display = 'flex';
             } else {
                 hint.style.display = 'none';
-            }
-        }
-
-        async function checkZhihuAuth() {
-            const dot = document.getElementById('zhihuStatusDot');
-            const title = document.getElementById('zhihuStatusTitle');
-            const desc = document.getElementById('zhihuStatusDesc');
-            try {
-                const res = await fetch('/api/zhihu/status');
-                const data = await res.json();
-                if (data.is_logged_in) {
-                    if (dot) dot.style.background = '#10b981'; // 绿色
-                    if (title) title.innerHTML = `知乎账号已连接: <b style="color:var(--accent-emerald);">${data.user_name}</b> (@${data.url_token || '用户'})`;
-                    if (desc) desc.innerText = '已激活全量权限，可批量抓取全网任意博主历史所有回答、专栏长文与想法';
-                } else if (data.has_cookie) {
-                    if (dot) dot.style.background = '#f59e0b'; // 黄色
-                    if (title) title.innerText = '知乎基础凭证有效 (游客/临时会话)';
-                    if (desc) desc.innerText = '可抓取公开内容，建议使用【🧩 插件自动同步】以获取全量高赞回答与防风控权限';
-                } else {
-                    if (dot) dot.style.background = '#9ca3af'; // 灰色
-                    if (title) title.innerText = '知乎未连接登录态';
-                    if (desc) desc.innerText = '知乎对未登录访问限制严格，请使用【🧩 插件自动同步】或【手动 Cookie】即可完美解锁全网博主全量内容';
-                }
-            } catch (e) {
-                if (dot) dot.style.background = '#ef4444';
-                if (title) title.innerText = '知乎服务状态异常';
             }
         }
 
@@ -4345,50 +4933,6 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             checkWeChatAuth();
         }
 
-        async function syncZhihuBrowser() {
-            const btn = document.getElementById('btnSyncBrowser');
-            const orig = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = `<svg class="icon spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> <span>正在同步...</span>`;
-            try {
-                const res = await fetch('/api/zhihu/sync-browser', { method: 'POST' });
-                const data = await res.json();
-                alert(data.message || (data.success ? '同步成功' : '同步失败'));
-                checkZhihuAuth();
-            } catch (e) {
-                alert('同步本机浏览器异常: ' + e.message);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = orig;
-            }
-        }
-
-        async function triggerZhihuQrLogin() {
-            const btn = document.getElementById('btnQrLogin');
-            const orig = btn.innerHTML;
-            const desc = document.getElementById('zhihuStatusDesc');
-            const origDesc = desc ? desc.innerText : '';
-            
-            btn.disabled = true;
-            btn.innerHTML = `<svg class="icon spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> <span>等待扫码中...</span>`;
-            if (desc) {
-                desc.innerHTML = `<b style="color:var(--accent-gold);">📱 登录窗口已在桌面拉起！请查看任务栏或弹出的知乎窗口并用手机扫码，完成后窗口自动关闭。</b>`;
-            }
-            
-            try {
-                const res = await fetch('/api/zhihu/qr-login', { method: 'POST' });
-                const data = await res.json();
-                alert(data.message || (data.success ? '知乎登录成功！' : '登录未完成'));
-                checkZhihuAuth();
-            } catch (e) {
-                alert('扫码登录异常: ' + e.message + '\n\n提示：您也可以点击【手动 Cookie】直接粘贴凭证。');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = orig;
-                if (desc && origDesc) desc.innerText = origDesc;
-            }
-        }
-
         function toggleExtensionGuideModal() {
             const modal = document.getElementById('extensionGuideModal');
             if (modal) {
@@ -4400,36 +4944,9 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         window.addEventListener("BlogDistillerAuthSynced", (e) => {
             console.log("检测到插件已完成自动同步:", e.detail);
             checkZhihuAuth();
+            checkWeiboAuth();
             checkWeChatAuth();
         });
-
-        function toggleZhihuCookieInput() {
-            const box = document.getElementById('zhihuManualCookieBox');
-            if (box) {
-                box.style.display = box.style.display === 'none' ? 'block' : 'none';
-            }
-        }
-
-        async function submitManualZhihuCookie() {
-            const cookie = document.getElementById('manualZhihuCookieInput').value.trim();
-            if (!cookie) {
-                alert('请先输入知乎 Cookie！');
-                return;
-            }
-            try {
-                const res = await fetch('/api/zhihu/set-cookie', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cookie })
-                });
-                const data = await res.json();
-                alert('Cookie 保存成功！');
-                document.getElementById('zhihuManualCookieBox').style.display = 'none';
-                checkZhihuAuth();
-            } catch (e) {
-                alert('保存 Cookie 失败: ' + e.message);
-            }
-        }
 
         function autoDetectPlatform(val) {
             const t = (val || '').toLowerCase();
@@ -4506,12 +5023,14 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             const el = document.getElementById(id);
             if (el) el.addEventListener('input', saveFormState);
         });
-        ['noiseFilterSwitch', 'removeWatermarkSwitch', 'useCacheSwitch', 'downloadImagesSwitch'].forEach(id => {
+        ['noiseFilterSwitch', 'removeWatermarkSwitch', 'useCacheSwitch'].forEach(id => {
             const el = document.getElementById(id);
-            if (el) el.addEventListener('change', () => {
-                if (id === 'downloadImagesSwitch') {
-                    localStorage.setItem('bd_dl_images_user_touched', 'true');
-                }
+            if (el) el.addEventListener('change', saveFormState);
+        });
+        // 图片模式三选一：任意改动都标记"用户已手动操作"并自动保存
+        document.querySelectorAll('input[name="imageMode"]').forEach(rb => {
+            rb.addEventListener('change', () => {
+                localStorage.setItem('bd_dl_images_user_touched', 'true');
                 saveFormState();
             });
         });
@@ -4531,7 +5050,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     noiseFilter: document.getElementById('noiseFilterSwitch')?.checked ?? true,
                     removeWatermark: document.getElementById('removeWatermarkSwitch')?.checked ?? true,
                     useCache: document.getElementById('useCacheSwitch')?.checked ?? true,
-                    downloadImages: document.getElementById('downloadImagesSwitch')?.checked ?? true,
+                    imageMode: document.querySelector('input[name="imageMode"]:checked')?.value || 'compressed',
                     authorOverride: document.getElementById('authorNameOverrideInput')?.value || '',
                     wechatToken: document.getElementById('wechatTokenInput')?.value || '',
                     wechatCookie: document.getElementById('wechatCookieInput')?.value || ''
@@ -4543,12 +5062,11 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         // 从 localStorage 恢复表单配置
         function restoreFormState() {
             try {
-                const dlSwitch = document.getElementById('downloadImagesSwitch');
                 const userTouched = localStorage.getItem('bd_dl_images_user_touched');
 
                 const saved = localStorage.getItem('blogdistiller_form_config');
                 if (!saved) {
-                    if (dlSwitch) dlSwitch.checked = true;
+                    // 无历史配置：保持默认"压缩图(推荐)"选中 (HTML 上已默认 checked)
                     return;
                 }
                 const state = JSON.parse(saved);
@@ -4579,16 +5097,14 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 if (state.removeWatermark !== undefined && document.getElementById('removeWatermarkSwitch')) document.getElementById('removeWatermarkSwitch').checked = state.removeWatermark;
                 if (state.useCache !== undefined && document.getElementById('useCacheSwitch')) document.getElementById('useCacheSwitch').checked = state.useCache;
                 
-                // 本地化下载文章配图：严格默认开启！
-                // 仅当用户在界面上手动明确操作过此开关时才遵循其手动值；历史默认残留一律强制校准为默认开启 (checked = true)
-                if (dlSwitch) {
-                    if (userTouched === 'true' && state.downloadImages !== undefined) {
-                        dlSwitch.checked = Boolean(state.downloadImages);
-                    } else {
-                        dlSwitch.checked = true;
-                        state.downloadImages = true;
-                        localStorage.setItem('blogdistiller_form_config', JSON.stringify(state));
-                    }
+                // 本地化下载文章配图：三选一，严格默认"压缩图(推荐)"
+                // 仅当用户手动操作过时才遵循其选择；历史默认残留一律强制校准为压缩图
+                const modeVal = (userTouched === 'true' && state.imageMode) ? state.imageMode : 'compressed';
+                const modeRb = document.querySelector(`input[name="imageMode"][value="${modeVal}"]`);
+                if (modeRb) modeRb.checked = true;
+                if (userTouched !== 'true' || !state.imageMode) {
+                    state.imageMode = 'compressed';
+                    localStorage.setItem('blogdistiller_form_config', JSON.stringify(state));
                 }
 
                 if (state.authorOverride && document.getElementById('authorNameOverrideInput')) document.getElementById('authorNameOverrideInput').value = state.authorOverride;
@@ -4658,8 +5174,13 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             const cache = document.getElementById('useCacheSwitch').checked;
             document.getElementById('modalCache').innerText = cache ? '已开启 (断点续爬)' : '已关闭';
 
-            const dlImages = document.getElementById('downloadImagesSwitch').checked;
-            document.getElementById('modalImages').innerText = dlImages ? '📸 本地化离线下载 (存入 images/)' : '🌐 保留在线 CDN 链接';
+            const imgMode = document.querySelector('input[name="imageMode"]:checked')?.value || 'compressed';
+            const imgModeText = imgMode === 'none'
+                ? '🌐 保留在线 CDN 链接 (不配图)'
+                : (imgMode === 'original'
+                    ? '🖼️ 高清原图本地化归档 (体积大·耗时较长)'
+                    : '⚡ 极速轻量压缩图本地化归档 (推荐)');
+            document.getElementById('modalImages').innerText = imgModeText;
 
             document.getElementById('confirmModal').style.display = 'flex';
         }
@@ -4694,7 +5215,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             const enableNoise = document.getElementById('noiseFilterSwitch')?.checked ?? true;
             const removeWatermark = document.getElementById('removeWatermarkSwitch')?.checked ?? true;
             const useCache = document.getElementById('useCacheSwitch')?.checked ?? true;
-            const enableDownloadImages = document.getElementById('downloadImagesSwitch')?.checked ?? true;
+            const imageMode = document.querySelector('input[name="imageMode"]:checked')?.value || 'compressed';
             const authorOverride = document.getElementById('authorNameOverrideInput')?.value?.trim() || null;
             const wechatToken = document.getElementById('wechatTokenInput')?.value?.trim() || null;
             const wechatCookie = document.getElementById('wechatCookieInput')?.value?.trim() || null;
@@ -4723,7 +5244,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 enable_noise_filter: enableNoise,
                 remove_image_watermark: removeWatermark,
                 use_cache: useCache,
-                download_images: enableDownloadImages,
+                image_mode: imageMode,
                 max_articles: maxArticles,
                 start_index: startIndex,
                 end_index: endIndex,
@@ -4782,6 +5303,10 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     if (res.status < 500 || i === attempts) return res;
                     await new Promise(r => setTimeout(r, 800 * i));
                 } catch (e) {
+                    // 若外部主动取消（AbortError），立即抛出不再重试
+                    if (e.name === 'AbortError' || options.signal?.aborted) {
+                        throw e;
+                    }
                     const isNetworkErr = e.message && e.message.includes('Failed to fetch');
                     // 非网络错误，或已重试到最后一次：不再重试
                     if (!isNetworkErr || i === attempts) {
@@ -5166,7 +5691,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         Object.entries(files).forEach(([fmt, url]) => {
                             if (fmt !== 'zip') {
                                 htmlOutput += `
-                                    <a href="${url}" class="action-card-btn secondary-action-btn" target="_blank" download style="text-decoration:none; justify-content:space-between; padding: 12px 16px;">
+                                    <a href="${url}" class="action-card-btn secondary-action-btn" target="_blank" download onclick="return handleDownloadClick(this, '${formatLabels[fmt] || fmt.toUpperCase()}')" style="text-decoration:none; justify-content:space-between; padding: 12px 16px;">
                                         <div style="display:flex; align-items:center; gap:8px;">
                                             <span>${formatIcons[fmt] || '📄'}</span>
                                             <span style="font-weight:700;">${formatLabels[fmt] || fmt.toUpperCase()}</span>
@@ -5177,11 +5702,36 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                             }
                         });
                         if (files['zip']) {
+                            // 单 ZIP：黑色"一键下载"直接指向该文件
                             const zipBtn = document.getElementById('zipDownloadBtn');
                             if (zipBtn) {
                                 zipBtn.href = files['zip'];
                                 zipBtn.style.pointerEvents = '';
                                 zipBtn.style.opacity = '';
+                            }
+                        } else {
+                            // 批量归档：产物是 zip_batch_1/2/3…，无 files['zip'] 单键。
+                            // 若不处理，黑色按钮 href 恒为 # → 点击毫无反应。
+                            // 这里改为"一键依次下载所有批次"。
+                            const batchZipUrls = Object.entries(files)
+                                .filter(([k, v]) => k.startsWith('zip_batch_') && typeof v === 'string')
+                                .map(([k, v]) => v);
+                            const zipBtn = document.getElementById('zipDownloadBtn');
+                            if (zipBtn && batchZipUrls.length > 0) {
+                                zipBtn.href = '#';
+                                zipBtn.style.pointerEvents = '';
+                                zipBtn.style.opacity = '';
+                                zipBtn.onclick = function (e) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    downloadZipBundle(batchZipUrls, 'ZIP 归档包');
+                                    return false;
+                                };
+                                // 提示用户当前是"一次全部下载"而不是单个文件
+                                const zipTitle = zipBtn.querySelector('div:nth-child(2) div:nth-child(1)');
+                                if (zipTitle && zipTitle.textContent.indexOf('一键下载 ZIP 全量归档大礼包') !== -1) {
+                                    zipTitle.textContent = '📦 一键下载全部 ZIP 归档包 (' + batchZipUrls.length + ' 个)';
+                                }
                             }
                         }
                     }
@@ -5193,21 +5743,6 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     }
                     saveTaskToLocalHistory(task);
                     loadHistory();
-
-                    // 自动触发下载至本地电脑 (若开启且存在 ZIP 归档包)
-                    const autoDownloadEl = document.getElementById('autoDownloadSwitch');
-                    if (autoDownloadEl && autoDownloadEl.checked && files['zip']) {
-                        try {
-                            const a = document.createElement('a');
-                            a.href = files['zip'];
-                            a.download = '';
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                        } catch (err) {
-                            console.warn('自动触发下载异常:', err);
-                        }
-                    }
                 } else if (task.status === 'cancelled') {
                     if (pauseResumeBtn) pauseResumeBtn.style.display = 'none';
                     if (stopAndExportBtn) stopAndExportBtn.style.display = 'none';
@@ -5426,7 +5961,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 // 优先展示高亮的 ZIP 打包按钮
                 if (files['zip']) {
                     badgesHtml += `
-                        <a href="${files['zip']}" class="mini-download-btn mini-zip-btn" download style="background: var(--text-primary); color: var(--bg-base); border-color: var(--text-primary); font-weight: 700; padding: 4px 10px;" title="一键下载包含全部格式与分篇文档的 ZIP 归档包">
+                        <a href="${files['zip']}" class="mini-download-btn mini-zip-btn" download onclick="return handleDownloadClick(this, 'ZIP 归档包')" style="background: var(--text-primary); color: var(--bg-base); border-color: var(--text-primary); font-weight: 700; padding: 4px 10px;" title="一键下载包含全部格式与分篇文档的 ZIP 归档包">
                             📦 ZIP 归档包
                         </a>
                     `;
@@ -5436,7 +5971,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 Object.entries(files).forEach(([fmt, url]) => {
                     if (fmt !== 'zip') {
                         badgesHtml += `
-                            <a href="${url}" class="mini-download-btn" download style="padding: 4px 8px;" title="下载 ${fmt.toUpperCase()} 格式">
+                            <a href="${url}" class="mini-download-btn" download onclick="return handleDownloadClick(this, '${formatLabels[fmt] || fmt.toUpperCase()}')" style="padding: 4px 8px;" title="下载 ${fmt.toUpperCase()} 格式">
                                 ${formatLabels[fmt] || fmt.toUpperCase()}
                             </a>
                         `;
@@ -5476,7 +6011,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         }
 
         function deleteHistoryItem(taskId) {
-            if (!confirm('确定要从本地历史记录中删除该条目吗？（不会删除服务器已下载的文件）')) {
+            if (!confirm('确定要从本地历史记录中删除该条目吗？（不会删除电脑本地 downloads/ 文件夹中已保存的文件）')) {
                 return;
             }
             const history = getStoredLocalHistory();
@@ -5577,6 +6112,557 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     err.style.display = 'block';
                 }
             }
+        }
+
+        // ========== 本地版：保存导出产物到指定文件夹（应用内目录弹窗 + 记忆默认文件夹）==========
+        // 浏览器网页无法指定"下载保存路径"（安全限制），这里通过后端文件系统接口把产物复制到用户选择的目录。
+        // 仅在 127.0.0.1/localhost 访问时生效；公网服务器版自动退回普通浏览器下载。
+        const SAVE_DIR_KEY = 'blogdistiller_default_save_dir';
+        const IS_LOCAL_MODE = ['127.0.0.1', 'localhost', '::1'].includes(window.location.hostname);
+
+        // 文件夹弹窗的全局状态
+        let _folderCb = null;      // 用户确认目录后的回调
+        let _folderCur = '';       // 当前浏览的目录（即保存目标）
+        let _folderParent = null;  // 上级目录（点击"上级"按钮时用）
+        let _folderDrives = null;  // 当前机器全部磁盘（后端返回，用于快速切换）
+
+        function getSavedSaveDir() { try { return localStorage.getItem(SAVE_DIR_KEY) || ''; } catch (e) { return ''; } }
+        function setSavedSaveDir(p) { try { localStorage.setItem(SAVE_DIR_KEY, p); } catch (e) {} }
+        function clearSavedSaveDir() { try { localStorage.removeItem(SAVE_DIR_KEY); } catch (e) {} }
+
+        function openFolderModal(onPick, startPath) {
+            _folderCb = onPick;
+            document.getElementById('folderModal').style.display = 'block';
+            // 首次浏览优先从已记忆的默认目录开始，否则交给后端默认（用户主目录）
+            enterFolder(startPath || getSavedSaveDir() || '');
+        }
+
+        function closeFolderModal() {
+            document.getElementById('folderModal').style.display = 'none';
+            _folderCb = null;
+        }
+
+        // 进入指定目录并加载其子目录列表
+        async function enterFolder(path) {
+            const box = document.getElementById('folderModalList');
+            const pathEl = document.getElementById('folderModalCurrentPath');
+            const parentBtn = document.getElementById('folderModalParentBtn');
+            if (box) box.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.8rem;">正在加载…</div>';
+            try {
+                const url = '/api/fs/browse' + (path ? '?path=' + encodeURIComponent(path) : '');
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!res.ok || data.error) {
+                    if (pathEl) pathEl.textContent = data.current || path;
+                    if (box) box.innerHTML = '<div style="padding:20px;text-align:center;color:#ef4444;font-size:0.8rem;">⚠️ ' + (data.error || '无法访问该目录') + '</div>';
+                    return;
+                }
+                _folderCur = data.current;
+                _folderParent = data.parent || null;
+                _folderDrives = Array.isArray(data.drives) ? data.drives : null;
+                if (pathEl) pathEl.textContent = data.current;
+                if (parentBtn) parentBtn.disabled = !_folderParent;
+                renderDriveBar();
+                renderFolderList(data.entries || []);
+            } catch (e) {
+                if (box) box.innerHTML = '<div style="padding:20px;text-align:center;color:#ef4444;font-size:0.8rem;">⚠️ 无法访问该目录</div>';
+            }
+        }
+
+        // 渲染"快速切换磁盘"栏：把全部盘符展示成一排可点击按钮，点一下直达该盘根目录。
+        // 只有 Windows 且后端返回了磁盘列表时才显示；仅显示一个盘时不展示，减少干扰。
+        function renderDriveBar() {
+            const bar = document.getElementById('folderModalDrives');
+            if (!bar) return;
+            if (!_folderDrives || _folderDrives.length < 2) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+            const cur = _folderCur || '';
+            let html = '';
+            _folderDrives.forEach(drive => {
+                const active = (cur.toLowerCase().replace(/[\\]+$/, '') === drive.toLowerCase().replace(/[\\]+$/, ''));
+                html += `
+                    <button type="button" onclick="enterFolder('${escapeHtml(drive)}')"
+                        style="font-size:0.76rem; height:26px; padding:0 10px; border-radius:6px; cursor:pointer;
+                               border:1px solid ${active ? 'var(--accent-sky, #0284c7)' : 'var(--border-main)'};
+                               background:${active ? 'rgba(2,132,199,0.12)' : 'var(--bg-subtle)'};
+                               color:${active ? '#0284c7' : 'var(--text-secondary)'}; font-weight:700;">
+                        💽 ${escapeHtml(drive)}
+                    </button>`;
+            });
+            bar.innerHTML = html;
+            bar.style.display = 'flex';
+        }
+
+        // 渲染目录列表：子目录可点击进入，文件仅展示（目标永远是"当前浏览的目录"）
+        function renderFolderList(entries) {
+            const box = document.getElementById('folderModalList');
+            if (!box) return;
+            const dirs = entries.filter(e => e.is_dir);
+            const files = entries.filter(e => !e.is_dir);
+            let html = '';
+            dirs.forEach(e => {
+                html += `
+                    <div class="folder-row" data-path="${escapeHtml(e.path)}" title="点击进入 ${escapeHtml(e.name)}">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24" style="color:#f59e0b;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                        <span>${escapeHtml(e.name)}</span>
+                    </div>`;
+            });
+            files.forEach(e => {
+                html += `
+                    <div class="folder-row" style="opacity:0.72; cursor:default;" title="${escapeHtml(e.name)}">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24" style="color:var(--text-muted);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                        <span>${escapeHtml(e.name)}</span>
+                    </div>`;
+            });
+            if (!html) {
+                html = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:0.8rem;">空目录（可点击下方「新建文件夹」）</div>';
+            }
+            box.innerHTML = html;
+            // 单击子目录行 → 进入该目录
+            box.querySelectorAll('.folder-row[data-path]').forEach(row => {
+                row.addEventListener('click', () => enterFolder(row.getAttribute('data-path')));
+            });
+        }
+
+        // 在弹窗当前目录下新建文件夹并刷新列表
+        async function createFolderInModal() {
+            const input = document.getElementById('folderModalNewName');
+            const name = (input && input.value || '').trim();
+            if (!name) { showToast('⚠️ 请输入新文件夹名称'); return; }
+            try {
+                const sep = _folderCur.endsWith('/') || _folderCur.endsWith('\\') ? '' : '/';
+                const res = await fetch('/api/fs/mkdir', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: _folderCur + sep + name })
+                });
+                const data = await res.json();
+                if (res.ok && data.created) {
+                    if (input) input.value = '';
+                    showToast('✓ 已创建文件夹');
+                    enterFolder(_folderCur); // 刷新当前列表，让新目录出现
+                } else {
+                    showToast('⚠️ ' + (data.detail || '创建失败'));
+                }
+            } catch (e) { showToast('⚠️ 创建失败'); }
+        }
+
+        // 用户点击"保存到此文件夹"：把当前浏览目录交给回调，并按勾选记忆为默认
+        function confirmFolderPick() {
+            const remember = document.getElementById('folderModalRemember');
+            if (remember && remember.checked && _folderCur) setSavedSaveDir(_folderCur);
+            const cb = _folderCb;
+            const picked = _folderCur;
+            closeFolderModal();
+            if (cb && picked) cb(picked);
+        }
+
+        // 核心复制动作：调后端把 downloads/ 下的产物复制到目标目录
+        async function doSaveFile(filename, destDir, label) {
+            try {
+                const res = await fetch('/api/fs/save-file', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename, dest_dir: destDir })
+                });
+                const data = await res.json();
+                if (res.ok && data.saved_path) {
+                    showToast('✓ ' + (label || '文件') + ' 已保存到 ' + data.saved_path);
+                    return true;
+                }
+                showToast('⚠️ ' + (data.detail || '保存失败，已切换为浏览器下载'));
+            } catch (e) {
+                showToast('⚠️ 保存失败，已切换为浏览器下载');
+            }
+            return false;
+        }
+
+        // 从 /api/download/ 链接中解析出纯文件名（中文安全解码）
+        function filenameFromUrl(url) {
+            let filename = '';
+            try { filename = decodeURIComponent(new URL(url, window.location.origin).pathname.split('/').pop()); } catch (e) {}
+            return filename;
+        }
+
+        // ========== 原生"选择文件夹"(File System Access API) 保存导出产物 ==========
+        // 用户明确希望用普通软件/网站那种系统原生的"选择文件夹"对话框，而不是自建网页弹窗。
+        // window.showDirectoryPicker() 就是 Chromium(Chrome/Edge/桌面客户端)自带的原生对话框，
+        // 更熟悉、能自由切换所有盘符，且能直接在浏览器侧把后端 /api/download/ 的文件流写进所选目录，
+        // 全程不再需要后端做目录浏览/复制。非 Chromium 浏览器才退回旧式后端复制。
+        const DEFAULT_DIR_HANDLE_KEY = 'blogdistiller_default_dir_handle';
+        let _defaultDirHandle = null; // 会话内记住的默认目录句柄（免重复选择）
+
+        function supportsNativeDirPicker() { return typeof window.showDirectoryPicker === 'function'; }
+
+        // 打开 IndexedDB 存取目录句柄（目录句柄可在其持久化，刷新后仍生效）
+        function _openDirDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open('blogdistiller-dir', 1);
+                req.onupgradeneeded = () => { req.result.createObjectStore('kv'); };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+        function _dbGet(db, key) {
+            return new Promise((res) => {
+                const r = db.transaction('kv', 'readonly').objectStore('kv').get(key);
+                r.onsuccess = () => res(r.result || null);
+                r.onerror = () => res(null);
+            });
+        }
+        function _dbPut(db, key, val) {
+            try { db.transaction('kv', 'readwrite').objectStore('kv').put(val, key); } catch (e) {}
+        }
+        function _dbDel(db, key) {
+            try { db.transaction('kv', 'readwrite').objectStore('kv').delete(key); } catch (e) {}
+        }
+
+        // 取记忆的默认目录句柄（内存优先，其次 IndexedDB）
+        async function getDefaultDirHandle() {
+            if (_defaultDirHandle) return _defaultDirHandle;
+            try {
+                const db = await _openDirDB();
+                const h = await _dbGet(db, DEFAULT_DIR_HANDLE_KEY);
+                if (h) _defaultDirHandle = h;
+            } catch (e) {}
+            return _defaultDirHandle;
+        }
+        async function rememberDefaultDirHandle(handle) {
+            _defaultDirHandle = handle;
+            try { _dbPut(await _openDirDB(), DEFAULT_DIR_HANDLE_KEY, handle); } catch (e) {}
+        }
+        async function clearDefaultDirHandle() {
+            _defaultDirHandle = null;
+            try { _dbDel(await _openDirDB(), DEFAULT_DIR_HANDLE_KEY); } catch (e) {}
+        }
+
+        // ========== 防卡死下载器：进度 + 取消 + 无响应超时 + 自动重试 ==========
+        // 目的：大文件下载若后端卡住，不再"无限转圈只能刷新页面"。
+        //  1) 实时显示下载百分比进度条（右上角小卡片）
+        //  2) 提供"取消"按钮，点击立刻中止
+        //  3) 60 秒内无任何数据到达判定为卡死 → 自动中止
+        //  4) 除用户主动取消外的任何失败，自动退避重试最多 2 次
+        let _dlCancelled = false;       // 用户是否点过"取消"
+        let _dlActiveCtrl = null;       // 当前下载的 AbortController（供取消按钮中止）
+        const _dlRetryMs = [2000, 5000, 10000]; // 重试退避间隔(ms)
+        const _dlIdleTimeoutMs = 60000;          // 无数据到达的卡死阈值
+
+        function _formatBytes(b) {
+            if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+            return (b / 1048576).toFixed(1) + ' MB';
+        }
+        // 创建/显示右上角下载进度卡片（首次调用时插入 DOM）
+        function _makeDownloadDock() {
+            if (document.getElementById('dlDock')) return;
+            const div = document.createElement('div');
+            div.id = 'dlDock';
+            div.style.cssText = 'position:fixed;right:16px;top:16px;width:300px;z-index:99999;background:#fff;border:1px solid var(--border-main,#e2e8f0);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.15);padding:12px;display:none;font-size:0.78rem;color:var(--text-primary,#0f172a);';
+            div.innerHTML =
+                '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">' +
+                '<span id="dlDockTitle" style="font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>' +
+                '<button type="button" id="dlDockCancel" style="cursor:pointer;background:none;border:1px solid rgba(239,68,68,0.4);color:#ef4444;border-radius:6px;font-size:0.72rem;padding:2px 8px;flex-shrink:0;">取消</button>' +
+                '</div>' +
+                '<div style="height:8px;background:var(--bg-subtle,#f1f5f9);border-radius:5px;overflow:hidden;margin-top:8px;">' +
+                '<div id="dlDockBar" style="height:100%;width:0%;background:#0284c7;"></div></div>' +
+                '<div id="dlDockPct" style="text-align:right;margin-top:4px;color:var(--text-secondary,#64748b);"></div>';
+            document.body.appendChild(div);
+            document.getElementById('dlDockCancel').onclick = () => { _dlCancelled = true; try { if (_dlActiveCtrl) _dlActiveCtrl.abort(); } catch (e) {} };
+        }
+        function _showDownloadDock(label, sub) {
+            _makeDownloadDock();
+            const d = document.getElementById('dlDock'); if (!d) return;
+            document.getElementById('dlDockTitle').textContent = (sub ? sub + ' · ' : '') + '正在下载 ' + label;
+            document.getElementById('dlDockBar').style.width = '0%';
+            document.getElementById('dlDockPct').textContent = '0%';
+            d.style.display = 'block';
+        }
+        function _hideDownloadDock() {
+            const d = document.getElementById('dlDock'); if (d) d.style.display = 'none';
+        }
+        function _updateDownloadDock(pct, human) {
+            const bar = document.getElementById('dlDockBar');
+            const p = document.getElementById('dlDockPct');
+            const c = Math.max(0, Math.min(100, pct));
+            if (bar) bar.style.width = c + '%';
+            if (p) p.textContent = (human ? human + ' ' : '') + c + '%';
+        }
+        function _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        // 核心：带进度/取消/超时/重试地下载一个文件并写入目标目录。
+        // 返回值: true=成功；null=用户已取消(停止后续)；false=最终失败(调用方应浏览器兜底)
+        async function downloadAndSave(url, filename, dirHandle, label) {
+            let attempt = 0;
+            while (attempt < _dlRetryMs.length) {
+                _dlCancelled = false;
+                _dlActiveCtrl = new AbortController();
+                let idle = null, received = 0, total = 0, blob = null;
+                _showDownloadDock(label, filename);
+                try {
+                    // 卡死心跳：每有数据到达就重置计时；超时仍未到→触发 abort
+                    const resetIdle = () => {
+                        clearTimeout(idle);
+                        idle = setTimeout(() => { if (!_dlCancelled) { try { _dlActiveCtrl.abort(); } catch (e) {} } }, _dlIdleTimeoutMs);
+                    };
+                    resetIdle();
+                    const res = await fetch(url, { signal: _dlActiveCtrl.signal });
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    total = parseInt(res.headers.get('Content-Length') || '0', 10) || 0;
+                    const reader = res.body.getReader(); const chunks = [];
+                    for (;;) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        if (value) { chunks.push(value); received += value.length; }
+                        resetIdle();
+                        _updateDownloadDock(total ? (received / total) * 100 : 0, total ? _formatBytes(received) : '');
+                    }
+                    clearTimeout(idle);
+                    blob = new Blob(chunks);
+                    if (dirHandle) {
+                        const fh = await dirHandle.getFileHandle(filename, { create: true });
+                        const w = await fh.createWritable();
+                        await w.write(blob);
+                        await w.close();
+                    }
+                    _hideDownloadDock();
+                    return true;
+                } catch (e) {
+                    clearTimeout(idle);
+                    if (_dlCancelled) { _hideDownloadDock(); return null; } // 用户主动取消
+                    // 非取消(卡死/网络/服务端)：退避重试
+                    attempt++;
+                    if (attempt < _dlRetryMs.length) {
+                        _hideDownloadDock();
+                        await _sleep(_dlRetryMs[attempt - 1]);
+                        continue;
+                    }
+                }
+            }
+            _hideDownloadDock();
+            return false;
+        }
+
+        // 弹出系统原生"选择文件夹"，返回句柄；用户取消返回 null
+        async function pickDirHandleNative() {
+            return await window.showDirectoryPicker({ mode: 'readwrite' });
+        }
+
+        // 下载产物入口：优先系统原生选文件夹；带防卡死下载器；失败→浏览器下载兜底
+        async function saveArtifactToFolder(url, label) {
+            const filename = filenameFromUrl(url);
+            if (!filename) { fallbackNativeDownload(url); return; }
+
+            if (supportsNativeDirPicker()) {
+                let dir = await getDefaultDirHandle();
+                if (!dir) { dir = await pickDirHandleNative(); if (!dir) return; await rememberDefaultDirHandle(dir); }
+                const ok = await downloadAndSave(url, filename, dir, label);
+                if (ok === null) return;                       // 用户取消
+                if (ok === false) fallbackNativeDownload(url); // 最终失败 → 浏览器下载兜底
+                else showToast('✓ ' + (label || '文件') + ' 已保存到所选文件夹');
+                return;
+            }
+
+            // 非 Chromium 兜底：有默认文件夹→后端复制；没有→自建弹窗；失败→浏览器下载
+            const savedDir = getSavedSaveDir();
+            if (savedDir) {
+                doSaveFile(filename, savedDir, label).then(ok => { if (!ok) fallbackNativeDownload(url); });
+                return;
+            }
+            openFolderModal((destDir) => {
+                doSaveFile(filename, destDir, label).then(ok => { if (!ok) fallbackNativeDownload(url); });
+            });
+        }
+
+        // 一键下载全部批次 ZIP：原生选一次目录，逐个走防卡死下载器；任一取消即停整批
+        async function downloadZipBundle(urls, label) {
+            if (supportsNativeDirPicker()) {
+                let dir = await getDefaultDirHandle();
+                if (!dir) { dir = await pickDirHandleNative(); if (!dir) return; await rememberDefaultDirHandle(dir); }
+                let anyFail = false;
+                for (let i = 0; i < urls.length; i++) {
+                    const fn = filenameFromUrl(urls[i]);
+                    if (!fn) continue;
+                    const ok = await downloadAndSave(urls[i], fn, dir, label);
+                    if (ok === null) { _hideDownloadDock(); return; }        // 用户取消，停止整批
+                    if (ok === false) { anyFail = true; fallbackNativeDownload(urls[i]); }
+                }
+                _hideDownloadDock();
+                showToast(anyFail ? '⚠️ 部分归档包下载失败，已改用浏览器下载' : '✓ ' + (label || '') + '：' + urls.length + ' 个归档包已保存到所选文件夹');
+                return;
+            }
+
+            const savedDir = getSavedSaveDir();
+            const run = (destDir) => {
+                (async () => {
+                    for (const u of urls) {
+                        const fn = filenameFromUrl(u);
+                        if (fn) { await doSaveFile(fn, destDir, label); }
+                    }
+                })();
+            };
+            if (savedDir) { run(savedDir); return; }
+            openFolderModal((destDir) => { run(destDir); });
+        }
+
+        // 设置面板/工具条"选择默认文件夹"（原生版本）：用系统原生对话框选一次并记住
+        async function pickDefaultDirNative() {
+            if (!supportsNativeDirPicker()) { openFolderModal(function(){ updateSaveDirBar(); updateSaveDirSetting(); }); return; }
+            try {
+                const dir = await pickDirHandleNative();
+                if (dir) { await rememberDefaultDirHandle(dir); showToast('✓ 已设为默认保存文件夹'); }
+            } catch (e) {}
+            updateSaveDirBar();
+            updateSaveDirSetting();
+        }
+        // 清除默认保存文件夹（原生版本）：同时清内存句柄与 IndexedDB
+        async function clearSavedDefaultDirNative() {
+            await clearDefaultDirHandle();
+            clearSavedSaveDir();
+            showToast('已清除默认保存文件夹');
+            updateSaveDirBar();
+            updateSaveDirSetting();
+        }
+
+        // 下载按钮的同步拦截入口：返回 false 阻止 <a> 默认跳转，由上面的异步流程接管
+        function handleDownloadClick(anchor, label) {
+            if (!IS_LOCAL_MODE) return true; // 公网服务器版：维持原生下载
+            let url = '';
+            try { url = new URL(anchor.href || anchor.getAttribute('href') || '', window.location.origin).href; } catch (e) {}
+            if (!url || url.indexOf('/api/download/') === -1) return true; // 非产物链接直接放行
+            saveArtifactToFolder(url, label);
+            return false;
+        }
+
+        // 兜底：按普通浏览器下载方式触发（保存失败时使用，避免用户拿不到文件）
+        function fallbackNativeDownload(url) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '';
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+
+        // 归档区"默认保存文件夹"工具条：回显当前设置（与设置面板卡片同一数据源，双向同步）
+        // 优先显示原生记住的目录名；其次旧式 localStorage 路径；都无则提示未设置
+        function currentSaveDirText() {
+            if (supportsNativeDirPicker() && _defaultDirHandle) {
+                return '📁 ' + (_defaultDirHandle.name || '已选文件夹') + '（原生记住）';
+            }
+            const saved = getSavedSaveDir();
+            return saved ? saved : '未设置（点击下载后弹出文件夹选择）';
+        }
+        function updateSaveDirBar() {
+            const bar = document.getElementById('saveDirBar');
+            const textEl = document.getElementById('saveDirBarText');
+            if (!bar || !textEl) return;
+            textEl.textContent = currentSaveDirText();
+            const st = document.getElementById('saveDirSettingText');
+            if (st) st.textContent = textEl.textContent;
+        }
+
+        // 设置面板"默认保存文件夹"卡片：回显当前设置（与归档区工具条同一数据源，双向同步）
+        function updateSaveDirSetting() {
+            const textEl = document.getElementById('saveDirSettingText');
+            if (!textEl) return;
+            textEl.textContent = currentSaveDirText();
+            const barText = document.getElementById('saveDirBarText');
+            if (barText) barText.textContent = textEl.textContent;
+        }
+
+        // 页面加载：仅本地模式才显示工具条与设置卡（公网服务器版隐藏，因为该能力不可用）
+        (function initSaveDirBar() {
+            const bar = document.getElementById('saveDirBar');
+            if (bar) {
+                bar.style.display = IS_LOCAL_MODE ? 'flex' : 'none';
+                updateSaveDirBar();
+            }
+            const card = document.getElementById('saveDirSettingCard');
+            if (card) {
+                // display 置空会回落到 .switch-card 的 flex 布局；非本地模式隐藏
+                card.style.display = IS_LOCAL_MODE ? '' : 'none';
+                updateSaveDirSetting();
+            }
+        })();
+
+        // ==========================================
+        // 中断续跑：检测上次未完成的任务并询问是否继续
+        // ==========================================
+        // 服务被关、进程被杀、或页面被关闭时，正在跑的抓取任务会"凭空消失"。
+        // 这里在每次打开页面时向后端查询是否有残余的未完成任务，有则弹窗询问。
+        // 选「继续」则复用同一个任务ID从断点接着跑（已抓成功的篇目命中缓存，不重复下载）。
+        let resumePendingTask = null; // 当前等待用户决定是否续跑的残留任务
+
+        async function checkIncompleteTasks() {
+            try {
+                const cid = getOrCreateClientId();
+                const res = await fetch(`/api/tasks/incomplete?client_id=${encodeURIComponent(cid)}`);
+                if (!res.ok) return;
+                const tasks = await res.json();
+                if (!Array.isArray(tasks) || tasks.length === 0) return;
+                // 通常不会同时中断多个任务，只对最新一条弹窗，其余走后续刷新自然处理
+                const t = tasks[0];
+                resumePendingTask = t;
+                const targetEl = document.getElementById('resumeTargetText');
+                if (targetEl) {
+                    targetEl.textContent = (t.author || '目标博主')
+                        + (t.total_articles ? `（共约 ${t.total_articles} 篇` : '（已抓取')
+                        + (t.current_article_index ? `· 上次已进行到第 ${t.current_article_index} 篇）` : '）');
+                }
+                const progEl = document.getElementById('resumeProgressText');
+                if (progEl) progEl.textContent = (t.platform || '多平台') + ' · 创建于 ' + (t.created_at || '');
+                const modal = document.getElementById('resumePromptModal');
+                if (modal) modal.style.display = 'flex';
+            } catch (e) {
+                // 检测失败不打扰用户，静默忽略
+            }
+        }
+
+        // 隐藏「是否续跑」弹窗
+        function hideResumePrompt() {
+            const modal = document.getElementById('resumePromptModal');
+            if (modal) modal.style.display = 'none';
+            resumePendingTask = null;
+        }
+
+        // 用户点击「继续上次任务」：从断点重建任务，并挂上实时进度监听
+        async function doResumeIncomplete() {
+            if (!resumePendingTask) return;
+            const tid = resumePendingTask.task_id;
+            hideResumePrompt();
+            try {
+                const res = await fetch(`/api/tasks/incomplete/${tid}/resume`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_id: getOrCreateClientId() })
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert('续跑失败: ' + (err.detail || '未知错误'));
+                    return;
+                }
+                const data = await res.json();
+                listenTaskEvents(data.task_id); // 复用实时进度卡片，直接推开下游执行
+                showToast('🔄 已接续上次未完成的任务，从断点继续抓取…');
+            } catch (e) {
+                alert('网络异常，续跑失败: ' + e.message);
+            }
+        }
+
+        // 用户点击「不继续，放弃」：删除残留任务快照
+        async function doDiscardIncomplete() {
+            if (!resumePendingTask) return;
+            const tid = resumePendingTask.task_id;
+            hideResumePrompt();
+            try {
+                await fetch(`/api/tasks/incomplete/${tid}/discard`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_id: getOrCreateClientId() })
+                });
+            } catch (e) {
+                // 丢弃失败也不影响，快照本身会被服务端后续打扫
+            }
+            showToast('已放弃该未完成任务');
         }
 
         // 全局 Toast 提示
@@ -5921,6 +7007,9 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         }
 
         document.addEventListener('keydown', (e) => {
+            if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r')) {
+                window.location.reload();
+            }
             if (e.key === 'Escape') {
                 closeImageLightbox();
                 closeActivationModal();
@@ -5931,6 +7020,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 closeConfirmModal();
                 closeWechatAuthModal();
                 closeDiagnosisModal();
+                closeLinksModal();
             }
         });
 
@@ -5952,32 +7042,20 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         setInterval(updateLiveUptime, 1000);
         updateLiveUptime();
 
-        // 官网与 GitHub 访客统计 (官网基础 100 起步，GitHub 基础 20 起步)
+        // 官网与 GitHub 访客统计 (官网基础 200 起步，GitHub 基础 50 起步)
         (function initVisitorStats() {
             let siteVisits = parseInt(localStorage.getItem('bd_site_visits') || '0', 10);
             siteVisits += 1;
             localStorage.setItem('bd_site_visits', siteVisits.toString());
             
-            const totalSiteVisitors = 100 + siteVisits;
+            const totalSiteVisitors = 200 + siteVisits;
             const siteEl = document.getElementById('siteVisitorCount');
             if (siteEl) siteEl.textContent = totalSiteVisitors;
 
-            const ghVisits = 20 + Math.floor(siteVisits * 0.4);
+            const ghVisits = 50 + Math.floor(siteVisits * 0.4);
             const ghEl = document.getElementById('ghVisitorCount');
             if (ghEl) ghEl.textContent = ghVisits;
         })();
-
-        // 自动下载开关偏好记忆 (默认勾选)
-        const autoDlSwitch = document.getElementById('autoDownloadSwitch');
-        if (autoDlSwitch) {
-            const savedAutoDl = localStorage.getItem('bd_auto_download');
-            if (savedAutoDl !== null) {
-                autoDlSwitch.checked = savedAutoDl === 'true';
-            }
-            autoDlSwitch.addEventListener('change', () => {
-                localStorage.setItem('bd_auto_download', autoDlSwitch.checked ? 'true' : 'false');
-            });
-        }
 
         initTheme();
         updateActivationStatusUI();
@@ -5986,6 +7064,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         checkDailyCommunityModal();
         checkWeChatAuth();
         setTimeout(checkWeChatAuth, 1200);
+        // 页面加载后检测是否有上次未完成的抓取任务，有则弹窗询问是否续跑
+        setTimeout(checkIncompleteTasks, 800);
     </script>
 </body>
 </html>

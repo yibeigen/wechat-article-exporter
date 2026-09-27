@@ -77,7 +77,8 @@ class TaskCreateRequest(BaseModel):
     enable_noise_filter: bool = Field(True, description="是否开启智能去噪（剔除广告、求赞、关注引流语）")
     remove_image_watermark: bool = Field(True, description="是否智能去除平台水印与溯源高清原图 (关闭则保留平台原样水印图)")
     use_cache: bool = Field(True, description="是否开启断点续爬与本地持久化缓存")
-    download_images: bool = Field(True, description="是否将文章配图下载到本地并转为相对路径打包进 ZIP")
+    image_mode: str = Field("compressed", description="配图下载模式三选一: compressed 极速压缩图(推荐,体积小加载快) / original 高清原图(体积大加载慢) / none 不配图(纯文字模式,全链路不下载不内嵌图片,内存占用极小)")
+    batch_size: Optional[int] = Field(None, description="自动分批导出：每批最多篇数 (如 500)。留空时若文章总数超过 800 篇自动按 500 篇/批拆分，避免大规模导出内存耗尽与渲染卡死")
     max_articles: Optional[int] = Field(None, description="最大抓取篇数，None 表示抓取全部")
     start_index: Optional[int] = Field(1, description="起始文章序号，从 1 开始")
     end_index: Optional[int] = Field(None, description="结束文章序号，留空表示抓取到最后")
@@ -96,6 +97,8 @@ class TaskCreateRequest(BaseModel):
     # 避免把 URL 列表错判定为 custom_urls 而丢失 content_type / column_title 等分类信息
     articles_meta: Optional[List[Dict[str, Any]]] = Field(None, description="已选文章元数据列表，存在时直接按此列表导出")
     client_id: Optional[str] = Field(None, description="客户端匿名设备标识 (用于多用户免登录会话与历史隔离)")
+    scrape_source: Optional[str] = Field("server", description="抓取网络通道：server 云端服务器 / client_relay 客户端浏览器住宅IP中继")
+    relay_upload_id: Optional[str] = Field(None, description="本地直连源码的分块上传ID。正文源码已由前端经 /api/relay/upload-chunk 分块上传到服务器临时文件，创建任务时 articles_meta 只带清单不带源码，避免数百 MB 请求体被网关 100M 上限拒绝")
 
 class TaskStatusEnum(str, Enum):
     PENDING = "pending"
@@ -134,3 +137,4 @@ class TaskProgress(BaseModel):
     explanation: Optional[str] = None
     declared_count: Optional[int] = None
     category_name: Optional[str] = None
+    scrape_source: Optional[str] = "server"

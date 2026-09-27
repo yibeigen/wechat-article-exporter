@@ -4,7 +4,6 @@ import html
 import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple
-import httpx
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -14,21 +13,7 @@ from docx.oxml.ns import nsdecls, qn
 from app.exporters.base import BaseExporter
 from app.models import ArticleItem
 from app.config import BRAND_OFFICIAL_ACCOUNT, BRAND_FOOTER_NOTE, BRAND_DISCLAIMER
-
-def get_platform_referer(url: str) -> Dict[str, str]:
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    }
-    u = url.lower()
-    if "cnblogs" in u: headers["Referer"] = "https://www.cnblogs.com/"
-    elif "csdn" in u: headers["Referer"] = "https://blog.csdn.net/"
-    elif "zhihu" in u or "zhimg" in u: headers["Referer"] = "https://www.zhihu.com/"
-    elif "juejin" in u: headers["Referer"] = "https://juejin.cn/"
-    elif "weixin" in u or "qpic" in u: headers["Referer"] = "https://mp.weixin.qq.com/"
-    elif "51cto" in u: headers["Referer"] = "https://blog.51cto.com/"
-    elif "jianshu" in u: headers["Referer"] = "https://www.jianshu.com/"
-    elif "sina" in u or "weibo" in u: headers["Referer"] = "https://weibo.com/"
-    return headers
+from app.core.image_helper import fetch_images_bytes_map, collect_articles_image_urls
 
 def set_cell_background(cell, fill_hex: str):
     """设置单元格背景颜色"""
@@ -336,9 +321,14 @@ def append_article_content_to_docx(
     art: ArticleItem,
     author_name: str,
     platform: str,
-    embed_images: bool = True
+    embed_images: bool = True,
+    img_bytes_map: Optional[Dict[str, bytes]] = None
 ):
-    """高质量逐篇渲染排版 (出版级字阶、代码框、Callout 引用框、中文字体严密对齐)"""
+    """高质量逐篇渲染排版 (出版级字阶、代码框、Callout 引用框、中文字体严密对齐)
+
+    img_bytes_map: 调用方预取的 url -> 图片字节。渲染期间只读内存映射，绝不发起网络请求，
+    避免数百张图逐张串行 httpx.get 卡死整个导出流程。
+    """
     # 1. 文章大标题 (小二 18pt，加粗深蓝)
     h_p = doc.add_paragraph()
     h_p.paragraph_format.space_before = Pt(16)
@@ -517,43 +507,31 @@ def append_article_content_to_docx(
             src = img_match.group("src").strip()
 
             inserted = False
-            if embed_images:
-                try:
-                    headers = get_platform_referer(src)
-                    fetch_urls = [src]
-                    if "upload-images.jianshu.io" in src or "jianshu.io" in src:
-                        fetch_urls = [
-                            src,
-                            f"https://img01.sogoucdn.com/net/a/04/link?appid=100520029&url={src}"
-                        ]
-                    for u in fetch_urls:
-                        try:
-                            resp = httpx.get(u, headers=headers, timeout=6.0, verify=False)
-                            if resp.status_code == 200 and len(resp.content) > 100:
-                                raw_bytes = resp.content
-                                # 如果是 WebP 格式，python-docx 原生不支持，尝试通过 PIL 转换为 PNG
-                                if raw_bytes[:4] == b'RIFF' and b'WEBP' in raw_bytes[:16]:
-                                    try:
-                                        from PIL import Image
-                                        im = Image.open(io.BytesIO(raw_bytes))
-                                        buf = io.BytesIO()
-                                        im.save(buf, format="PNG")
-                                        raw_bytes = buf.getvalue()
-                                    except Exception:
-                                        pass
-                                img_bio = io.BytesIO(raw_bytes)
-                                img_p = doc.add_paragraph()
-                                img_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                                img_p.paragraph_format.space_before = Pt(8)
-                                img_p.paragraph_format.space_after = Pt(2)
-                                img_run = img_p.add_run()
-                                img_run.add_picture(img_bio, width=Inches(5.5))
-                                inserted = True
-                                break
-                        except Exception:
-                            continue
-                except Exception:
-                    pass
+            if embed_images and img_bytes_map:
+                # 直接复用调用方预取的图片字节 (并发预取 + 全局缓存，不再逐张串行 httpx.get)
+                raw_bytes = img_bytes_map.get(src)
+                if raw_bytes and len(raw_bytes) > 100:
+                    try:
+                        # 如果是 WebP 格式，python-docx 原生不支持，尝试通过 PIL 转换为 PNG
+                        if raw_bytes[:4] == b'RIFF' and b'WEBP' in raw_bytes[:16]:
+                            try:
+                                from PIL import Image
+                                im = Image.open(io.BytesIO(raw_bytes))
+                                buf = io.BytesIO()
+                                im.save(buf, format="PNG")
+                                raw_bytes = buf.getvalue()
+                            except Exception:
+                                pass
+                        img_bio = io.BytesIO(raw_bytes)
+                        img_p = doc.add_paragraph()
+                        img_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        img_p.paragraph_format.space_before = Pt(8)
+                        img_p.paragraph_format.space_after = Pt(2)
+                        img_run = img_p.add_run()
+                        img_run.add_picture(img_bio, width=Inches(5.5))
+                        inserted = True
+                    except Exception:
+                        pass
 
             if not inserted:
                 # 无论图片能否下载，绝对不直接暴露丑陋的 ![alt](url) 原始语法
@@ -715,9 +693,18 @@ def setup_document_styles(doc: Document):
 class DocxExporter(BaseExporter):
     """Word (.docx) 单文件合并导出器 (出版级排版、表格原生化、中文字体严密对齐)"""
 
-    async def export(self, articles: List[ArticleItem], filename_prefix: str) -> Path:
+    async def export(self, articles: List[ArticleItem], filename_prefix: str, image_mode: str = "compressed") -> Path:
         output_file = self.output_dir / f"{filename_prefix}.docx"
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # 配图模式：none 时不发起任何图片网络请求 (纯文字模式)
+        download_images = image_mode != "none"
+
+        # 预取本批全部图片字节 (并发 + 全局 LRU 缓存复用，同任务多格式不会重复下载同一张图)
+        # 压缩模式返回轻量压缩图；原图模式返回高清原图，供 python-docx 同步渲染直接内嵌
+        img_bytes_map: Dict[str, bytes] = {}
+        if download_images:
+            img_bytes_map = await fetch_images_bytes_map(collect_articles_image_urls(articles), image_mode)
 
         def _render_all_docx_sync() -> Path:
             doc = Document()
@@ -770,9 +757,9 @@ class DocxExporter(BaseExporter):
 
                 doc.add_page_break()
 
-            # 3. 逐篇文章渲染
+            # 3. 逐篇文章渲染 (纯文字模式下 embed_images=False，直接显示图片占位符，不发起任何图片网络请求)
             for idx, art in enumerate(articles, 1):
-                append_article_content_to_docx(doc, art, self.author_name, self.platform, embed_images=True)
+                append_article_content_to_docx(doc, art, self.author_name, self.platform, embed_images=download_images, img_bytes_map=img_bytes_map)
                 if idx < len(articles):
                     doc.add_page_break()
 

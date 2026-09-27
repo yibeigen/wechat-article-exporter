@@ -1,9 +1,12 @@
 import asyncio
+import json
+import math
 import uuid
 import datetime
 import re
-from typing import Dict, List, Optional
-from app.config import OUTPUT_DIR
+from pathlib import Path
+from typing import Dict, List, Optional, Any, Tuple
+from app.config import OUTPUT_DIR, BASE_DIR
 from app.models import (
     TaskCreateRequest, TaskProgress, TaskStatusEnum, PlatformEnum, ExportFormatEnum, ArticleItem
 )
@@ -26,7 +29,9 @@ from app.exporters.docx_exporter import DocxExporter
 from app.exporters.pdf_exporter import PDFExporter
 from app.exporters.original_html_exporter import OriginalHTMLExporter
 from app.exporters.zip_exporter import ZipExporter
+from app.cleaners.html_cleaner import clean_html_content
 from app.core.cache import get_cached_article, save_cached_article
+from app.core.image_helper import clear_image_caches
 
 class TaskManager:
     def __init__(self):
@@ -35,6 +40,78 @@ class TaskManager:
         self.decision_events: Dict[str, asyncio.Event] = {}
         self.pause_events: Dict[str, asyncio.Event] = {}
         self.user_decisions: Dict[str, str] = {}
+
+        # ===== 中断续跑快照存储 =====
+        # 任务状态本来是纯内存的(self.tasks)，一旦服务/进程被杀、重启就全部丢失，
+        # 正在运行的抓取任务"凭空消失"。这里把每个任务的关键信息(原始请求+进度摘要)
+        # 额外固化为磁盘 JSON 快照，重启后凭快照就能检测到"上次没跑完的任务"并询问用户是否续跑。
+        # 续跑的核心机制：已抓成功的文章早已写入 SQLite 缓存(见 app/core/cache.py)，
+        # 用同一请求重新启动任务时，爬虫会命中缓存"秒过"，不重复下载，只继续抓没抓到的。
+        self._snap_dir = BASE_DIR / "data" / "resume"   # 快照存放目录
+        self._serialized_requests: Dict[str, Dict] = {}  # task_id -> 序列化后的原始请求(供快照复用，避免每篇文章都重新序列化)
+
+    # ---------- 续跑快照：写盘 / 删盘 辅助函数 ----------
+    def _snapshot_path(self, task_id: str) -> Path:
+        """快照正式文件路径 (存在即代表任务尚未跑完/被中断)"""
+        return self._snap_dir / f"{task_id}.json"
+
+    def _snapshot_tmp_path(self, task_id: str) -> Path:
+        """快照临时文件路径 (先写临时文件再原子改名，避免写一半读到损坏内容)"""
+        return self._snap_dir / f"{task_id}.tmp"
+
+    def _save_snapshot(self, task: TaskProgress):
+        """把任务的续跑快照写入磁盘(原子替换)。
+
+        快照里存的是「原始请求 + 当前进度摘要」，服务重启后调用 resume 时，
+        用这份快照重建同一个任务继续跑。未到终态的快照会一直保留，
+        一旦任务正常结束(完成/失败/取消)就在 finally 里删除，不再当"残留任务"。
+        """
+        req = self._serialized_requests.get(task.task_id)
+        if req is None:
+            # 没有存过原始请求(正常不会发生)，说明无法续跑，干脆不写快照
+            return
+        snap = {
+            "task_id": task.task_id,
+            "client_id": task.client_id,
+            "platform": task.platform,
+            "target": task.target,
+            "author": task.author_name,
+            "total_articles": task.total_articles,
+            "current_article_index": task.current_article_index,
+            "message": task.message,
+            "phase": task.status.value,  # 记录跑到哪个阶段，便于前端展示
+            "request": req,              # 重建任务所需的全部原始参数
+            "created_at": task.created_at,
+            "updated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        try:
+            self._snap_dir.mkdir(parents=True, exist_ok=True)
+            # 惯例：先写 .tmp 再原子替换，防止崩溃时留下半个 JSON
+            tmp = self._snapshot_tmp_path(task.task_id)
+            final = self._snapshot_path(task.task_id)
+            tmp.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(final)
+        except Exception as e:
+            print(f"⚠️ 写入续跑快照失败: {e}")
+
+    def _remove_snapshot(self, task_id: str):
+        """删除续跑快照(任务到达终态，或用户选择"放弃续跑"时调用)。"""
+        try:
+            for p in (self._snapshot_path(task_id), self._snapshot_tmp_path(task_id)):
+                if p.exists():
+                    p.unlink()
+        except Exception as e:
+            print(f"⚠️ 删除续跑快照失败: {e}")
+
+    def _read_snapshot(self, task_id: str) -> Optional[Dict]:
+        """读取单个快照；文件不存在或损坏时返回 None。"""
+        p = self._snapshot_path(task_id)
+        if not p.exists():
+            return None
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return None
 
     def get_task(self, task_id: str) -> Optional[TaskProgress]:
         return self.tasks.get(task_id)
@@ -135,7 +212,12 @@ class TaskManager:
         return False
 
     def create_task(self, request: TaskCreateRequest) -> str:
+        """新发起一个抓取导出任务（生成新 task_id 后交给 _launch 公共启动逻辑）。"""
         task_id = str(uuid.uuid4())[:8]
+        return self._launch(task_id, request)
+
+    def _launch(self, task_id: str, request: TaskCreateRequest) -> str:
+        """任务公共启动逻辑：建进度、写快照、拉起后台跑。新建任务与中断续跑共用。"""
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         detected_platform = self._detect_platform(request.target, request.platform)
@@ -150,13 +232,114 @@ class TaskManager:
             target=request.target,
             status=TaskStatusEnum.PENDING,
             created_at=now_str,
-            message="任务已创建，准备抓取..."
+            message="任务已创建，准备抓取...",
+            scrape_source=request.scrape_source or "server"
         )
         self.tasks[task_id] = progress
-        
+
+        # 序列化并缓存原始请求，供快照写盘与中断续跑重建使用 (mode="json" 让枚举转成字符串)
+        self._serialized_requests[task_id] = request.model_dump(mode="json")
+        # 写一份初始快照：此刻快照存在 = 该任务尚未完成，重启后可作为"残留任务"提示续跑
+        self._save_snapshot(progress)
+
         # 启动异步后台任务
         asyncio.create_task(self._run_task(task_id, request))
         return task_id
+
+    # =========================================================
+    # 中断续跑：检测残留 / 续跑 / 丢弃
+    # =========================================================
+    def list_incomplete_tasks(self, client_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """列出当前客户端所有"未跑完"的残留任务(从磁盘快照恢复，非内存)。
+
+        这些任务要么是服务重启/进程被杀后丢失的，要么是浏览器关闭后服务端还在跑、
+        但用户主动想从中断处继续的。返回给前端，用于启动时弹"是否继续?"确认框。
+        """
+        results: List[Dict[str, Any]] = []
+        if not self._snap_dir.exists():
+            return results
+        # 终态枚举：到达这些状态的任务它自己的 finally 会删快照，这里再防御一次
+        terminal = (TaskStatusEnum.COMPLETED, TaskStatusEnum.FAILED, TaskStatusEnum.CANCELLED)
+        for p in self._snap_dir.glob("*.json"):
+            try:
+                snap = json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                # 快照损坏无法解析，直接删掉，别让脏文件反复弹窗
+                self._remove_snapshot(p.stem)
+                continue
+            task_id = snap.get("task_id")
+            if not task_id:
+                self._remove_snapshot(p.stem)
+                continue
+            # 权限隔离：只能看到自己客户端的残留任务，防止公网多用户串台
+            if client_id and snap.get("client_id") != client_id.strip():
+                continue
+            # 该任务还在内存里正常运行(未到终态) => 不是残留，不打扰
+            if task_id in self.tasks and self.tasks[task_id].status not in terminal:
+                continue
+            # 若任务其实已结束但快照占着没删掉(异常边角)，顺手清掉
+            if task_id in self.tasks and self.tasks[task_id].status in terminal:
+                self._remove_snapshot(task_id)
+                continue
+            results.append({
+                "task_id": task_id,
+                "platform": snap.get("platform"),
+                "target": snap.get("target"),
+                "author": snap.get("author"),
+                "total_articles": snap.get("total_articles", 0),
+                "current_article_index": snap.get("current_article_index", 0),
+                "message": snap.get("message"),
+                "phase": snap.get("phase"),
+                "created_at": snap.get("created_at"),
+            })
+        # 按创建时间倒序，最新中断的排最前
+        results.sort(key=lambda r: r.get("created_at") or "", reverse=True)
+        return results
+
+    def resume_incomplete_task(self, task_id: str, client_id: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
+        """从磁盘快照重建任务并续跑。返回 (task_id, error)；error 不为空表示失败。
+
+        续跑原理：快照里保存了完整原始请求，直接用同一请求重新启动任务。
+        已抓成功的文章已写入 SQLite 缓存，重新跑时会命中缓存"秒过"，不重复下载，
+        只有真正还没抓到(或上次失败的)篇目才会重新访问网络。
+        """
+        p = self._snapshot_path(task_id)
+        if not p.exists():
+            return None, "未找到对应的未完成任务"
+        snap = self._read_snapshot(task_id)
+        if not snap:
+            return None, "续跑快照已损坏，无法恢复"
+        # 权限校验：只能续跑自己客户端的任务
+        if client_id and snap.get("client_id") != client_id.strip():
+            return None, "无权限续跑该任务"
+        req_data = snap.get("request")
+        if not req_data:
+            return None, "快照缺少原始请求，无法续跑"
+        # 冗余保护：如果该任务当前已在内存中正常运行，拒绝重复创建(避免双跑)
+        if task_id in self.tasks and self.tasks[task_id].status not in (
+            TaskStatusEnum.COMPLETED, TaskStatusEnum.FAILED, TaskStatusEnum.CANCELLED):
+            return task_id, None
+        try:
+            request = TaskCreateRequest.model_validate(req_data)
+            # 续跑必须命中缓存，否则之前已抓好的文章会被重复下载，断点续跑就失去意义了
+            request.use_cache = True
+        except Exception as e:
+            return None, f"原始请求重建失败: {e}"
+        # 复用同一个 task_id 继续跑，让前端看到连贯的进度
+        self._launch(task_id, request)
+        return task_id, None
+
+    def discard_incomplete_task(self, task_id: str, client_id: Optional[str] = None) -> bool:
+        """用户选择"不再继续"，删除残留任务的快照，并在内存任务还在跑时顺手取消。"""
+        if client_id:
+            snap = self._read_snapshot(task_id)
+            if snap and snap.get("client_id") != client_id.strip():
+                return False
+        self._remove_snapshot(task_id)
+        # 若该任务内存里其实还在跑(例如浏览器刷新看到的残留)，一并取消，避免后台白耗资源
+        if task_id in self.tasks and not self.tasks[task_id].is_cancelled:
+            self.cancel_task(task_id)
+        return True
 
     def _detect_platform(self, target: str, fallback: PlatformEnum) -> PlatformEnum:
         """根据 URL 规则智能识别平台 (若包含多条 URL 则自动转为自定义聚合模式)"""
@@ -222,6 +405,110 @@ class TaskManager:
         else:
             return CustomURLsScraper(request.target, request.enable_noise_filter, request.max_articles, remove_image_watermark=request.remove_image_watermark)
 
+    async def _export_batch(
+        self,
+        task: TaskProgress,
+        request: TaskCreateRequest,
+        articles: List[ArticleItem],
+        filename_prefix: str,
+        author_name: str,
+        platform_str: str,
+        formats: List[ExportFormatEnum],
+        progress_base: float,
+        progress_span: float,
+        batch_tag: str = ""
+    ) -> Tuple[Optional[Dict[str, str]], List[str]]:
+        """导出一批文章的指定格式并打 ZIP 归档包。
+
+        返回 (export_files, export_errors)；若任务被取消则返回 (None, [])。
+        PDF 多卷拆分产物会一并纳入 generated_paths 写入 ZIP。
+        """
+        task_id = task.task_id
+        export_files: Dict[str, str] = {}
+        generated_paths: Dict[str, Any] = {}
+        export_errors: List[str] = []
+
+        total_formats = len(formats)
+        for idx, fmt in enumerate(formats, 1):
+            if task.is_cancelled:
+                return None, export_errors
+
+            task.progress_percent = round(progress_base + (idx / (total_formats + 1)) * progress_span, 1)
+            task.message = f"{batch_tag}正在生成 {fmt.value.upper()} 格式文档 ({idx}/{total_formats})..."
+            await self._broadcast(task_id)
+
+            try:
+                if fmt == ExportFormatEnum.MARKDOWN:
+                    exporter = MarkdownExporter(author_name, platform_str, OUTPUT_DIR)
+                    out_path = await exporter.export(articles, filename_prefix)
+                    export_files["md"] = f"/api/download/{out_path.name}"
+                    generated_paths["md"] = out_path
+
+                elif fmt == ExportFormatEnum.HTML:
+                    exporter = HTMLExporter(author_name, platform_str, OUTPUT_DIR)
+                    out_path = await exporter.export(articles, filename_prefix, download_images=request.image_mode != "none")
+                    export_files["html"] = f"/api/download/{out_path.name}"
+                    generated_paths["html"] = out_path
+
+                elif fmt == ExportFormatEnum.ORIGINAL_HTML:
+                    exporter = OriginalHTMLExporter(author_name, platform_str, OUTPUT_DIR)
+                    out_path = await exporter.export(articles, filename_prefix, download_images=request.image_mode != "none")
+                    export_files["original_html"] = f"/api/download/{out_path.name}"
+                    generated_paths["original_html"] = out_path
+
+                elif fmt == ExportFormatEnum.TXT:
+                    exporter = TxtExporter(author_name, platform_str, OUTPUT_DIR)
+                    out_path = await exporter.export(articles, filename_prefix)
+                    export_files["txt"] = f"/api/download/{out_path.name}"
+                    generated_paths["txt"] = out_path
+
+                elif fmt == ExportFormatEnum.WORD:
+                    exporter = DocxExporter(author_name, platform_str, OUTPUT_DIR)
+                    out_path = await exporter.export(articles, filename_prefix, image_mode=request.image_mode)
+                    export_files["docx"] = f"/api/download/{out_path.name}"
+                    generated_paths["docx"] = out_path
+
+                elif fmt == ExportFormatEnum.PDF:
+                    exporter = PDFExporter(author_name, platform_str, OUTPUT_DIR)
+                    out_path = await exporter.export(articles, filename_prefix, download_images=request.image_mode != "none")
+                    export_files["pdf"] = f"/api/download/{out_path.name}"
+                    # 多卷拆分：后续卷一并写入 ZIP 的合并总文档目录
+                    extra_vols = list(getattr(exporter, "extra_outputs", []) or [])
+                    generated_paths["pdf"] = [out_path] + extra_vols if extra_vols else out_path
+            except Exception as export_err:
+                err_msg = f"导出格式 {fmt.value} 失败: {export_err}"
+                print(err_msg)
+                export_errors.append(err_msg)
+
+        if task.is_cancelled:
+            return None, export_errors
+
+        # 打包本批 ZIP 归档包
+        try:
+            task.message = f"{batch_tag}正在打包 ZIP 归档包 (含合并文档 + 分篇独立文章与目录清单)..."
+            task.progress_percent = round(progress_base + progress_span * 0.96, 1)
+            await self._broadcast(task_id)
+
+            async def _zip_progress_cb(msg: str):
+                task.message = f"{batch_tag}{msg}"
+                await self._broadcast(task_id)
+
+            zip_exporter = ZipExporter(author_name, platform_str, OUTPUT_DIR)
+            zip_path = await zip_exporter.export(
+                articles,
+                filename_prefix,
+                generated_paths,
+                image_mode=request.image_mode,
+                progress_callback=_zip_progress_cb
+            )
+            export_files["zip"] = f"/api/download/{zip_path.name}"
+        except Exception as zip_err:
+            err_msg = f"生成 ZIP 压缩包失败: {zip_err}"
+            print(err_msg)
+            export_errors.append(err_msg)
+
+        return export_files, export_errors
+
     async def _run_task(self, task_id: str, request: TaskCreateRequest):
         task = self.tasks[task_id]
         detected_platform = self._detect_platform(request.target, request.platform)
@@ -231,7 +518,36 @@ class TaskManager:
         pause_event = asyncio.Event()
         pause_event.set()
         self.pause_events[task_id] = pause_event
-        
+
+        # ===== 本地住宅IP直连源码（分块上传）索引 =====
+        # 前端把扩展抓到的源码按块上传到 data/relay_uploads/{upload_id}.jsonl（每行一篇），
+        # 创建任务时 articles_meta 不带源码。这里建立 URL→字节偏移 的轻量索引，
+        # 处理到某篇时再按偏移精确读取该行，全程不必把数百 MB 源码载入内存。
+        relay_file_path = None
+        relay_line_index = {}
+        if getattr(request, "relay_upload_id", None):
+            # upload_id 白名单校验，防止路径穿越
+            if re.fullmatch(r"[A-Za-z0-9_\-]{6,64}", request.relay_upload_id):
+                relay_file_path = BASE_DIR / "data" / "relay_uploads" / f"{request.relay_upload_id}.jsonl"
+                if relay_file_path.exists():
+                    try:
+                        with open(relay_file_path, "rb") as rf:
+                            offset = 0
+                            for line in rf:
+                                try:
+                                    u = json.loads(line).get("url")
+                                    # 同 URL 以首次出现为准（网络重试可能造成极少量重复行，无害）
+                                    if u and u not in relay_line_index:
+                                        relay_line_index[u] = offset
+                                except Exception:
+                                    pass
+                                offset += len(line)
+                    except Exception:
+                        relay_line_index = {}
+                else:
+                    # 承认现实：临时文件丢了（如服务器重启清理），后续全部按失败归档，不用云端IP补抓
+                    relay_file_path = None
+
         try:
             if task.is_cancelled:
                 task.status = TaskStatusEnum.CANCELLED
@@ -321,6 +637,8 @@ class TaskManager:
             task.status = TaskStatusEnum.SCRAPING_ARTICLES
             task.message = f"共选定 {len(article_list)} 篇目标文章 (全量检索到 {total_discovered} 篇)，开始抓取..."
             await self._broadcast(task_id)
+            # 抓到列表后落一次快照，便于中断恢复时展示"共几篇、已到第几篇"
+            self._save_snapshot(task)
 
             # 3. 批量抓取单篇正文 (支持断点续爬与本地缓存)
             scraped_articles: List[ArticleItem] = []
@@ -355,6 +673,23 @@ class TaskManager:
                 task.progress_percent = round((idx / len(article_list)) * 75.0, 1) # 抓取占 75%
 
                 article_url = meta.get("url", "")
+
+                # 若该篇源码在分块上传的临时文件里（创建任务时未内联携带），按 URL 精确取回
+                if relay_file_path is not None and not meta.get("raw_html"):
+                    off = relay_line_index.get(article_url)
+                    if off is not None:
+                        try:
+                            with open(relay_file_path, "rb") as rf:
+                                rf.seek(off)
+                                relay_item = json.loads(rf.readline())
+                                for k in ("raw_html", "content_html", "status_code", "error_reason"):
+                                    if relay_item.get(k) and not meta.get(k):
+                                        meta[k] = relay_item[k]
+                                # 标记来源：该篇确实经过本地直连通道（哪怕是失败的）
+                                meta["_from_relay"] = True
+                        except Exception:
+                            pass
+
                 cached_item = get_cached_article(article_url) if request.use_cache else None
 
                 # 仅当缓存内容完整、无破损乱码且非失败/残缺提示时才命中缓存
@@ -377,10 +712,66 @@ class TaskManager:
                     and "内容获取异常" not in cached_item.content_markdown
                 )
 
-                if is_valid_cache:
+                # 本地直连中继判定：有源码且扩展侧未标记失败
+                # （扩展对 403/超时会标 is_failed=True，此时即使带回了错误页 HTML 也不能当正文用）
+                is_client_relay = bool((meta.get("raw_html") or meta.get("content_html")) and not meta.get("is_failed"))
+
+                if is_client_relay:
+                    task.message = f"[本地住宅IP中继] ({idx}/{len(article_list)}): {task.current_article_title[:22]}..."
+                    await self._broadcast(task_id)
+                    article_item = None
+                    try:
+                        article_item = await scraper.scrape_article_detail(meta)
+                    except Exception:
+                        article_item = None
+
+                    if not article_item or article_item.is_failed:
+                        raw_c = meta.get("content_html") or meta.get("raw_html") or ""
+                        cleaned_html, md_content, images = clean_html_content(
+                            raw_c,
+                            enable_noise_filter=request.enable_noise_filter,
+                            remove_watermark=request.remove_image_watermark
+                        )
+                        article_item = ArticleItem(
+                            id=meta.get("id") or article_url,
+                            title=meta.get("title", task.current_article_title),
+                            author=meta.get("author", task.author_name),
+                            publish_time=meta.get("publish_time", ""),
+                            url=article_url,
+                            platform=task.platform,
+                            summary=md_content[:200].replace("\n", " ").strip() if md_content else "",
+                            content_html=cleaned_html,
+                            content_markdown=md_content,
+                            images=images,
+                            category=meta.get("column_title") or meta.get("category") or task.category_name,
+                            content_type=meta.get("content_type", "article"),
+                            is_failed=False
+                        )
+
+                    if request.use_cache and article_item.content_html and not article_item.is_failed:
+                        save_cached_article(article_item)
+                elif is_valid_cache:
                     task.message = f"[缓存命中] ({idx}/{len(article_list)}): {task.current_article_title[:22]}..."
                     await self._broadcast(task_id)
                     article_item = cached_item
+                elif meta.get("_from_relay"):
+                    # 本地直连抓取过但没拿到源码（失败项）：直接按失败归档。
+                    # 千万不能用云端服务器 IP 去补抓知乎——机房 IP 已被风控，一旦触发整批雪崩
+                    article_item = ArticleItem(
+                        id=meta.get("id") or article_url,
+                        title=meta.get("title", task.current_article_title),
+                        author=meta.get("author", task.author_name),
+                        publish_time=meta.get("publish_time", ""),
+                        url=article_url,
+                        platform=task.platform,
+                        summary="",
+                        content_html="",
+                        content_markdown="",
+                        images=[],
+                        category=meta.get("column_title") or meta.get("category") or task.category_name,
+                        content_type=meta.get("content_type", "article"),
+                        is_failed=True
+                    )
                 else:
                     task.message = f"正在抓取 ({idx}/{len(article_list)}): {task.current_article_title[:22]}..."
                     await self._broadcast(task_id)
@@ -439,6 +830,9 @@ class TaskManager:
                     "words_count": len(article_item.content_markdown.strip())
                 })
                 await self._broadcast(task_id)
+                # 每抓 20 篇落一次快照：既不过度刷盘，又能保证中断时进度损失有界(最多回退 20 篇)
+                if idx % 20 == 0:
+                    self._save_snapshot(task)
 
             await scraper.close()
 
@@ -473,6 +867,8 @@ class TaskManager:
                 await self._broadcast(task_id)
 
                 self.decision_events[task_id] = asyncio.Event()
+                # 等待用户决策可能很久，先落一次快照，便于此时进程若被杀也能快速续跑
+                self._save_snapshot(task)
                 await self.decision_events[task_id].wait()
 
                 if task.is_cancelled:
@@ -592,99 +988,133 @@ class TaskManager:
             else:
                 filename_prefix = f"{safe_author}_{safe_platform}"
 
-            export_files = {}
-            generated_paths = {}
-            export_errors = []  # 记录各格式导出失败原因，避免静默吞异常
+            # ===== 自动分批导出编排 =====
+            # 大规模导出 (如九千篇) 一次性渲染合并 PDF/Word 会把内存与浏览器压垮 (用户反馈的「卡在 96%」)。
+            # 策略：未显式指定 batch_size 且总数超过 800 篇时，自动按 500 篇/批拆分；
+            # 多批模式下，md/txt/html/original_html 等轻量格式仍提供全量合并单文件，
+            # PDF/Word 等重型格式随每批独立 ZIP 交付，永不一次性渲染数千篇。
+            total_selected = len(scraped_articles)
+            batch_size = request.batch_size
+            auto_batched = False
+            if not batch_size and total_selected > 800:
+                batch_size = 500
+                auto_batched = True
+            if batch_size:
+                try:
+                    batch_size = max(50, min(2000, int(batch_size)))
+                except (TypeError, ValueError):
+                    batch_size = 500
+            num_batches = math.ceil(total_selected / batch_size) if (batch_size and total_selected > batch_size) else 1
 
-            total_formats = len(request.export_formats)
-            for idx, fmt in enumerate(request.export_formats, 1):
-                if task.is_cancelled:
+            export_files: Dict[str, str] = {}
+            export_errors: List[str] = []
+
+            if num_batches <= 1:
+                # ---------- 单批：保持原有导出行为 ----------
+                result_files, result_errors = await self._export_batch(
+                    task, request, scraped_articles, filename_prefix, author_name, platform_str,
+                    request.export_formats, 82.0, 17.0
+                )
+                if result_files is None:
                     task.status = TaskStatusEnum.CANCELLED
                     await self._broadcast(task_id)
                     return
+                export_files.update(result_files)
+                export_errors.extend(result_errors)
 
-                task.progress_percent = round(82.0 + (idx / total_formats) * 14.0, 1)
-                task.message = f"正在生成 {fmt.value.upper()} 格式文档 ({idx}/{total_formats})..."
+                # 若全部导出格式均失败，任务应标记为失败，不要让前端显示「已完成但无产物」
+                if not export_files and export_errors:
+                    raise RuntimeError("; ".join(export_errors))
+            else:
+                # ---------- 多批：轻量合并格式全量一份 + 每批独立 ZIP ----------
+                if auto_batched:
+                    task.message = f"📦 检测到 {total_selected} 篇大规模导出，已自动启用分批备份 (每批 {batch_size} 篇 · 共 {num_batches} 批)，告别内存爆炸与末尾卡死..."
+                else:
+                    task.message = f"📦 已启用分批备份 (每批 {batch_size} 篇 · 共 {num_batches} 批)，正在逐批导出..."
+                task.progress_percent = 80.0
                 await self._broadcast(task_id)
 
-                try:
-                    if fmt == ExportFormatEnum.MARKDOWN:
-                        exporter = MarkdownExporter(author_name, platform_str, OUTPUT_DIR)
-                        out_path = await exporter.export(scraped_articles, filename_prefix)
-                        export_files["md"] = f"/api/download/{out_path.name}"
-                        generated_paths["md"] = out_path
+                # 1. 轻量合并格式 (md/txt/html/original_html) 全量合并单文件，进度 80 -> 86
+                light_format_set = {ExportFormatEnum.MARKDOWN, ExportFormatEnum.TXT, ExportFormatEnum.HTML, ExportFormatEnum.ORIGINAL_HTML}
+                light_formats = [f for f in request.export_formats if f in light_format_set]
+                if light_formats:
+                    light_total = len(light_formats)
+                    for l_idx, fmt in enumerate(light_formats, 1):
+                        if task.is_cancelled:
+                            task.status = TaskStatusEnum.CANCELLED
+                            await self._broadcast(task_id)
+                            return
+                        task.progress_percent = round(80.0 + (l_idx / (light_total + 1)) * 6.0, 1)
+                        task.message = f"正在生成全量合并 {fmt.value.upper()} 文档 ({l_idx}/{light_total})..."
+                        await self._broadcast(task_id)
+                        try:
+                            if fmt == ExportFormatEnum.MARKDOWN:
+                                exporter = MarkdownExporter(author_name, platform_str, OUTPUT_DIR)
+                                out_path = await exporter.export(scraped_articles, filename_prefix)
+                                export_files["md"] = f"/api/download/{out_path.name}"
+                            elif fmt == ExportFormatEnum.TXT:
+                                exporter = TxtExporter(author_name, platform_str, OUTPUT_DIR)
+                                out_path = await exporter.export(scraped_articles, filename_prefix)
+                                export_files["txt"] = f"/api/download/{out_path.name}"
+                            elif fmt == ExportFormatEnum.HTML:
+                                exporter = HTMLExporter(author_name, platform_str, OUTPUT_DIR)
+                                out_path = await exporter.export(scraped_articles, filename_prefix, download_images=request.image_mode != "none")
+                                export_files["html"] = f"/api/download/{out_path.name}"
+                            elif fmt == ExportFormatEnum.ORIGINAL_HTML:
+                                exporter = OriginalHTMLExporter(author_name, platform_str, OUTPUT_DIR)
+                                out_path = await exporter.export(scraped_articles, filename_prefix, download_images=request.image_mode != "none")
+                                export_files["original_html"] = f"/api/download/{out_path.name}"
+                        except Exception as light_err:
+                            err_msg = f"全量合并格式 {fmt.value} 导出失败: {light_err}"
+                            print(err_msg)
+                            export_errors.append(err_msg)
+                    # 轻量格式生成完毕，释放图片缓存
+                    clear_image_caches()
 
-                    elif fmt == ExportFormatEnum.HTML:
-                        exporter = HTMLExporter(author_name, platform_str, OUTPUT_DIR)
-                        out_path = await exporter.export(scraped_articles, filename_prefix)
-                        export_files["html"] = f"/api/download/{out_path.name}"
-                        generated_paths["html"] = out_path
+                # 2. 逐批导出全部勾选格式并打独立 ZIP，进度 86 -> 99
+                batch_span = 13.0 / num_batches
+                for b_idx in range(num_batches):
+                    if task.is_cancelled:
+                        task.status = TaskStatusEnum.CANCELLED
+                        await self._broadcast(task_id)
+                        return
+                    b_start = b_idx * batch_size
+                    b_articles = scraped_articles[b_start:b_start + batch_size]
+                    b_prefix = f"{filename_prefix}_第{b_idx + 1}批_{b_start + 1}-{b_start + len(b_articles)}篇"
+                    b_tag = f"[第 {b_idx + 1}/{num_batches} 批] "
 
-                    elif fmt == ExportFormatEnum.ORIGINAL_HTML:
-                        exporter = OriginalHTMLExporter(author_name, platform_str, OUTPUT_DIR)
-                        out_path = await exporter.export(scraped_articles, filename_prefix)
-                        export_files["original_html"] = f"/api/download/{out_path.name}"
-                        generated_paths["original_html"] = out_path
+                    result_files, result_errors = await self._export_batch(
+                        task, request, b_articles, b_prefix, author_name, platform_str,
+                        request.export_formats, 86.0 + b_idx * batch_span, batch_span, batch_tag=b_tag
+                    )
+                    if result_files is None:
+                        task.status = TaskStatusEnum.CANCELLED
+                        await self._broadcast(task_id)
+                        return
 
-                    elif fmt == ExportFormatEnum.TXT:
-                        exporter = TxtExporter(author_name, platform_str, OUTPUT_DIR)
-                        out_path = await exporter.export(scraped_articles, filename_prefix)
-                        export_files["txt"] = f"/api/download/{out_path.name}"
-                        generated_paths["txt"] = out_path
+                    if "zip" in result_files:
+                        export_files[f"zip_batch_{b_idx + 1}"] = result_files["zip"]
+                    export_errors.extend(result_errors)
+                    # 每批之间释放全局图片缓存，避免跨批内存累积
+                    clear_image_caches()
 
-                    elif fmt == ExportFormatEnum.WORD:
-                        exporter = DocxExporter(author_name, platform_str, OUTPUT_DIR)
-                        out_path = await exporter.export(scraped_articles, filename_prefix)
-                        export_files["docx"] = f"/api/download/{out_path.name}"
-                        generated_paths["docx"] = out_path
+                # 全部批次均失败才算任务失败
+                has_any_zip = any(k.startswith("zip_batch_") for k in export_files)
+                if not has_any_zip and not export_files and export_errors:
+                    raise RuntimeError("; ".join(export_errors))
 
-                    elif fmt == ExportFormatEnum.PDF:
-                        exporter = PDFExporter(author_name, platform_str, OUTPUT_DIR)
-                        out_path = await exporter.export(scraped_articles, filename_prefix)
-                        export_files["pdf"] = f"/api/download/{out_path.name}"
-                        generated_paths["pdf"] = out_path
-                except Exception as export_err:
-                    err_msg = f"导出格式 {fmt.value} 失败: {export_err}"
-                    print(err_msg)
-                    export_errors.append(err_msg)
-
-            # 若全部导出格式均失败，任务应标记为失败，不要让前端显示「已完成但无产物」
-            if not export_files and export_errors:
-                raise RuntimeError("; ".join(export_errors))
-
-            # 7. 自动生成全量 ZIP 归档包
-            if task.is_cancelled:
-                task.status = TaskStatusEnum.CANCELLED
-                await self._broadcast(task_id)
-                return
-
-            try:
-                task.message = "正在打包全量 ZIP 归档包 (含合并文档 + 分篇独立文章与目录清单)..."
-                task.progress_percent = 98.0
-                await self._broadcast(task_id)
-
-                async def _zip_progress_cb(msg: str):
-                    task.message = msg
-                    await self._broadcast(task_id)
-
-                zip_exporter = ZipExporter(author_name, platform_str, OUTPUT_DIR)
-                zip_path = await zip_exporter.export(
-                    scraped_articles,
-                    filename_prefix,
-                    generated_paths,
-                    download_images=request.download_images,
-                    progress_callback=_zip_progress_cb
-                )
-                export_files["zip"] = f"/api/download/{zip_path.name}"
-            except Exception as zip_err:
-                print(f"生成 ZIP 压缩包失败: {zip_err}")
+            # 导出阶段收尾：清空全局图片缓存，释放大对象内存
+            clear_image_caches()
 
             # 8. 完成
             task.status = TaskStatusEnum.COMPLETED
             task.progress_percent = 100.0
             task.export_files = export_files
             task.completed_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            task.message = f"🎉 抓取与导出全部完成！共合并 {len(scraped_articles)} 篇有效文章。"
+            if num_batches > 1:
+                task.message = f"🎉 分批备份全部完成！共 {len(scraped_articles)} 篇有效文章，已拆分为 {num_batches} 个 ZIP 归档包，可逐批下载。"
+            else:
+                task.message = f"🎉 抓取与导出全部完成！共合并 {len(scraped_articles)} 篇有效文章。"
             await self._broadcast(task_id)
 
         except Exception as e:
@@ -699,5 +1129,18 @@ class TaskManager:
         finally:
             self.pause_events.pop(task_id, None)
             self.decision_events.pop(task_id, None)
+            # 任务到达终态后，删除本地直连源码临时文件（数百 MB，不能留着占满磁盘）。
+            # 暂停/等待确认不算终态：文件保留，恢复执行时还要按 URL 读源码
+            try:
+                terminal = (TaskStatusEnum.COMPLETED, TaskStatusEnum.FAILED, TaskStatusEnum.CANCELLED)
+                if relay_file_path is not None and relay_file_path.exists() and task.status in terminal:
+                    relay_file_path.unlink()
+            except Exception:
+                pass
+            # 任务到达终态后，同时删除续跑快照：不再把它当作"未完成的残留任务"去打扰用户续跑
+            if task.status in (TaskStatusEnum.COMPLETED, TaskStatusEnum.FAILED, TaskStatusEnum.CANCELLED):
+                self._remove_snapshot(task_id)
+            # 清理该任务的请求序列化缓存，防止长驻进程内存累积
+            self._serialized_requests.pop(task_id, None)
 
 task_manager = TaskManager()

@@ -34,9 +34,12 @@ ROOT_DIR = BACKEND_DIR.parent
 class OriginalHTMLExporter(BaseExporter):
     """平台网站原版 HTML 离线导出器"""
 
-    async def export(self, articles: List[ArticleItem], filename_prefix: str) -> Path:
-        # 1. 确保所有文章中的图片均已转换为 Base64 内嵌，保证 100% 单文件永久离线
-        await embed_articles_images_as_base64(articles)
+    async def export(self, articles: List[ArticleItem], filename_prefix: str, download_images: bool = True) -> Path:
+        # 1. 核心保障：针对 <= 300 篇的中小合集且启用图片下载时，内嵌全量 Base64 图片确保 100% 独立离线
+        # 超大规模合集 (>300 篇) 或纯文字模式跳过全量图片内嵌下载，保留原图链接，
+        # 彻底防止数万张图片的 Base64 把单一 HTML 撑到数百 MB 导致内存耗尽、网络暴增与末尾卡死数十分钟
+        if download_images and len(articles) <= 300:
+            await embed_articles_images_as_base64(articles)
 
         # 2. 识别当前平台类型
         platform_name = self.get_effective_platform_name(articles)
@@ -60,7 +63,7 @@ class OriginalHTMLExporter(BaseExporter):
             return await self._export_zhihu_classic(articles, filename_prefix)
 
         # 4. 弹性降级策略 (若其他平台原版模板尚未独立编写，平滑采用高质量离线版本生成原版)
-        return await self._export_fallback_classic(articles, filename_prefix, platform_name)
+        return await self._export_fallback_classic(articles, filename_prefix, platform_name, download_images=download_images)
 
     async def _export_sina_classic(self, articles: List[ArticleItem], filename_prefix: str) -> Path:
         """渲染新浪博客 PC 电脑端 1:1 原版经典排版"""
@@ -178,10 +181,15 @@ class OriginalHTMLExporter(BaseExporter):
         default_avatar_svg = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="#a0aec0"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>'
         default_avatar_b64 = "data:image/svg+xml;base64," + base64.b64encode(default_avatar_svg.encode("utf-8")).decode("ascii")
 
+        # 头像下载与本地内存缓存（避免上千篇文章重复下载同一头像，杜绝网络长等待）
+        avatar_cache: Dict[str, str] = {}
+
         # 异步下载图片并转为 Base64，保证离线单文件也能显示头像
         async def url_to_base64(url: str) -> str:
             if not url or url.startswith("data:"):
                 return url or default_avatar_b64
+            if url in avatar_cache:
+                return avatar_cache[url]
             if url.startswith("//"):
                 url = "https:" + url
             try:
@@ -195,9 +203,12 @@ class OriginalHTMLExporter(BaseExporter):
                         mime = resp.headers.get("content-type", "image/png").split(";")[0]
                         if mime == "application/octet-stream":
                             mime = "image/png"
-                        return f"data:{mime};base64," + base64.b64encode(resp.content).decode("ascii")
+                        res = f"data:{mime};base64," + base64.b64encode(resp.content).decode("ascii")
+                        avatar_cache[url] = res
+                        return res
             except Exception:
                 pass
+            avatar_cache[url] = default_avatar_b64
             return default_avatar_b64
 
         # 从文章中提取真实作者头像（JianshuScraper 已在 scrape_article_detail 中写入）
@@ -212,10 +223,17 @@ class OriginalHTMLExporter(BaseExporter):
         author_bio = ""
 
         # 清理正文 HTML：移除可能导致文字与图片重叠的绝对定位、浮动、负边距等样式
-        def sanitize_jianshu_html(html: str) -> str:
+        def sanitize_jianshu_html(raw_html: str) -> str:
             """对简书正文再做一次安全清洗，防止原站残留样式导致离线排版错乱"""
+            if not raw_html:
+                return ""
+            # 极速快道：如果没有内联样式或简书排版干扰 class，仅快速补齐图片块级样式
+            needs_deep_clean = ("style=" in raw_html) or ("image-container" in raw_html) or ("image-view" in raw_html) or ("image-package" in raw_html)
+            if not needs_deep_clean:
+                return re.sub(r'<img\b(?![^>]*\bstyle=)', '<img style="display:block;max-width:100%;margin:20px auto;border-radius:4px;" ', raw_html)
+
             from bs4 import BeautifulSoup
-            soup = BeautifulSoup(html, "lxml")
+            soup = BeautifulSoup(raw_html, "lxml")
             for tag in soup.find_all(True):
                 # 1. 清理危险内联样式：绝对定位、固定定位、浮动、负边距、z-index、transform
                 if tag.get("style"):
@@ -260,7 +278,11 @@ class OriginalHTMLExporter(BaseExporter):
         articles_data = []
         for idx, art in enumerate(articles, 1):
             cleaned_html = sanitize_jianshu_html(art.content_html or "")
-            art_avatar = await url_to_base64(art.author_avatar or author_avatar_url)
+            target_avatar_url = (art.author_avatar or "").strip() or author_avatar_url
+            if not target_avatar_url or target_avatar_url == author_avatar_url:
+                art_avatar = author_avatar
+            else:
+                art_avatar = await url_to_base64(target_avatar_url)
             articles_data.append({
                 "id": art.id or str(idx),
                 "title": art.title,
@@ -278,7 +300,7 @@ class OriginalHTMLExporter(BaseExporter):
         tmpl_path = CURRENT_DIR / "templates" / "jianshu_classic" / "jianshu_classic.html"
         if not tmpl_path.exists():
             # 模板不存在时降级到普通 HTML，避免任务失败
-            return await self._export_fallback_classic(articles, filename_prefix, "简书")
+            return await self._export_fallback_classic(articles, filename_prefix, "简书", download_images=download_images)
 
         template_str = tmpl_path.read_text(encoding="utf-8")
         template = Template(template_str)
@@ -303,10 +325,15 @@ class OriginalHTMLExporter(BaseExporter):
         default_avatar_svg = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="#a0aec0"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>'
         default_avatar_b64 = "data:image/svg+xml;base64," + base64.b64encode(default_avatar_svg.encode("utf-8")).decode("ascii")
 
+        # 头像下载与本地内存缓存（避免上千篇文章重复下载同一头像，杜绝网络长等待）
+        avatar_cache: Dict[str, str] = {}
+
         # 异步下载图片并转为 Base64，保证离线单文件也能显示头像
         async def url_to_base64(url: str) -> str:
             if not url or url.startswith("data:"):
                 return url or default_avatar_b64
+            if url in avatar_cache:
+                return avatar_cache[url]
             if url.startswith("//"):
                 url = "https:" + url
             try:
@@ -320,9 +347,12 @@ class OriginalHTMLExporter(BaseExporter):
                         mime = resp.headers.get("content-type", "image/png").split(";")[0]
                         if mime == "application/octet-stream":
                             mime = "image/png"
-                        return f"data:{mime};base64," + base64.b64encode(resp.content).decode("ascii")
+                        res = f"data:{mime};base64," + base64.b64encode(resp.content).decode("ascii")
+                        avatar_cache[url] = res
+                        return res
             except Exception:
                 pass
+            avatar_cache[url] = default_avatar_b64
             return default_avatar_b64
 
         # 从文章中提取真实作者头像
@@ -340,10 +370,16 @@ class OriginalHTMLExporter(BaseExporter):
         column_count = len({c.strip() for a in articles for c in (a.column_title or "").split("、") if c.strip()})
 
         # 清理正文 HTML：知乎原站可能残留一些导致离线排版错乱的样式，这里做安全清洗
-        def sanitize_zhihu_html(html: str, is_answer: bool = False) -> str:
+        def sanitize_zhihu_html(raw_html: str, is_answer: bool = False) -> str:
             """对知乎正文做安全清洗，移除危险样式，保证离线单文件展示整洁"""
+            if not raw_html:
+                return ""
+            needs_deep_clean = ("style=" in raw_html) or is_answer
+            if not needs_deep_clean:
+                return re.sub(r'<img\b(?![^>]*\bstyle=)', '<img style="display:block;max-width:100%;margin:20px auto;border-radius:4px;" ', raw_html)
+
             from bs4 import BeautifulSoup
-            soup = BeautifulSoup(html, "lxml")
+            soup = BeautifulSoup(raw_html, "lxml")
             for tag in soup.find_all(True):
                 # 移除定位、浮动等危险内联样式
                 if tag.get("style"):
@@ -391,7 +427,11 @@ class OriginalHTMLExporter(BaseExporter):
                 # 专栏只是归类标签（看 column_title 字段），这里做兼容归一
                 ctype = "article"
             cleaned_html = sanitize_zhihu_html(art.content_html or "", is_answer=(ctype == "answer"))
-            art_avatar = await url_to_base64(art.author_avatar or author_avatar_url)
+            target_avatar_url = (art.author_avatar or "").strip() or author_avatar_url
+            if not target_avatar_url or target_avatar_url == author_avatar_url:
+                art_avatar = author_avatar
+            else:
+                art_avatar = await url_to_base64(target_avatar_url)
             # 去掉标题中的【文章】【专栏文章】【回答】前缀，便于模板按类型干净展示
             display_title = art.title
             if display_title.startswith("【专栏文章】"):
@@ -423,7 +463,7 @@ class OriginalHTMLExporter(BaseExporter):
         tmpl_path = CURRENT_DIR / "templates" / "zhihu_classic" / "zhihu_classic.html"
         if not tmpl_path.exists():
             # 模板不存在时降级到普通 HTML，避免任务失败
-            return await self._export_fallback_classic(articles, filename_prefix, "知乎")
+            return await self._export_fallback_classic(articles, filename_prefix, "知乎", download_images=download_images)
 
         template_str = tmpl_path.read_text(encoding="utf-8")
         template = Template(template_str)
@@ -441,8 +481,8 @@ class OriginalHTMLExporter(BaseExporter):
         output_file.write_text(rendered_html, encoding="utf-8")
         return output_file
 
-    async def _export_fallback_classic(self, articles: List[ArticleItem], filename_prefix: str, platform_name: str) -> Path:
+    async def _export_fallback_classic(self, articles: List[ArticleItem], filename_prefix: str, platform_name: str, download_images: bool = True) -> Path:
         """针对尚未单独上线原版模板的平台，平滑降级至高保真离线版本"""
         from app.exporters.html_exporter import HTMLExporter
         fallback_exporter = HTMLExporter(self.author_name, self.platform, self.output_dir)
-        return await fallback_exporter.export(articles, f"{filename_prefix}_原版")
+        return await fallback_exporter.export(articles, f"{filename_prefix}_原版", download_images=download_images)

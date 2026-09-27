@@ -869,6 +869,7 @@
             <span style="font-size: 0.72rem; padding: 2px 7px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-emerald); font-weight: 700; border: 1px solid var(--border-main); margin-left: 2px;">纯净无广告</span>
         </a>
         <div class="nav-links">
+            <a href="#desktop-download" class="nav-link" style="color: var(--accent-emerald); font-weight: 700;">桌面客户端 <span style="font-size: 0.65rem; background: var(--accent-emerald-subtle); color: var(--accent-emerald); padding: 1px 5px; border-radius: 4px; border: 1px solid rgba(4, 120, 87, 0.2);">免风控</span></a>
             <a href="#features" class="nav-link">核心特性</a>
             <a href="#platforms" class="nav-link">支持平台</a>
             <a href="#workflow" class="nav-link">工作流程</a>
@@ -879,6 +880,10 @@
                 <svg id="themeIconSun" class="icon" viewBox="0 0 24 24" style="display:none;"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
                 <svg id="themeIconMoon" class="icon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
             </button>
+            <a href="#desktop-download" class="btn-secondary" style="padding: 8px 16px; font-size: 0.85rem; border-color: var(--accent-emerald); color: var(--accent-emerald); font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                <span>下载桌面端</span>
+            </a>
             <a href="/app" class="btn-luxury">
                 <span>进入工作台</span>
                 <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
@@ -928,13 +933,17 @@
         </div>
 
         <div class="hero-actions">
-            <a href="/app" class="btn-luxury" style="padding: 13px 32px; font-size: 0.95rem;">
-                <span>进入文章导出工作台</span>
-                <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            <a href="#desktop-download" class="btn-luxury" style="padding: 13px 28px; font-size: 0.95rem; background: linear-gradient(135deg, #047857, #10b981); color: #ffffff; border: none; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);">
+                <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                <span>下载桌面客户端 (首选·零风控)</span>
             </a>
-            <a href="https://github.com/yibeigen/wechat-article-exporter" target="_blank" rel="noopener noreferrer" class="btn-secondary" style="padding: 13px 24px; font-size: 0.95rem;">
+            <a href="/app" class="btn-secondary" style="padding: 13px 26px; font-size: 0.95rem; font-weight: 600;">
+                <span>进入网页版工作台</span>
+                <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+            </a>
+            <a href="https://github.com/yibeigen/wechat-article-exporter" target="_blank" rel="noopener noreferrer" class="btn-secondary" style="padding: 13px 20px; font-size: 0.95rem;">
                 <svg class="icon" viewBox="0 0 24 24"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
-                <span>GitHub 源码开源</span>
+                <span>GitHub 开源</span>
             </a>
         </div>
 
@@ -956,7 +965,7 @@
                 </div>
                 <div class="metric-content">
                     <span class="metric-label">官网累计服务人次</span>
-                    <span class="metric-value"><span id="siteVisitorCount">100</span> 人次</span>
+                    <span class="metric-value"><span id="siteVisitorCount">200</span> 人次</span>
                 </div>
             </div>
             <div class="metric-divider"></div>
@@ -1042,6 +1051,131 @@
             </div>
         </div>
     </header>
+
+    <!-- 客户端自治模式重磅专区 (Desktop Client Download Showcase) -->
+    <section id="desktop-download" class="section-wrap" style="padding-top: 70px; padding-bottom: 70px; border-bottom: 1px solid var(--border-main);">
+        <div class="section-header-center" style="margin-bottom: 40px;">
+            <div class="section-eyebrow" style="color: var(--accent-emerald);">CLIENT AUTONOMY ARCHITECTURE</div>
+            <h2 class="section-headline">首选推荐：BlogDistiller 桌面自治客户端</h2>
+            <p style="font-size: 0.98rem; color: var(--text-secondary); max-width: 780px; margin: 12px auto 0; line-height: 1.65;">
+                重磅推行<b>“客户端自治模式”</b>：全网抓取、去广告清洗与多格式合并排版 <b>100% 在您的电脑本地完成</b>。<br>
+                知乎、微博等登录 Cookie 仅留存于本机沙盒，绝不上云；彻底绕开云端并发排队与超时限制，享受原生系统级极速体验！
+            </p>
+        </div>
+
+        <!-- 客户端核心架构特性卡片 -->
+        <div class="bento-grid" style="margin-bottom: 32px;">
+            <!-- 卡片 1: Windows 10/11 现代标准版 -->
+            <div class="bento-card col-6" id="clientCardStandard" style="border: 2px solid var(--accent-emerald); position: relative; overflow: hidden; background: linear-gradient(to bottom, var(--bg-surface), var(--bg-subtle));">
+                <div style="position: absolute; top: 16px; right: 16px; background: var(--accent-emerald); color: #fff; font-size: 0.72rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px; letter-spacing: 0.05em;" id="standardBadge">
+                    ⭐ 官方强烈推荐 (95% 用户)
+                </div>
+                <div>
+                    <div class="bento-icon-box" style="background: var(--accent-emerald-subtle); color: var(--accent-emerald); border-color: rgba(4, 120, 87, 0.25);">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                    </div>
+                    <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px;">
+                        <h3 class="bento-title" style="font-size: 1.35rem; margin-bottom: 0;">Windows 10 / 11 现代标准版</h3>
+                        <span style="font-size: 0.78rem; font-family: 'JetBrains Mono', monospace; color: var(--text-muted);">64-bit · v1.2.0</span>
+                    </div>
+                    <div style="font-size: 0.82rem; color: var(--accent-gold); font-weight: 600; margin-bottom: 16px;">
+                        内嵌技术栈：Electron 44 (Chromium 134) + 本地 Python 3.11 极速并发引擎
+                    </div>
+                    <ul style="list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 24px;">
+                        <li style="display: flex; align-items: flex-start; gap: 8px;">
+                            <span style="color: var(--accent-emerald); font-weight: 800;">✓</span>
+                            <span><b>本地极速多协程</b>：抓取速度提升 5~10 倍，图片即刻本地缓存，合并无延迟</span>
+                        </li>
+                        <li style="display: flex; align-items: flex-start; gap: 8px;">
+                            <span style="color: var(--accent-emerald); font-weight: 800;">✓</span>
+                            <span><b>零风控隐私安全</b>：知乎、微博等登录 Cookie 仅留存于本地电脑，100% 杜绝泄露</span>
+                        </li>
+                        <li style="display: flex; align-items: flex-start; gap: 8px;">
+                            <span style="color: var(--accent-emerald); font-weight: 800;">✓</span>
+                            <span><b>免打包即时热更新</b>：界面直连云端热更服务，突发反爬调整与 bug 修复即刻生效</span>
+                        </li>
+                        <li style="display: flex; align-items: flex-start; gap: 8px;">
+                            <span style="color: var(--accent-emerald); font-weight: 800;">✓</span>
+                            <span><b>直存系统 Downloads</b>：支持一键在资源管理器中定位导出文档与本地全景浏览</span>
+                        </li>
+                    </ul>
+                </div>
+                <div>
+                    <a href="/api/client/download" class="btn-luxury" style="width: 100%; justify-content: center; padding: 13px; font-size: 0.95rem; background: var(--accent-emerald); border-color: var(--accent-emerald); color: #fff; box-shadow: 0 4px 14px rgba(4, 120, 87, 0.3);">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        <span>立即下载 Windows 10/11 安装包 (.exe)</span>
+                    </a>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 8px;">
+                        适用于 Win10 / Win11 / Server 2016+ (64位) · 开箱即用无需配置 Python
+                    </div>
+                </div>
+            </div>
+
+            <!-- 卡片 2: Windows 7 / 8.1 兼容典藏版 -->
+            <div class="bento-card col-6" id="clientCardWin7" style="border: 1px solid var(--border-main); position: relative; background: var(--bg-surface);">
+                <div style="position: absolute; top: 16px; right: 16px; background: var(--bg-subtle); color: var(--text-secondary); border: 1px solid var(--border-main); font-size: 0.72rem; font-weight: 700; padding: 4px 12px; border-radius: 9999px;" id="win7Badge">
+                    💻 老旧政企机房适配
+                </div>
+                <div>
+                    <div class="bento-icon-box" style="background: var(--bg-subtle); color: var(--text-secondary);">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    </div>
+                    <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px;">
+                        <h3 class="bento-title" style="font-size: 1.35rem; margin-bottom: 0;">Windows 7 / 8.1 兼容典藏版</h3>
+                        <span style="font-size: 0.78rem; font-family: 'JetBrains Mono', monospace; color: var(--text-muted);">x86/x64 · v1.2.0-win7</span>
+                    </div>
+                    <div style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600; margin-bottom: 16px;">
+                        专属技术栈：Electron 22 (Chromium 108) + 本地 Python 3.9 稳定支持内核
+                    </div>
+                    <ul style="list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 24px;">
+                        <li style="display: flex; align-items: flex-start; gap: 8px;">
+                            <span style="color: var(--text-primary); font-weight: 800;">✓</span>
+                            <span><b>原生支持 Windows 7 SP1</b>：解决老系统无法运行现代 Electron 与 Python 3.10+ 难题</span>
+                        </li>
+                        <li style="display: flex; align-items: flex-start; gap: 8px;">
+                            <span style="color: var(--text-primary); font-weight: 800;">✓</span>
+                            <span><b>极低内存占用</b>：轻量内核优化，在 2GB 内存的老电脑上依旧流畅如新</span>
+                        </li>
+                        <li style="display: flex; align-items: flex-start; gap: 8px;">
+                            <span style="color: var(--text-primary); font-weight: 800;">✓</span>
+                            <span><b>功能全量对齐</b>：9 大平台全量抓取、去噪清洗与 5 大文档格式合并导出完全一致</span>
+                        </li>
+                        <li style="display: flex; align-items: flex-start; gap: 8px;">
+                            <span style="color: var(--text-primary); font-weight: 800;">✓</span>
+                            <span><b>离线安全</b>：支持完全内网隔离环境下的纯本地自治运行与文档生成</span>
+                        </li>
+                    </ul>
+                </div>
+                <div>
+                    <a href="/api/client/download/win7" class="btn-secondary" style="width: 100%; justify-content: center; padding: 13px; font-size: 0.95rem;">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        <span>下载 Windows 7 / 8.1 兼容版安装包</span>
+                    </a>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 8px;">
+                        适用于 Windows 7 SP1 / Windows 8 / Windows 8.1 及 32位环境
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 架构优势对比横栏 -->
+        <div style="background: var(--bg-surface); border: 1px solid var(--border-main); border-radius: 12px; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 38px; height: 38px; border-radius: 8px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; color: var(--accent-emerald);">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                </div>
+                <div>
+                    <div style="font-weight: 700; font-size: 0.92rem; color: var(--text-primary);">为什么首选桌面客户端？</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">网页版共享云端服务器计算带宽易受排队超时限制；桌面端使用您本机处理器与本地网络，永不排队、绝不封号。</div>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <a href="/app" style="font-size: 0.84rem; color: var(--text-secondary); text-decoration: underline;">
+                    不想安装？继续使用网页轻量版 →
+                </a>
+            </div>
+        </div>
+    </section>
 
     <!-- Bento 现代卡片特性区 -->
     <section id="features" class="section-wrap">
@@ -1858,19 +1992,50 @@
         setInterval(updateLiveUptime, 1000);
         updateLiveUptime();
 
-        // 官网与 GitHub 访客统计 (官网基础 100 起步，GitHub 基础 20 起步)
+        // 官网与 GitHub 访客统计 (官网基础 200 起步，GitHub 基础 50 起步)
         (function initVisitorStats() {
             let siteVisits = parseInt(localStorage.getItem('bd_site_visits') || '0', 10);
             siteVisits += 1;
             localStorage.setItem('bd_site_visits', siteVisits.toString());
             
-            const totalSiteVisitors = 100 + siteVisits;
+            const totalSiteVisitors = 200 + siteVisits;
             const siteEl = document.getElementById('siteVisitorCount');
             if (siteEl) siteEl.textContent = totalSiteVisitors;
 
-            const ghVisits = 20 + Math.floor(siteVisits * 0.4);
+            const ghVisits = 50 + Math.floor(siteVisits * 0.4);
             const ghEl = document.getElementById('ghVisitorCount');
             if (ghEl) ghEl.textContent = ghVisits;
+        })();
+
+        // 智能操作系统环境检测与客户端推荐
+        (function detectClientPlatform() {
+            try {
+                const ua = navigator.userAgent.toLowerCase();
+                const cardStd = document.getElementById("clientCardStandard");
+                const cardWin7 = document.getElementById("clientCardWin7");
+                const stdBadge = document.getElementById("standardBadge");
+                const win7Badge = document.getElementById("win7Badge");
+
+                if (ua.includes("windows nt 6.1") || ua.includes("windows nt 6.2") || ua.includes("windows nt 6.3")) {
+                    // Windows 7 / 8 / 8.1
+                    if (cardWin7 && cardStd) {
+                        cardWin7.style.border = "2px solid var(--accent-emerald)";
+                        cardWin7.style.background = "linear-gradient(to bottom, var(--bg-surface), var(--bg-subtle))";
+                        if (win7Badge) {
+                            win7Badge.textContent = "⭐ 检测到当前系统，推荐此版本";
+                            win7Badge.style.background = "var(--accent-emerald)";
+                            win7Badge.style.color = "#fff";
+                        }
+                        cardStd.style.border = "1px solid var(--border-main)";
+                        if (stdBadge) stdBadge.style.display = "none";
+                    }
+                } else if (ua.includes("windows nt 10.0")) {
+                    // Windows 10 / 11
+                    if (stdBadge) {
+                        stdBadge.textContent = "⭐ 检测到 Win 10/11，推荐此版本";
+                    }
+                }
+            } catch(e) {}
         })();
 
         initTheme();

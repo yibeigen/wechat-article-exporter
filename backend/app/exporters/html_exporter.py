@@ -11,12 +11,15 @@ from app.core.image_helper import embed_articles_images_as_base64
 class HTMLExporter(BaseExporter):
     """HTML 响应式离线电子书导出器 (默认优雅浅色阅读排版，支持一键切换暗黑模式，全量内嵌离线 Base64 图片)"""
 
-    async def export(self, articles: List[ArticleItem], filename_prefix: str) -> Path:
+    async def export(self, articles: List[ArticleItem], filename_prefix: str, download_images: bool = True) -> Path:
         output_file = self.output_dir / f"{filename_prefix}.html"
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # 核心保障：将所有文章中的外链图片抓取并转换为 Base64 嵌入，确保导出的单一 HTML 文件为 100% 独立离线备份
-        await embed_articles_images_as_base64(articles)
+        # 纯文字模式 (download_images=False) 或超大规模合集 (>300 篇) 时跳过内嵌，保留在线图链接，
+        # 避免数万张图片的 Base64 把单一 HTML 撑到数百 MB 导致内存耗尽
+        if download_images and len(articles) <= 300:
+            await embed_articles_images_as_base64(articles)
 
         # 解析真实平台友好展示名称与标签 (避免出现 custom_urls 等内部代码名)
         platform_name = self.get_effective_platform_name(articles)
@@ -508,6 +511,41 @@ class HTMLExporter(BaseExporter):
             document.querySelectorAll('.toc-link').forEach(l => l.classList.remove('active'));
             el.classList.add('active');
         }}
+
+        function toggleImageQuality(img) {{
+            if (!img) return;
+            const isOrig = img.getAttribute('data-is-original') === 'true';
+            const origSrc = img.getAttribute('data-original');
+            const thumbSrc = img.getAttribute('data-thumb');
+            const figure = img.closest('figure');
+            const badge = figure ? figure.querySelector('.img-badge-status') : null;
+            const btn = figure ? figure.querySelector('.toggle-img-btn') : null;
+
+            if (!isOrig && origSrc) {{
+                img.src = origSrc;
+                img.setAttribute('data-is-original', 'true');
+                if (badge) {{
+                    badge.textContent = '🔍 高清原图';
+                    badge.style.background = 'rgba(234, 88, 12, 0.92)';
+                }}
+                if (btn) {{
+                    btn.innerHTML = '⚡ 还原为轻量压缩图 <span style="font-size:11px;color:var(--accent);opacity:0.9;">(推荐·更省内存)</span>';
+                    btn.style.color = 'var(--accent)';
+                }}
+            }} else if (thumbSrc) {{
+                img.src = thumbSrc;
+                img.setAttribute('data-is-original', 'false');
+                if (badge) {{
+                    badge.textContent = '⚡ 轻量压缩图';
+                    badge.style.background = 'rgba(2, 132, 199, 0.92)';
+                }}
+                if (btn) {{
+                    btn.innerHTML = '🔍 查看高清原图 <span style="font-size:11px;color:#dc2626;opacity:0.9;">(⚠️加载慢·耗内存)</span>';
+                    btn.style.color = '#ea580c';
+                }}
+            }}
+        }}
+        window.toggleImageQuality = toggleImageQuality;
 
         initTheme();
     </script>

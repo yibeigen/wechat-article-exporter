@@ -78,8 +78,10 @@ async def check_zhihu_auth_status() -> Dict[str, Any]:
                 data = resp.json()
                 return {
                     "is_logged_in": True,
+                    "authenticated": True,
                     "has_cookie": True,
                     "user_name": data.get("name", "知乎已认证用户"),
+                    "username": data.get("name", "知乎已认证用户"),
                     "url_token": data.get("url_token", ""),
                     "avatar_url": data.get("avatar_url", ""),
                     "headline": data.get("headline", ""),
@@ -88,6 +90,7 @@ async def check_zhihu_auth_status() -> Dict[str, Any]:
             else:
                 return {
                     "is_logged_in": False,
+                    "authenticated": False,
                     "has_cookie": True,
                     "message": "已保存的 Cookie 已过期，请重新同步或扫码登录"
                 }

@@ -40,15 +40,54 @@ def find_system_browser() -> Optional[str]:
 
 
 class PDFExporter(BaseExporter):
-    """PDF 单文件排版导出器 (内嵌高清离线 Base64 图片，100% 免疫防盗链与脱机渲染)"""
+    """PDF 单文件排版导出器 (内嵌高清离线 Base64 图片，100% 免疫防盗链与脱机渲染)
 
-    async def export(self, articles: List[ArticleItem], filename_prefix: str) -> Path:
+    大规模合集保护机制：
+    - 纯文字模式 (download_images=False) 跳过图片下载与 Base64 内嵌，保留在线图链接；
+    - 超过 PDF_VOLUME_SIZE 篇时自动拆分为多卷 PDF 逐卷渲染 (self.extra_outputs 存放后续卷)，
+      避免数千篇文章拼成的巨型 HTML 把无头浏览器直接卡死 (即用户反馈的「卡在 96%」)；
+    - 渲染超时按篇数动态放大，彻底告别 90 秒硬性超时误杀。
+    """
+
+    PDF_VOLUME_SIZE = 150  # 每卷最多篇数
+
+    def __init__(self, author_name: str, platform: str, output_dir: Path):
+        super().__init__(author_name, platform, output_dir)
+        self.extra_outputs: List[Path] = []  # 多卷拆分时的后续卷文件
+
+    async def export(self, articles: List[ArticleItem], filename_prefix: str, download_images: bool = True) -> Path:
+        self.extra_outputs = []
+
+        if len(articles) <= self.PDF_VOLUME_SIZE:
+            return await self._export_single_volume(articles, filename_prefix, download_images)
+
+        # 超大规模：拆分为多卷逐卷渲染，每卷之间释放浏览器与 HTML 字符串内存
+        volumes = []
+        for v_idx in range(0, len(articles), self.PDF_VOLUME_SIZE):
+            chunk = articles[v_idx:v_idx + self.PDF_VOLUME_SIZE]
+            vol_no = v_idx // self.PDF_VOLUME_SIZE + 1
+            vol_prefix = f"{filename_prefix}_第{vol_no}卷_{v_idx + 1}-{v_idx + len(chunk)}篇"
+            try:
+                vol_path = await self._export_single_volume(chunk, vol_prefix, download_images)
+                volumes.append(vol_path)
+            except Exception as e:
+                print(f"PDF 第 {vol_no} 卷渲染失败: {e}")
+
+        if not volumes:
+            raise RuntimeError("PDF 全部分卷渲染均失败")
+        self.extra_outputs = volumes[1:]
+        return volumes[0]
+
+    async def _export_single_volume(self, articles: List[ArticleItem], filename_prefix: str, download_images: bool = True) -> Path:
         output_file = self.output_dir / f"{filename_prefix}.pdf"
         fallback_html_file = self.output_dir / f"{filename_prefix}_for_pdf.html"
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # 1. 预先将所有外部图片转换为 Base64，确保在 PDF 引擎中无损离线渲染
-        base64_map = await embed_articles_images_as_base64(articles)
+        #    纯文字模式跳过，直接保留在线图链接，零图片流量、内存占用极小
+        base64_map = {}
+        if download_images:
+            base64_map = await embed_articles_images_as_base64(articles)
 
         # 2. 生成适合 PDF 打印的高清优雅排版 HTML
         article_htmls = []
@@ -344,6 +383,9 @@ class PDFExporter(BaseExporter):
         fallback_html_file.write_text(pdf_html, encoding="utf-8")
 
         # 优先使用系统原生 Edge / Chrome 无头打印 (毫秒级极速渲染、无需庞大依赖)
+        # 渲染超时按篇数动态放大：基础 90 秒 + 每篇 1.2 秒，上限 10 分钟，
+        # 避免大规模合集被 90 秒硬超时误杀后表现「卡在 96% 不动」
+        render_timeout = min(90 + int(len(articles) * 1.2), 600)
         browser_path = find_system_browser()
         if browser_path:
             def _render_via_cli(b_path: str, src_html: Path, target_pdf: Path) -> bool:
@@ -356,7 +398,7 @@ class PDFExporter(BaseExporter):
                         f"--print-to-pdf={str(target_pdf.resolve())}",
                         str(src_html.resolve())
                     ]
-                    res = subprocess.run(cmd, capture_output=True, timeout=90)
+                    res = subprocess.run(cmd, capture_output=True, timeout=render_timeout)
                     return res.returncode == 0 and target_pdf.exists() and target_pdf.stat().st_size > 1000
                 except Exception as e:
                     print(f"原生浏览器打印 PDF 异常: {e}")
@@ -385,7 +427,7 @@ class PDFExporter(BaseExporter):
                         ]
                     )
                     page = browser.new_page()
-                    page.set_content(html_text, wait_until="load", timeout=35000)
+                    page.set_content(html_text, wait_until="load", timeout=min(35000 + len(articles) * 500, 120000))
                     page.pdf(
                         path=str(target_pdf),
                         format="A4",

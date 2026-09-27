@@ -102,13 +102,29 @@ def _resolve_author_sync(url: str, cookies: Optional[Dict[str, str]]) -> Optiona
         print(f"溯源博主信息异常: {e}")
         return None
 
-def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Optional[Dict[str, str]], max_articles: Optional[int], target_fallback_url: str, is_direct_article: bool, progress_callback: Optional[Callable[[str, int, int], None]] = None) -> List[Dict[str, str]]:
-    """在工作线程中同步抓取博主全部回答与专栏文章"""
+def _parse_count(s: str) -> int:
+    """把知乎展示的'1.2万 / 8,634 / 3k'这类数字文本解析成整数，失败返回 0"""
+    s = (s or "").strip().replace(",", "").replace(" ", "")
+    m = re.match(r"^([\d.]+)([万亿kKwWmM]?)$", s)
+    if not m:
+        return 0
+    mult = {"万": 10000, "w": 10000, "W": 10000, "k": 1000, "K": 1000,
+            "m": 1000000, "M": 1000000, "亿": 100000000}.get(m.group(2), 1)
+    try:
+        return int(float(m.group(1)) * mult)
+    except ValueError:
+        return 0
+
+def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Optional[Dict[str, str]], max_articles: Optional[int], target_fallback_url: str, is_direct_article: bool, progress_callback: Optional[Callable[[str, int, int], None]] = None) -> tuple:
+    """在工作线程中同步抓取博主全部回答与专栏文章
+    返回 (文章列表, 警告列表)：警告列表非空说明本次列表可能不完整（如被登录墙截断）"""
     import time
     from playwright.sync_api import sync_playwright
-    
+
     all_articles: List[Dict[str, str]] = []
     seen_urls = set()
+    warnings: List[str] = []  # 完整性警告，最终透传到前端展示给用户
+    declared: Dict[str, str] = {}  # 博主主页声明的总篇数（回答/文章），抓取后比对用
 
     try:
         with sync_playwright() as p:
@@ -137,6 +153,34 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
             # 先加载博主主页，激活浏览器会话与安全签名
             page.goto(f"https://www.zhihu.com/people/{url_token}", wait_until="domcontentloaded", timeout=25000)
             time.sleep(1.5)
+
+            # 读取博主主页声明的总篇数（如"回答 295 / 文章 44"），抓取完成后用于
+            # 比对列表是否加载完整。注意：新版知乎把数字直接放在主页 Tab 栏上
+            # （回答 295 / 文章 44），旧版的右侧数字板（NumberBoard）现在只剩
+            # "关注了/关注者"，所以两种位置都要读、互相兜底
+            declared = page.evaluate('''() => {
+                const out = {};
+                document.querySelectorAll('a[href*="/answers"], a[href*="/posts"]').forEach(a => {
+                    const href = a.href || '';
+                    const t = (a.innerText || '').replace(/\\s+/g, ' ').trim();
+                    let key = null;
+                    if (/\\/answers\\b/.test(href)) key = '回答';
+                    else if (/\\/posts\\b/.test(href)) key = '文章';
+                    if (!key) return;
+                    // Tab 文本形如"回答 295"，取末尾的数字部分
+                    const m = t.match(/([\\d.,]+\\s*[万亿kKwW]?)\\s*$/);
+                    if (m && parseInt(m[1], 10) > 0) out[key] = m[1].trim();
+                });
+                document.querySelectorAll('.NumberBoard-item').forEach(item => {
+                    const nameEl = item.querySelector('.NumberBoard-itemName');
+                    const valueEl = item.querySelector('.NumberBoard-itemValue');
+                    if (nameEl && valueEl) {
+                        const nm = nameEl.innerText.trim();
+                        if (!(nm in out)) out[nm] = valueEl.innerText.trim();
+                    }
+                });
+                return out;
+            }''') or {}
 
             # ==========================================================
             # 步骤 1: 全量抓取博主「文章」Tab（模拟真人浏览，滚动加载）
@@ -173,17 +217,65 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                 """统一文章 URL 主机名：www.zhihu.com/p/x 与 zhuanlan.zhihu.com/p/x 视为同一篇"""
                 return re.sub(r"^https?://(?:www\.)?zhihu\.com/p/", "https://zhuanlan.zhihu.com/p/", u or "")
 
+            def _count_items(expected_type):
+                """统计当前页面 DOM 中指定类型（文章/回答）的条目数量"""
+                raw = page.evaluate(extract_js) or []
+                return sum(1 for r in raw if r.get("type") == expected_type)
+
+            def _detect_wall():
+                """检测知乎是否弹出登录墙或安全验证（触发后页面不会再返回新数据）。
+                返回 'login'（登录墙）/ 'captcha'（风控验证）/ ''（正常）"""
+                return page.evaluate('''() => {
+                    // 强信号 1：整页被重定向到 unhuman 安全验证页
+                    // （这是知乎把服务器 IP 拉黑的标志，出现即代表游客通道已废）
+                    if (/zhihu\\.com\\/account\\/unhuman/.test(location.href)) return 'captcha';
+                    // 强信号 2：整页被重定向到登录页（游客被强制要求登录）
+                    if (/zhihu\\.com\\/signin($|\\?)/.test(location.href)) return 'login';
+                    // 强信号 3：页面标题变成"安全验证"
+                    if (document.title.includes('安全验证')) return 'captcha';
+                    // 弱信号：登录弹窗出现（只有 Modal 弹窗容器里出现"登录/扫码"才算，
+                    // 页面顶部导航常驻的"登录"按钮不算，避免误报）
+                    const modal = document.querySelector('.Modal-wrapper, [role="dialog"]');
+                    if (modal && /登录|扫码/.test(modal.innerText || '')) return 'login';
+                    if (/安全验证|系统监测到异常/.test(document.body.innerText || '')) return 'captcha';
+                    return '';
+                }''') or ""
+
+            def _wait_load(expected_type, timeout_s=8.0):
+                """滚动后的智能等待：知乎加载下一批数据经常超过 1 秒（尤其服务器
+                IP 被限流时），固定 sleep(1.0) 会误判"没有更多"提前收工。
+                这里每 0.5 秒数一次条目，数量还在变就继续等；
+                连续 1 秒数量不变（加载完成）或超过 timeout 秒（兜底）即结束"""
+                stable = 0
+                waited = 0.0
+                last = _count_items(expected_type)
+                while waited < timeout_s and stable < 2:
+                    time.sleep(0.5)
+                    waited += 0.5
+                    cur = _count_items(expected_type)
+                    stable = stable + 1 if cur == last else 0
+                    last = cur
+                return last
+
             def _scroll_collect(expected_type):
-                """在当前 Tab 页反复滚动直到连续 3 轮无新内容，返回该类型的条目列表"""
+                """在当前 Tab 页反复滚动直到连续 5 轮无新内容，
+                返回 (该类型的条目列表, 墙类型)；墙类型非空说明是被登录墙/验证截断"""
                 stable_rounds = 0
                 last_count = 0
                 items = []
+                wall_type = ""
                 type_label = "文章" if expected_type == "article" else "回答"
-                while stable_rounds < 3:
+                while stable_rounds < 5:
                     if max_articles and len(all_articles) >= max_articles:
                         break
+                    # 滚动前先检测登录墙/验证码：弹了就不再白滚，立即止损
+                    wall = _detect_wall()
+                    if wall:
+                        wall_type = wall
+                        break
                     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    time.sleep(1.0)
+                    # 智能等待知乎把下一批数据真正渲染出来（最多 8 秒）
+                    _wait_load(expected_type)
                     raw = page.evaluate(extract_js) or []
                     items = [r for r in raw if r.get("type") == expected_type]
                     if progress_callback:
@@ -193,7 +285,33 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                     else:
                         stable_rounds = 0
                         last_count = len(items)
-                return items
+                return items, wall_type
+
+            # 主页加载后立即做风控/登录墙强检测：如果整页已被重定向到安全验证页
+            # 或登录页（服务器 IP 被知乎拉黑的标志），后续滚动必然空手而归，
+            # 直接快速失败并告知用户解法，避免白跑滚动流程（还会进一步加重风控）
+            # 注意：必须放在 _detect_wall 等闭包函数定义之后，否则会触发
+            # "referenced before assignment" 作用域错误
+            main_wall = _detect_wall()
+            if main_wall in ("captcha", "login"):
+                if main_wall == "captcha":
+                    warnings.append(
+                        "⚠️ 当前 IP 被知乎安全验证/风控拦截，游客通道无法继续。"
+                        "请在工作台「设置」中通过浏览器扩展同步已在浏览器登录的知乎 Cookie，或直接扫码登录知乎后重试。"
+                    )
+                    if progress_callback:
+                        progress_callback("⚠️ 当前 IP 被知乎风控拦截，请在设置中同步 Cookie 或扫码登录后重试", 0, 0)
+                else:
+                    warnings.append(
+                        "⚠️ 当前未检测到有效的知乎登录凭证 (z_c0)，知乎拒绝了主页访问。"
+                        "如果你已安装同步扩展，请确认在同一浏览器里已登录 zhihu.com 且扩展正常同步；"
+                        "也可以在工作台「设置」中扫码登录或手动粘贴 Cookie 后重试。"
+                    )
+                    if progress_callback:
+                        progress_callback("⚠️ 知乎登录凭证缺失，请在设置中同步/扫码/手动 Cookie 后重试", 0, 0)
+                print(f"[知乎] 主页阶段即检测到{'安全验证(风控)' if main_wall == 'captcha' else '登录墙'}，快速失败跳过滚动抓取")
+                browser.close()
+                return all_articles, warnings, None
 
             # 打开「文章」Tab 并滚动采集
             try:
@@ -201,7 +319,15 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                 time.sleep(2.0)
             except Exception:
                 pass
-            for r in _scroll_collect("article"):
+            posts_items, wall_posts = _scroll_collect("article")
+            if wall_posts:
+                # 被登录墙/风控截断：如实告知用户列表不完整，而不是静默导出一部分
+                wall_label = "登录墙（知乎要求登录）" if wall_posts == "login" else "安全验证（知乎风控）"
+                wall_hint = "建议在设置中同步/扫码知乎 Cookie 后重试" if wall_posts == "login" else "建议稍后重试，或降低抓取频率"
+                warnings.append(f"⚠️ 文章列表被知乎{wall_label}截断，只加载到 {len(posts_items)} 篇，{wall_hint}")
+                if progress_callback:
+                    progress_callback(f"⚠️ 文章列表被知乎{wall_label}截断，只加载到 {len(posts_items)} 篇...", len(all_articles), 0)
+            for r in posts_items:
                 u = r.get("url") or ""
                 if u in seen_urls:
                     continue
@@ -228,7 +354,15 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                 time.sleep(2.0)
             except Exception:
                 pass
-            for r in _scroll_collect("answer"):
+            answer_items, wall_answers = _scroll_collect("answer")
+            if wall_answers:
+                # 被登录墙/风控截断：如实告知用户列表不完整，而不是静默导出一部分
+                wall_label = "登录墙（知乎要求登录）" if wall_answers == "login" else "安全验证（知乎风控）"
+                wall_hint = "建议在设置中同步/扫码知乎 Cookie 后重试" if wall_answers == "login" else "建议稍后重试，或降低抓取频率"
+                warnings.append(f"⚠️ 回答列表被知乎{wall_label}截断，只加载到 {len(answer_items)} 篇，{wall_hint}")
+                if progress_callback:
+                    progress_callback(f"⚠️ 回答列表被知乎{wall_label}截断，只加载到 {len(answer_items)} 篇...", len(all_articles), 0)
+            for r in answer_items:
                 u = r.get("url") or ""
                 if u in seen_urls:
                     continue
@@ -380,12 +514,81 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                         art["column_title"] = "、".join(dict.fromkeys(col_hits))
                         marked += 1
                 print(f"[知乎] 专栏映射完成，共为 {marked} 篇文章标注专栏归属")
+
+                # 补全：专栏里存在、但主页「文章」Tab 滚动加载时漏掉的文章，
+                # 从专栏映射中挑出来补进列表（缩小与主页标称文章数的差距）
+                # 标题先占位，详情抓取阶段会从文章页面取回真实标题覆盖
+                added = 0
+                norm_seen = {_norm_article_url(s) for s in seen_urls}
+                for art_url, cols in column_map.items():
+                    if not art_url or art_url in norm_seen:
+                        continue
+                    art_id = art_url.rstrip("/").split("/")[-1]
+                    all_articles.append({
+                        "id": art_id or art_url,
+                        "url": art_url,
+                        "title": "【文章】知乎文章_" + art_id,
+                        "publish_time": "",
+                        "content_html": "",
+                        "excerpt": "",
+                        "content_type": "article",
+                        "column_title": "、".join(dict.fromkeys(cols)) if cols else None
+                    })
+                    seen_urls.add(art_url)
+                    norm_seen.add(art_url)
+                    added += 1
+                if added:
+                    print(f"[知乎] 从专栏映射补全 {added} 篇主页文章 Tab 漏掉的文章")
             except Exception as e:
                 print(f"枚举知乎专栏异常（不影响文章抓取）: {e}")
 
             browser.close()
     except Exception as e:
         print(f"Playwright 同步抓取异常: {e}")
+
+    # ==============================================================
+    # 完整性校验：把实际抓到的篇数与博主主页声明的总篇数比对，
+    # 少于 90% 视为"没抓全"，生成警告透传给前端（避免静默漏抓）
+    # ==============================================================
+    declared_total = None  # 博主主页声明的总篇数（回答+文章），供前端显示"标称 X 篇"
+    try:
+        n_articles = sum(1 for a in all_articles if a.get("content_type") == "article")
+        n_answers = sum(1 for a in all_articles if a.get("content_type") == "answer")
+        declared_articles = _parse_count(declared.get("文章", ""))
+        declared_answers = _parse_count(declared.get("回答", ""))
+        # 把声明总数上报给前端：检索清单弹窗会显示「标称 X 篇 vs 收录 Y 篇」，
+        # 用户一眼就能看出是否抓全（此前这里一直是空，导致漏抓毫无提示）
+        if declared_articles + declared_answers > 0:
+            declared_total = declared_articles + declared_answers
+        # 知乎主页的声明数量是博主本人视角（含“仅自己可见”的私密内容），访客视角通常只能看到公开内容。
+        # 差异在 25% 以内多数情况下属于正常（博主删除、设为私密、平台下架等），不必动不动就报警。
+        completeness_threshold = 0.75
+        has_login_cookie = bool(cookies and "z_c0" in cookies)
+
+        if declared_articles > 0 and n_articles < declared_articles * completeness_threshold:
+            reason_hint = (
+                "当前未检测到有效登录 Cookie (z_c0)，知乎很可能只返回了游客可见部分。"
+                if not has_login_cookie else
+                "可能受知乎登录墙/风控影响，或差额内容已被博主设为私密/仅自己可见。"
+            )
+            warnings.append(
+                f"⚠️ 文章未抓全：主页声明约 {declared_articles} 篇，本次仅加载到 {n_articles} 篇。{reason_hint}"
+                f"建议在工作台「设置」中通过浏览器扩展同步、扫码登录或手动粘贴 Cookie 后重试。"
+            )
+        if declared_answers > 0 and n_answers < declared_answers * completeness_threshold:
+            reason_hint = (
+                "当前未检测到有效登录 Cookie (z_c0)，知乎很可能只返回了游客可见部分。"
+                if not has_login_cookie else
+                "可能受知乎登录墙/风控影响，或差额内容已被博主设为私密/仅自己可见。"
+            )
+            warnings.append(
+                f"⚠️ 回答未抓全：主页声明约 {declared_answers} 篇回答，本次仅加载到 {n_answers} 篇。{reason_hint}"
+                f"建议在工作台「设置」中通过浏览器扩展同步、扫码登录或手动粘贴 Cookie 后重试。"
+            )
+        if warnings:
+            print(f"[知乎] 完整性警告: {warnings}")
+    except Exception as _cmp_e:
+        print(f"[知乎] 完整性比对异常（不影响抓取结果）: {_cmp_e}")
 
     # 如果仍未抓到任何列表内容，返回单篇内容兜底
     if not all_articles and is_direct_article:
@@ -399,7 +602,7 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
             "content_type": fallback_type
         })
 
-    return all_articles
+    return all_articles, warnings, declared_total
 
 def _scrape_detail_sync(url: str, cookies: Optional[Dict[str, str]]) -> Dict[str, str]:
     """在工作线程中同步获取单篇文章正文与标题"""
@@ -551,7 +754,7 @@ class ZhihuScraper(BaseScraper):
             progress_callback(f"已锁定博主【{author_name}】(@{url_token})，正在遍历其全量回答与专栏文章...", 0, 0)
 
         # 3. 通过工作线程中的同步 Playwright 自动化获取博主全部回答和文章
-        return await asyncio.to_thread(
+        articles, warnings, declared_total = await asyncio.to_thread(
             _scrape_user_all_content_sync,
             url_token,
             author_name,
@@ -561,6 +764,14 @@ class ZhihuScraper(BaseScraper):
             self._is_direct_article_url(),
             progress_callback
         )
+        # 完整性警告（列表可能没抓全）写入 explanation，
+        # task_manager 会自动透传到前端任务详情中展示
+        if warnings:
+            self.explanation = "\n".join(warnings)
+        # 声明总数（回答+文章）上报：前端检索清单弹窗会显示「标称 X 篇 vs 收录 Y 篇」
+        if declared_total:
+            self.declared_count = declared_total
+        return articles
 
     async def _get_column_articles(self, progress_callback: Optional[Callable[[str, int, int], None]] = None) -> List[Dict[str, str]]:
         """抓取专栏文章列表"""

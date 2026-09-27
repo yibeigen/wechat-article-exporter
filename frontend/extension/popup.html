@@ -146,22 +146,48 @@
             font-weight: 600;
         }
         .author-links a:hover { text-decoration: underline; }
+
+        .relay-log {
+            margin-top: 8px;
+            padding: 8px;
+            background: #0f172a;
+            border-radius: 5px;
+            font-size: 11px;
+            color: #cbd5e1;
+            line-height: 1.4;
+            word-break: break-all;
+            display: none;
+        }
+        .relay-log.show { display: block; }
+        .relay-log.success { border: 1px solid #059669; color: #34d399; }
+        .relay-log.fail { border: 1px solid #b91c1c; color: #f87171; }
     </style>
 </head>
 <body>
     <div class="header">
         <img src="icon.png" alt="Logo" />
-        <span class="header-title">文章批量导出助手 · 同步扩展</span>
+        <span class="header-title">文章批量导出助手 · 本地直连扩展</span>
     </div>
     
     <div class="desc">
-        结合官网 <b>doc.305758.xyz</b> 联动使用。免抓包、免扫码！自动检测并同步知乎与微博已登录凭证。
+        抓取知乎/微博时，请求会走<b>你当前电脑和家庭宽带 IP</b>直接出去，绕开服务器机房 IP 风控。
     </div>
 
     <!-- 官网快捷直达 -->
     <button class="btn-website" id="btnOpenWebsite">
         🌐 打开文章批量导出助手工作台
     </button>
+
+    <!-- 本地住宅 IP 直连中继 -->
+    <div class="card">
+        <div class="card-header">
+            <span>本地住宅 IP 直连中继</span>
+            <span id="relayBadge" class="status-badge badge-warn">检测中...</span>
+        </div>
+        <div class="card-desc" id="relayDesc">抓取时扩展会使用你当前电脑和家庭宽带的真实 IP 发起请求，绕开机房 IP 风控。</div>
+        <button class="btn-sm" id="btnTestRelay">测试本地直连</button>
+        <div id="relayLog" class="relay-log"></div>
+    </div>
 
     <!-- 知乎卡片 -->
     <div class="card">
@@ -189,7 +215,7 @@
     <div class="author-card">
         <div class="author-title">
             <span>👨‍💻 关于作者 & 官网</span>
-            <span style="color: #64748b; font-size: 10px;">v1.3.0</span>
+            <span style="color: #64748b; font-size: 10px;">v1.4.0</span>
         </div>
         <div class="author-info">
             作者：<b>艺杯羹</b> (peace-83)<br>

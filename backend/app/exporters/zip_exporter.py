@@ -13,7 +13,7 @@ from app.exporters.base import BaseExporter
 from app.models import ArticleItem
 from app.config import BRAND_OFFICIAL_ACCOUNT, BRAND_FOOTER_NOTE, BRAND_DISCLAIMER
 from app.exporters.pdf_exporter import find_system_browser
-from app.core.image_helper import download_image_bytes
+from app.core.image_helper import download_image_bytes, compress_image_bytes
 
 class ZipExporter(BaseExporter):
     """ZIP 全量打包导出器 (支持单文件合集 + 分篇独立文章 + 图片本地化离线下载 + 目录索引清单)"""
@@ -45,11 +45,30 @@ class ZipExporter(BaseExporter):
 
     async def _download_images_task(
         self,
-        articles: List[ArticleItem]
-    ) -> Tuple[Dict[str, bytes], Dict[str, str]]:
-        """并发下载所有文章内的图片，返回 (图片二进制字典, URL->本地相对路径映射字典)"""
-        image_bytes_map: Dict[str, bytes] = {}
-        url_to_filename_map: Dict[str, str] = {}
+        articles: List[ArticleItem],
+        temp_dir: Path,
+        progress_callback: Optional[Any] = None,
+        image_mode: str = "compressed"
+    ) -> Dict[str, Dict[str, Any]]:
+        """并发下载所有文章内的配图，并按用户选择的模式归档 (三选一)。
+
+        模式说明：
+        - "compressed" (推荐)：只存储极速轻量压缩图 (WebP/优化 JPEG，体积减小 85%+，秒开省内存)；
+        - "original"：只存储高清原图 (体积大、加载慢，符合用户对"高清原图"耗时的预期)；
+        - "none"：不下载任何配图，返回空映射，正文保留在线 CDN 链接。
+
+        每张图只下载一次 (复用全局 LRU 字节缓存，同任务多格式不会重复拉取)，写盘也只写一份。
+        """
+        url_to_filename_map: Dict[str, Dict[str, Any]] = {}
+
+        # "不配图"模式：直接返回空映射，全程零图片网络请求
+        if image_mode == "none":
+            return url_to_filename_map
+
+        compressed_dir = temp_dir / "compressed"
+        original_dir = temp_dir / "original"
+        compressed_dir.mkdir(parents=True, exist_ok=True)
+        original_dir.mkdir(parents=True, exist_ok=True)
 
         # 收集所有独立图片 URL
         all_img_urls = set()
@@ -64,12 +83,23 @@ class ZipExporter(BaseExporter):
                     all_img_urls.add(f_url)
 
         if not all_img_urls:
-            return image_bytes_map, url_to_filename_map
+            return url_to_filename_map
+
+        total_imgs = len(all_img_urls)
+        done_count = 0
+        count_lock = asyncio.Lock()
+
+        # 进度文案随模式变化，让用户清楚当前在做什么
+        if image_mode == "original":
+            mode_hint = "高清原图"
+        else:
+            mode_hint = "轻量压缩图"
 
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, verify=False, trust_env=False) as client:
             semaphore = asyncio.Semaphore(10) # 限制最大 10 并发，保护网络稳定
 
             async def fetch_one(img_url: str, idx: int):
+                nonlocal done_count
                 async with semaphore:
                     try:
                         res = await download_image_bytes(client, img_url)
@@ -80,20 +110,49 @@ class ZipExporter(BaseExporter):
                                 ext = ".jpg"
                             if not ext.startswith("."):
                                 ext = f".{ext}"
-                            
-                            # 生成干净的文件名
+
                             url_hash = hashlib.md5(img_url.encode("utf-8")).hexdigest()[:8]
-                            clean_filename = f"img_{idx:03d}_{url_hash}{ext}"
-                            
-                            image_bytes_map[clean_filename] = img_bytes
-                            url_to_filename_map[img_url] = clean_filename
+
+                            if image_mode == "original":
+                                # 高清原图模式：原样保存，展示与备份同一份
+                                raw_filename = f"img_{idx:05d}_{url_hash}_raw{ext}"
+                                await asyncio.to_thread((original_dir / raw_filename).write_bytes, img_bytes)
+                                url_to_filename_map[img_url] = {
+                                    "thumb": f"images/original/{raw_filename}",
+                                    "thumb_name": raw_filename,
+                                    "original": "",
+                                    "original_name": "",
+                                    "is_compressed": False
+                                }
+                            else:
+                                # 压缩图模式 (推荐)：只生成轻量 WebP/优化 JPEG，杜绝原图体积翻倍
+                                comp_bytes, comp_ext, comp_mime = compress_image_bytes(img_bytes, max_width=1200, quality=75)
+                                thumb_filename = f"img_{idx:05d}_{url_hash}{comp_ext}"
+                                await asyncio.to_thread((compressed_dir / thumb_filename).write_bytes, comp_bytes)
+                                url_to_filename_map[img_url] = {
+                                    "thumb": f"images/{thumb_filename}",
+                                    "thumb_name": thumb_filename,
+                                    "original": "",
+                                    "original_name": "",
+                                    "is_compressed": True
+                                }
                     except Exception:
                         pass # 下载失败则保持原链接
+                    finally:
+                        async with count_lock:
+                            done_count += 1
+                            current = done_count
+                        # 每 40 张或最后一张广播一次实时进度
+                        if progress_callback and (current % 40 == 0 or current == total_imgs):
+                            try:
+                                await progress_callback(f"正在智能归档文章配图 ({mode_hint}, {current}/{total_imgs} 张)...")
+                            except Exception:
+                                pass
 
             tasks = [fetch_one(u, i) for i, u in enumerate(all_img_urls, 1)]
             await asyncio.gather(*tasks, return_exceptions=True)
 
-        return image_bytes_map, url_to_filename_map
+        return url_to_filename_map
 
     def _generate_single_html(self, art: ArticleItem, idx: int, now_str: str, html_content: str) -> str:
         """生成单篇高颜值独立 HTML 文章"""
@@ -291,6 +350,41 @@ class ZipExporter(BaseExporter):
             document.getElementById('themeText').innerText = next === 'dark' ? '☀️ 浅色' : '🌙 暗黑';
         }}
         initTheme();
+
+        function toggleImageQuality(img) {{
+            if (!img) return;
+            const isOrig = img.getAttribute('data-is-original') === 'true';
+            const origSrc = img.getAttribute('data-original');
+            const thumbSrc = img.getAttribute('data-thumb');
+            const figure = img.closest('figure');
+            const badge = figure ? figure.querySelector('.img-badge-status') : null;
+            const btn = figure ? figure.querySelector('.toggle-img-btn') : null;
+
+            if (!isOrig && origSrc) {{
+                img.src = origSrc;
+                img.setAttribute('data-is-original', 'true');
+                if (badge) {{
+                    badge.textContent = '🔍 高清原图';
+                    badge.style.background = 'rgba(234, 88, 12, 0.92)';
+                }}
+                if (btn) {{
+                    btn.innerHTML = '⚡ 还原为轻量压缩图 <span style="font-size:11px;color:#0284c7;opacity:0.9;">(推荐·更省内存)</span>';
+                    btn.style.color = '#0284c7';
+                }}
+            }} else if (thumbSrc) {{
+                img.src = thumbSrc;
+                img.setAttribute('data-is-original', 'false');
+                if (badge) {{
+                    badge.textContent = '⚡ 轻量压缩图';
+                    badge.style.background = 'rgba(2, 132, 199, 0.92)';
+                }}
+                if (btn) {{
+                    btn.innerHTML = '🔍 查看高清原图 <span style="font-size:11px;color:#dc2626;opacity:0.9;">(⚠️加载慢·耗内存)</span>';
+                    btn.style.color = '#ea580c';
+                }}
+            }}
+        }}
+        window.toggleImageQuality = toggleImageQuality;
     </script>
 </body>
 </html>
@@ -446,14 +540,17 @@ class ZipExporter(BaseExporter):
 </html>
 """
 
-    def _generate_single_docx(self, art: ArticleItem) -> bytes:
-        """生成单篇独立 Word 文档二进制流 (所见即所得、内嵌高清配图与富文本排版)"""
+    def _generate_single_docx(self, art: ArticleItem, embed_images: bool = True, img_bytes_map: Optional[Dict[str, bytes]] = None) -> bytes:
+        """生成单篇独立 Word 文档二进制流 (所见即所得、内嵌所选模式配图与富文本排版)
+
+        img_bytes_map: url -> 图片字节。由调用方传入 (本地已下载文件读盘而来，零额外网络请求)。
+        """
         import io
         from docx import Document
         from app.exporters.docx_exporter import append_article_content_to_docx
-        
+
         doc = Document()
-        append_article_content_to_docx(doc, art, self.author_name, self.platform, embed_images=True)
+        append_article_content_to_docx(doc, art, self.author_name, self.platform, embed_images=embed_images, img_bytes_map=img_bytes_map)
         bio = io.BytesIO()
         doc.save(bio)
         return bio.getvalue()
@@ -462,36 +559,94 @@ class ZipExporter(BaseExporter):
         self,
         articles: List[ArticleItem],
         filename_prefix: str,
-        generated_files: Optional[Dict[str, Path]] = None,
-        download_images: bool = True,
+        generated_files: Optional[Dict[str, Any]] = None,
+        image_mode: str = "compressed",
         progress_callback: Optional[Any] = None
     ) -> Path:
+        """generated_files 的值支持 Path 或 List[Path] (PDF 多卷拆分时传入多份文件)
+
+        image_mode: "compressed" 压缩图(推荐) / "original" 高清原图 / "none" 不配图。
+        """
         zip_output_file = self.output_dir / f"{filename_prefix}_知识归档包.zip"
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         generated_files = generated_files or {}
 
         safe_author = re.sub(r'[\\/:*?"<>|]', '_', self.author_name).strip() or "博主"
-        
-        # 1. 如果用户勾选了“下载配图 (本地化离线归档)”，开始并发下载并生成替换表
-        image_bytes_map = {}
+
+        import tempfile, shutil
+        temp_dir = Path(tempfile.mkdtemp(prefix="bd_imgs_"))
+
+        # 1. 按用户选择的配图模式开始并发下载归档 (none 模式直接跳过，正文保留在线链接)
         url_to_filename = {}
-        if download_images:
+        if image_mode != "none":
             if progress_callback:
                 await progress_callback("正在扫描并下载文章配图离线归档...")
-            image_bytes_map, url_to_filename = await self._download_images_task(articles)
+            url_to_filename = await self._download_images_task(articles, temp_dir, progress_callback, image_mode)
             if progress_callback:
-                await progress_callback(f"配图离线下载完成 (共 {len(image_bytes_map)} 张高清配图)，正在写入压缩包...")
+                await progress_callback(f"配图离线下载完成 (共 {len(url_to_filename)} 张)，正在写入压缩包...")
 
         if progress_callback:
             await progress_callback("正在初始化 ZIP 归档包结构并写入全量合并总文档...")
 
         with zipfile.ZipFile(str(zip_output_file), "w", zipfile.ZIP_DEFLATED) as zf:
-            # 2. 如果下载了图片，写入 images/ 文件夹
-            if image_bytes_map:
-                for img_name, img_data in image_bytes_map.items():
-                    zf.writestr(f"images/{img_name}", img_data)
+            # ---------- 提速辅助：分块并发生成单篇独立文章 ----------
+            # 原实现是上千篇文章在主线程串行循环 + 同步写入 ZIP，事件循环被长时间阻塞，
+            # 期间所有进度广播都发不出去，前端日志就会长时间空白（观感像卡死）。
+            # 现在把每篇文章的生成扔进线程池并发执行，每块生成完上报一次进度，
+            # 主线程只负责把已生成的字节串行写回 ZIP (zipfile 非线程安全，必须主线程写)。
+            async def _build_single_articles(
+                total: int,
+                worker,
+                label: str,
+                chunk_size: int = 100,
+                n_workers: int = 8,
+                comp_type: int = zipfile.ZIP_DEFLATED
+            ):
+                for start in range(0, total, chunk_size):
+                    end = min(start + chunk_size, total)
+                    if progress_callback:
+                        try:
+                            await progress_callback(f"正在生成{label} ({start}/{total})...")
+                        except Exception:
+                            pass
+                    sem = asyncio.Semaphore(n_workers)
+                    items = [None] * (end - start)
 
-            # 3. 写入用户勾选生成的各个格式合并单文件
+                    async def _one(pos: int, idx: int):
+                        async with sem:
+                            items[pos] = await asyncio.to_thread(worker, idx)
+
+                    await asyncio.gather(*(_one(p, i) for p, i in enumerate(range(start, end))))
+                    for arcname, data in items:
+                        if data:
+                            zf.writestr(arcname, data, compress_type=comp_type)
+                if progress_callback:
+                    try:
+                        await progress_callback(f"正在生成{label} ({total}/{total})...")
+                    except Exception:
+                        pass
+
+            # 2. 如果下载了图片，从临时目录流式写入 images/ 文件夹 (仅包含所选模式的图片)
+            if url_to_filename:
+                for item in url_to_filename.values():
+                    if isinstance(item, dict):
+                        # 展示用图片 (压缩模式=压缩图；原图模式=原图)，只写这一份
+                        sub_dir = "compressed" if item.get("is_compressed") else "original"
+                        t_path = temp_dir / sub_dir / item["thumb_name"]
+                        if t_path.exists():
+                            # 配图已是 WebP/JPEG 等压缩编码，DEFLATE 二次压缩几乎无收益，改用 STORED 免去纯 CPU 开销
+                            zf.write(str(t_path), arcname=item["thumb"], compress_type=zipfile.ZIP_STORED)
+                        # 兼容兜底：若仍有额外原图字段（旧数据），才额外写入
+                        if item.get("original") and item.get("original_name"):
+                            o_path = temp_dir / "original" / item["original_name"]
+                            if o_path.exists():
+                                zf.write(str(o_path), arcname=item["original"], compress_type=zipfile.ZIP_STORED)
+                    else:
+                        img_path = temp_dir / item
+                        if img_path.exists():
+                            zf.write(str(img_path), arcname=f"images/{item}", compress_type=zipfile.ZIP_STORED)
+
+            # 3. 写入用户勾选生成的各个格式合并单文件 (值可为单文件或多卷文件列表)
             format_names = {
                 "md": f"合并总文档/【合并合集】{safe_author}_{self.platform}_文章合集.md",
                 "html": f"合并总文档/【合并合集】{safe_author}_{self.platform}_离线网页电子书.html",
@@ -501,17 +656,28 @@ class ZipExporter(BaseExporter):
                 "txt": f"合并总文档/【合并合集】{safe_author}_{self.platform}_纯文本语料.txt"
             }
 
-            for fmt_key, file_path in generated_files.items():
-                if file_path and file_path.exists():
+            for fmt_key, file_value in generated_files.items():
+                file_list = file_value if isinstance(file_value, list) else [file_value]
+                for f_idx, file_path in enumerate(file_list, 1):
+                    if not file_path or not file_path.exists():
+                        continue
                     arcname = format_names.get(fmt_key, f"合并总文档/{file_path.name}")
+                    # 多卷文件：在文件名中体现卷号
+                    if len(file_list) > 1:
+                        stem = arcname.rsplit(".", 1)
+                        arcname = f"{stem[0]}_第{f_idx}卷.{stem[1]}" if len(stem) == 2 else f"{arcname}_第{f_idx}卷"
                     # 如果由于降级实际为 html 文件，保留其正确扩展名
                     if fmt_key == "pdf" and file_path.suffix == ".html":
-                        arcname = f"合并总文档/【合并合集】{safe_author}_{self.platform}_排版打印.html"
-                    zf.write(str(file_path), arcname=arcname)
+                        arcname = arcname.rsplit(".", 1)[0] + ".html"
+                    # PDF/DOCX 内部已是压缩二进制，STORED 免二次压缩；纯文本类仍用 DEFLATE 压缩
+                    comp_type = zipfile.ZIP_STORED if fmt_key in ("pdf", "docx") else zipfile.ZIP_DEFLATED
+                    zf.write(str(file_path), arcname=arcname, compress_type=comp_type)
 
             # 4. 生成并写入单篇独立文章 (根据用户选定格式精准提供相应独立文件)
             # A. Markdown 独立篇章 (始终默认提供便携式 Markdown，严格对齐用户标准格式：标题 -> 标签 -> 原文 -> 原文链接 -> 正文)
-            for idx, art in enumerate(articles, 1):
+            # 由原来的主线程串行循环改为分块线程池并发生成，块间上报进度 (见 _build_single_articles)
+            def _md_single_worker(idx: int):
+                art = articles[idx - 1]
                 clean_title = re.sub(r'[\\/:*?"<>|]', '_', art.title).strip() or f"文章_{idx}"
                 single_md_filename = f"单篇独立文章_Markdown/{idx:02d}_{clean_title[:45]}.md"
 
@@ -525,12 +691,24 @@ class ZipExporter(BaseExporter):
                     f"{url_line}"
                     f"---\n\n"
                 )
-                
+
                 md_body = art.content_markdown or ""
-                # 若开启了图片本地化，将 Markdown 中的在线图片链接替换为相对路径 ../images/xxx
+                # 若已本地化配图，将 Markdown 中的在线图片链接替换为相对路径（按所选模式展示，不再同时引用原图）
                 if url_to_filename:
-                    for online_url, local_img_name in url_to_filename.items():
-                        md_body = md_body.replace(online_url, f"../images/{local_img_name}")
+                    # 压缩模式追加一句轻量提示；原图模式提示来源
+                    mode_note = (
+                        "> ⚡ *已加载轻量压缩图（极速秒开·内存极低）*\n\n"
+                        if image_mode == "compressed"
+                        else "> 🖼️ *已加载高清原图（体积较大）*\n\n"
+                    )
+                    for online_url, item in url_to_filename.items():
+                        if isinstance(item, dict):
+                            thumb_path = item["thumb"]
+                            md_card = f"\n\n![文章配图](../{thumb_path})\n{mode_note}"
+                            md_body = re.sub(r'!\[.*?\]\(' + re.escape(online_url) + r'\)', md_card, md_body)
+                            md_body = md_body.replace(online_url, f"../{thumb_path}")
+                        else:
+                            md_body = md_body.replace(online_url, f"../images/{item}")
 
                 # 剔除正文头部重复的标题行
                 md_body_lines = md_body.split("\n")
@@ -548,22 +726,51 @@ class ZipExporter(BaseExporter):
                 md_body_clean = "\n".join(md_body_lines[b_idx:]).strip()
 
                 single_md_content = clean_header + md_body_clean + f"\n\n> *{BRAND_FOOTER_NOTE}*\n"
-                zf.writestr(single_md_filename, single_md_content.encode("utf-8"))
+                return (single_md_filename, single_md_content.encode("utf-8"))
+
+            await _build_single_articles(len(articles), _md_single_worker, "单篇独立 Markdown")
 
             # B. HTML 独立篇章（如果勾选了 HTML，生成高颜值独立单篇 HTML 文件）
             if "html" in generated_files:
-                for idx, art in enumerate(articles, 1):
+                # 由原来的主线程串行循环改为分块线程池并发生成，块间上报进度 (见 _build_single_articles)
+                def _html_single_worker(idx: int):
+                    art = articles[idx - 1]
                     clean_title = re.sub(r'[\\/:*?"<>|]', '_', art.title).strip() or f"文章_{idx}"
                     single_html_filename = f"单篇独立文章_HTML/{idx:02d}_{clean_title[:45]}.html"
-                    
+
                     html_body = art.content_html or ""
-                    # 若开启了图片本地化，将 HTML 中的图片链接替换为相对路径 ../images/xxx
+                    # 若已本地化配图，将 HTML 中的图片链接替换为所选模式的单图卡片 (三选一模式下不再做双图切换)
                     if url_to_filename:
-                        for online_url, local_img_name in url_to_filename.items():
-                            html_body = html_body.replace(online_url, f"../images/{local_img_name}")
+                        # 压缩模式提示秒开省内存；原图模式提示体积大
+                        badge_text = "⚡ 轻量压缩图" if image_mode == "compressed" else "🖼️ 高清原图"
+                        badge_color = "#0284c7" if image_mode == "compressed" else "#ea580c"
+                        for online_url, item in url_to_filename.items():
+                            if isinstance(item, dict):
+                                thumb_path = item["thumb"]
+                                html_card = (
+                                    f'<figure class="article-image-card" style="margin: 24px auto; text-align: center; max-width: 100%;">'
+                                    f'  <div style="position: relative; display: inline-block; max-width: 100%;">'
+                                    f'    <img src="../{thumb_path}" '
+                                    f'         alt="文章配图" '
+                                    f'         class="article-img-responsive" '
+                                    f'         loading="lazy" '
+                                    f'         style="display: block; max-width: 100%; height: auto; margin: 0 auto; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,0.08);" />'
+                                    f'    <span class="img-badge-status" style="position: absolute; top: 10px; right: 10px; background: {badge_color}; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 12px; backdrop-filter: blur(4px); box-shadow: 0 2px 6px rgba(0,0,0,0.15); pointer-events: none;">{badge_text}</span>'
+                                    f'  </div>'
+                                    f'</figure>'
+                                )
+                                img_pattern = re.compile(r'<img\b[^>]*?(?:src|data-src|data-original-src)=["\']' + re.escape(online_url) + r'["\'][^>]*>', re.IGNORECASE)
+                                if img_pattern.search(html_body):
+                                    html_body = img_pattern.sub(html_card, html_body)
+                                else:
+                                    html_body = html_body.replace(online_url, f"../{thumb_path}")
+                            else:
+                                html_body = html_body.replace(online_url, f"../images/{item}")
 
                     single_html_content = self._generate_single_html(art, idx, now_str, html_body)
-                    zf.writestr(single_html_filename, single_html_content.encode("utf-8"))
+                    return (single_html_filename, single_html_content.encode("utf-8"))
+
+                await _build_single_articles(len(articles), _html_single_worker, "单篇独立 HTML")
 
             # C. PDF 独立篇章（仅当勾选了 PDF 且文章总数 <= 20 篇时才生成单篇独立 PDF）
             # 对于大规模批量文章（如数十到数千篇），单篇独立调用数千次无头浏览器将造成数小时的严重卡死与内存耗尽。
@@ -634,35 +841,65 @@ class ZipExporter(BaseExporter):
 
                     rendered_pdfs = await asyncio.to_thread(_render_single_pdfs_batch_sync, pdf_tasks)
                     for arcname, pdf_data in rendered_pdfs.items():
-                        zf.writestr(arcname, pdf_data)
+                        # PDF 内部已是压缩二进制，STORED 免二次压缩
+                        zf.writestr(arcname, pdf_data, compress_type=zipfile.ZIP_STORED)
                 else:
                     if progress_callback:
                         await progress_callback(f"检测到文章篇数较多 ({len(articles)} 篇)，已在【合并总文档】中提供全量高清排版文件，自动免去数千次浏览器启停...")
 
             # D. Word 独立篇章（如果勾选了 docx）
             if "docx" in generated_files:
-                for idx, art in enumerate(articles, 1):
+                # 从已下载的本地图片文件构建 字节映射 (直接读盘复用，零额外网络请求；未下载则为空)
+                docx_img_map: Dict[str, bytes] = {}
+                if url_to_filename:
+                    for online_url, item in url_to_filename.items():
+                        if isinstance(item, dict):
+                            sub_dir = "compressed" if item.get("is_compressed") else "original"
+                            p = temp_dir / sub_dir / item["thumb_name"]
+                            if p.exists():
+                                try:
+                                    docx_img_map[online_url] = p.read_bytes()
+                                except Exception:
+                                    pass
+                # 由原来的主线程串行循环改为分块线程池并发生成，块间上报进度 (见 _build_single_articles)
+                def _docx_single_worker(idx: int):
+                    art = articles[idx - 1]
                     clean_title = re.sub(r'[\\/:*?"<>|]', '_', art.title).strip() or f"文章_{idx}"
                     single_docx_filename = f"单篇独立文章_Word/{idx:02d}_{clean_title[:45]}.docx"
                     try:
-                        single_docx_bytes = self._generate_single_docx(art)
-                        zf.writestr(single_docx_filename, single_docx_bytes)
+                        single_docx_bytes = self._generate_single_docx(art, embed_images=image_mode != "none", img_bytes_map=docx_img_map)
+                        return (single_docx_filename, single_docx_bytes)
                     except Exception:
-                        pass
+                        return (single_docx_filename, b"")
+
+                # DOCX 内部已是压缩 XML 二进制，写入 ZIP 用 STORED 免二次压缩
+                await _build_single_articles(len(articles), _docx_single_worker, "单篇独立 Word", comp_type=zipfile.ZIP_STORED)
 
             # E. TXT 纯文本独立篇章（如果勾选了 TXT）
             if "txt" in generated_files:
-                for idx, art in enumerate(articles, 1):
+                # 由原来的主线程串行循环改为分块线程池并发生成，块间上报进度 (见 _build_single_articles)
+                def _txt_single_worker(idx: int):
+                    art = articles[idx - 1]
                     clean_title = re.sub(r'[\\/:*?"<>|]', '_', art.title).strip() or f"文章_{idx}"
                     single_txt_filename = f"单篇独立文章_TXT/{idx:02d}_{clean_title[:45]}.txt"
                     txt_body = f"标题：{art.title}\n作者：{art.author or self.author_name}\n发布时间：{art.publish_time}\n原文链接：{art.url}\n\n" + (art.content_markdown or "") + f"\n\n[{BRAND_FOOTER_NOTE}]\n"
-                    zf.writestr(single_txt_filename, txt_body.encode("utf-8"))
+                    return (single_txt_filename, txt_body.encode("utf-8"))
+
+                await _build_single_articles(len(articles), _txt_single_worker, "单篇独立 TXT")
 
             # 5. 写入 00_目录与索引清单.md
             if self.platform in ["微信公众号", "wechat"] or "公众号" in self.platform:
                 catalog_title = f"【{self.author_name}公众号合集】文章归档索引清单" if "公众号" not in self.author_name else f"【{self.author_name}文章合集】文章归档索引清单"
             else:
                 catalog_title = f"【{self.author_name}】文章归档索引清单"
+
+            # 图片模式描述随用户三选一变化
+            if image_mode == "none":
+                img_mode_desc = "🌐 在线 CDN 链接 (未下载配图)"
+            elif image_mode == "original":
+                img_mode_desc = "🖼️ 高清原图本地化存储 (images/ 目录 · 体积较大加载慢)"
+            else:
+                img_mode_desc = "⚡ 极速轻量压缩图本地化存储 (images/ 目录 · 体积减小 85%+ 秒开省内存)"
 
             manifest_lines = [
                 f"# 📚 {catalog_title}",
@@ -672,7 +909,7 @@ class ZipExporter(BaseExporter):
                 f"> **文章总数**：{len(articles)} 篇  ",
                 f"> **打包时间**：{now_str}  ",
                 f"> **免责声明**：{BRAND_DISCLAIMER}  ",
-                f"> **图片模式**：{'📸 本地化离线存储 (已保存至 images/ 目录)' if url_to_filename else '🌐 在线 CDN 链接'}  ",
+                f"> **图片模式**：{img_mode_desc}  ",
                 f"",
                 f"---",
                 f"",
@@ -689,5 +926,11 @@ class ZipExporter(BaseExporter):
 
             manifest_content = "\n".join(manifest_lines)
             zf.writestr("00_目录与索引清单.md", manifest_content.encode("utf-8"))
+
+        # 图片临时目录清理 (无论成功与否都尽力释放磁盘)
+        try:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception:
+            pass
 
         return zip_output_file

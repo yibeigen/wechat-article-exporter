@@ -59,10 +59,45 @@ contextBridge.exposeInMainWorld("blogDistiller", {
     openOutputDir: (dirPath) => ipcRenderer.invoke("fs:open-dir", dirPath),
     openExternal: (targetUrl) => ipcRenderer.invoke("app:open-external", targetUrl),
     copyToClipboard: (text) => ipcRenderer.invoke("app:copy-clipboard", text),
+    saveTextFile: (params) => ipcRenderer.invoke("fs:save-text", params),
 
-    // 本地缓存与设置
+    // 本地磁盘档案库与设置
     getArticleCache: (biz) => ipcRenderer.invoke("cache:get", biz),
-    getHistoryAccounts: () => ipcRenderer.invoke("cache:get-all-accounts"),
+    getHistoryAccounts: () => ipcRenderer.invoke("history:get-all"),
+    saveHistoryAccount: (accountData) => ipcRenderer.invoke("history:save-account", accountData),
+    deleteHistoryAccount: (key) => ipcRenderer.invoke("history:delete-account", key),
+    getHistoryInfo: () => ipcRenderer.invoke("history:get-info"),
+    openHistoryDir: () => ipcRenderer.invoke("history:open-dir"),
     getSettings: () => ipcRenderer.invoke("settings:get"),
-    saveSettings: (settings) => ipcRenderer.invoke("settings:save", settings)
+    saveSettings: (settings) => ipcRenderer.invoke("settings:save", settings),
+    openZhihuLogin: () => ipcRenderer.invoke("auth:open-zhihu-login"),
+    openWeiboLogin: () => ipcRenderer.invoke("auth:open-weibo-login")
 });
+
+// 暴露通用的 window.electronAPI (符合 PRD 本地优先桌面客户端规范)
+contextBridge.exposeInMainWorld("electronAPI", {
+    isDesktop: true,
+    startLocalService: () => ipcRenderer.invoke("local-service:start"),
+    stopLocalService: () => ipcRenderer.invoke("local-service:stop"),
+    getLocalServiceStatus: () => ipcRenderer.invoke("local-service:status"),
+    restartLocalService: () => ipcRenderer.invoke("local-service:restart"),
+    openExternal: (url) => ipcRenderer.invoke("app:open-external", url),
+    revealFile: (filePath) => ipcRenderer.invoke("fs:reveal-file", filePath),
+    getDownloadsPath: () => ipcRenderer.invoke("fs:get-downloads-path"),
+    showOpenDialog: (options) => ipcRenderer.invoke("fs:show-open-dialog", options),
+    openZhihuLogin: () => ipcRenderer.invoke("auth:open-zhihu-login"),
+    openWeiboLogin: () => ipcRenderer.invoke("auth:open-weibo-login"),
+    onServiceStatusChange: (callback) => {
+        const handler = (_e, data) => callback(data);
+        ipcRenderer.on("service-status-change", handler);
+        return () => ipcRenderer.removeListener("service-status-change", handler);
+    },
+    onUpdateAvailable: (callback) => {
+        const handler = (_e, data) => callback(data);
+        ipcRenderer.on("update-available", handler);
+        return () => ipcRenderer.removeListener("update-available", handler);
+    },
+    restartApp: () => ipcRenderer.send("app:restart")
+});
+
+

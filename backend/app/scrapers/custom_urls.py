@@ -92,9 +92,14 @@ class CustomURLsScraper(BaseScraper):
         publish_time = ""
         
         try:
-            resp = await self.client.get(url)
-            if resp.status_code == 200:
-                soup = BeautifulSoup(resp.text, "lxml")
+            resp_text = article_meta.get("raw_html")
+            if not resp_text:
+                resp = await self.client.get(url)
+                if resp.status_code == 200:
+                    resp_text = resp.text
+
+            if resp_text:
+                soup = BeautifulSoup(resp_text, "lxml")
                 
                 # 清除明显属于导航、页脚、侧边栏的干扰区域
                 for noise in soup.select("header, footer, nav, aside, .header, .footer, .nav, .sidebar, #header, #footer, #topbar, .topbar"):

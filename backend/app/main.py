@@ -2,8 +2,11 @@
 import os
 import sys
 import json
+import re
+import uuid
 import time
 import asyncio
+import shutil
 from pathlib import Path
 
 if sys.platform == "win32":
@@ -16,13 +19,16 @@ if sys.platform == "win32":
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import httpx
-from fastapi import FastAPI, HTTPException, Query, Body, Request
+from fastapi import FastAPI, HTTPException, Query, Body, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+import io
+import zipfile
 
 from app.config import OUTPUT_DIR, BASE_DIR
 from app.models import TaskCreateRequest, TaskProgress, TaskStatusEnum
@@ -86,6 +92,16 @@ async def startup_event():
 ======================================================================
     """
     print(banner, flush=True)
+
+@app.get("/api/health")
+async def health_check():
+    """本地客户端与服务端健康检查接口"""
+    return {
+        "status": "ok",
+        "timestamp": time.time(),
+        "client_mode": True,
+        "version": "1.0.0"
+    }
 
 @app.get("/api/platforms")
 async def get_supported_platforms():
@@ -173,48 +189,176 @@ class ExtractLinksRequest(BaseModel):
     key: Optional[str] = None
     pass_ticket: Optional[str] = None
     appmsg_token: Optional[str] = None
+    # 新版前端传 true 使用异步任务模式；旧版缓存前端不传，后端走同步模式兼容旧行为
+    async_mode: Optional[bool] = Field(None, description="是否以异步任务模式执行（海量文章防网关超时）")
+
+
+# ============ 文章清单检索的异步任务注册表 ============
+# 背景：/api/extract-links 原先是一个同步长请求，博主文章多达几千篇时要翻几百页、持续数分钟。
+# 线上 Nginx / Cloudflare 等网关默认 60~120 秒就会返回 HTML 504 / 524 超时页，浏览器把 HTML 当 JSON
+# 解析就会报 "Unexpected token '<'..."，导致用户看到弹窗报错。
+# 解决：新版前端通过 async_mode=true 让接口「立即返回任务 ID + 后台异步抓取 + 前端轮询」；
+# 旧版尚未刷新缓存的前端不传 async_mode，后端继续走同步模式返回旧格式，避免被 job_id 对象误导为空结果。
+_EXTRACT_JOBS: Dict[str, Dict[str, Any]] = {}
+_MAX_EXTRACT_JOBS = 2000  # 内存缓存上限，避免长期运行后注册表无限膨胀
+
+
+async def _do_extract_links(request: ExtractLinksRequest, job_id: Optional[str] = None) -> Dict[str, Any]:
+    """实际执行文章清单抓取，返回标准结果字典。
+
+    同步模式与异步模式共用此函数；如果传入 job_id，抓取进度会同步写入 _EXTRACT_JOBS。
+    """
+    from app.models import PlatformEnum, TaskCreateRequest
+    try:
+        p_enum = PlatformEnum(request.platform)
+    except Exception:
+        p_enum = PlatformEnum.CUSTOM_URLS
+
+    # 借用 task_manager 的平台识别与 scraper 工厂，和 /api/tasks 入口保持一致
+    dummy_req = TaskCreateRequest(
+        platform=p_enum,
+        target=request.target,
+        max_articles=request.max_articles,
+        wechat_cookie=request.cookie,
+        wechat_token=request.token,
+        wechat_uin=request.uin,
+        wechat_key=request.key,
+        wechat_pass_ticket=request.pass_ticket,
+        wechat_appmsg_token=request.appmsg_token
+    )
+    detected = task_manager._detect_platform(request.target, p_enum)
+    scraper = task_manager._get_scraper(dummy_req, detected)
+
+    # 进度回调：爬虫每翻一页就同步一次最新已检索篇数和状态文本
+    def extract_progress_cb(msg: str, count: int, _: int):
+        job = _EXTRACT_JOBS.get(job_id) if job_id else None
+        if job:
+            job["current"] = count
+            job["message"] = msg
+            job["status"] = "fetching"
+
+    try:
+        author_info = await scraper.get_author_info()
+        articles = await scraper.get_article_list(progress_callback=extract_progress_cb)
+        return {
+            "success": True,
+            "platform": request.platform,
+            "author": author_info.get("name", "未知博主"),
+            "total": len(articles),
+            "articles": articles,
+            "declared_count": getattr(scraper, "declared_count", None),
+            "category_name": getattr(scraper, "category_name", None),
+            "explanation": getattr(scraper, "explanation", None)
+        }
+    finally:
+        await scraper.close()
+
+
+async def _run_extract_links_job(job_id: str, request: ExtractLinksRequest) -> None:
+    """在后台执行文章清单抓取，并把结果写入 _EXTRACT_JOBS。
+
+    注意：该函数运行在独立的 asyncio Task 中，不会因为抓取时间长而阻塞 /api/extract-links 接口的响应。
+    """
+    try:
+        result = await _do_extract_links(request, job_id)
+        _EXTRACT_JOBS[job_id]["status"] = "completed"
+        _EXTRACT_JOBS[job_id]["result"] = result
+    except Exception as e:
+        _EXTRACT_JOBS[job_id]["status"] = "failed"
+        _EXTRACT_JOBS[job_id]["error"] = str(e)
+    finally:
+        job = _EXTRACT_JOBS.get(job_id)
+        if job:
+            job["message"] = "检索已结束"
+
+
+def _register_extract_job(platform: str, target: str) -> str:
+    """注册一个新的异步提取任务，并返回 job_id；顺便做简单的注册表清理。"""
+    job_id = str(uuid.uuid4())
+    _EXTRACT_JOBS[job_id] = {
+        "status": "pending",
+        "current": 0,
+        "message": "正在连接目标平台...",
+        "result": None,
+        "error": None,
+        "platform": platform,
+        "target": target.strip(),
+        "created_at": time.time()
+    }
+
+    # 简单清理：当缓存超过上限时，删除最旧的已结束任务，避免内存无限增长
+    if len(_EXTRACT_JOBS) > _MAX_EXTRACT_JOBS:
+        ended = [jid for jid, j in _EXTRACT_JOBS.items() if j.get("status") in ("completed", "failed")]
+        # 保留最近一半额度，腾出空间
+        for jid in ended[: max(0, len(ended) - _MAX_EXTRACT_JOBS // 2)]:
+            _EXTRACT_JOBS.pop(jid, None)
+
+    return job_id
+
+
+@app.get("/api/extract-links/progress")
+async def extract_links_progress(
+    job_id: Optional[str] = Query(None, description="异步任务 ID"),
+    platform: Optional[str] = Query(None, description="兼容旧轮询：平台名"),
+    target: Optional[str] = Query(None, description="兼容旧轮询：目标链接")
+):
+    """查询某次文章清单检索的实时进度与最终结果。"""
+    # 优先按 job_id 查询，这是新版异步模式
+    if job_id:
+        job = _EXTRACT_JOBS.get(job_id)
+        if not job:
+            return {"current": 0, "message": "", "status": "not_found"}
+        payload = {
+            "current": job.get("current", 0),
+            "message": job.get("message", ""),
+            "status": job.get("status", "pending")
+        }
+        if job["status"] == "completed":
+            payload["result"] = job.get("result")
+        if job["status"] == "failed":
+            payload["error"] = job.get("error", "未知错误")
+        return payload
+
+    # 兼容旧式按 platform + target 兜底查询（主要给未升级的前端使用）
+    if platform and target:
+        target_key = target.strip()
+        for job in _EXTRACT_JOBS.values():
+            if job.get("platform") == platform and job.get("target") == target_key:
+                payload = {
+                    "current": job.get("current", 0),
+                    "message": job.get("message", ""),
+                    "status": job.get("status", "pending")
+                }
+                if job["status"] == "completed":
+                    payload["result"] = job.get("result")
+                if job["status"] == "failed":
+                    payload["error"] = job.get("error", "未知错误")
+                return payload
+
+    return {"current": 0, "message": "", "status": "idle"}
+
 
 @app.post("/api/extract-links")
 async def extract_links_endpoint(request: ExtractLinksRequest):
-    """仅提取文章列表与链接清单 (两阶段架构阶段一)"""
+    """仅提取文章列表与链接清单（两阶段架构阶段一）。
+
+    - 新版前端传 async_mode=true：立即返回 job_id，后台异步抓取，前端轮询 /api/extract-links/progress
+      直至 status 为 completed 或 failed；这样海量文章也不会被网关超时掐掉。
+    - 旧版缓存前端未传 async_mode：继续走同步模式，直接返回旧格式结果，避免被 job_id 结构误报为空。
+    """
     if not request.target.strip():
         raise HTTPException(status_code=400, detail="目标博主链接或关键词不能为空")
-    
+
+    # 新版异步模式
+    if request.async_mode:
+        job_id = _register_extract_job(request.platform, request.target)
+        # 启动后台抓取任务，接口立即返回
+        asyncio.create_task(_run_extract_links_job(job_id, request))
+        return {"success": True, "job_id": job_id, "message": "文章清单检索已转入后台运行，请稍候..."}
+
+    # 同步兼容模式（给旧版缓存/未刷新页面兜底）
     try:
-        from app.models import PlatformEnum, TaskCreateRequest
-        try:
-            p_enum = PlatformEnum(request.platform)
-        except Exception:
-            p_enum = PlatformEnum.CUSTOM_URLS
-            
-        dummy_req = TaskCreateRequest(
-            platform=p_enum,
-            target=request.target,
-            max_articles=request.max_articles,
-            wechat_cookie=request.cookie,
-            wechat_token=request.token,
-            wechat_uin=request.uin,
-            wechat_key=request.key,
-            wechat_pass_ticket=request.pass_ticket,
-            wechat_appmsg_token=request.appmsg_token
-        )
-        detected = task_manager._detect_platform(request.target, p_enum)
-        scraper = task_manager._get_scraper(dummy_req, detected)
-        try:
-            author_info = await scraper.get_author_info()
-            articles = await scraper.get_article_list()
-            return {
-                "success": True,
-                "platform": request.platform,
-                "author": author_info.get("name", "未知博主"),
-                "total": len(articles),
-                "articles": articles,
-                "declared_count": getattr(scraper, "declared_count", None),
-                "category_name": getattr(scraper, "category_name", None),
-                "explanation": getattr(scraper, "explanation", None)
-            }
-        finally:
-            await scraper.close()
+        return await _do_extract_links(request, None)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -223,14 +367,127 @@ async def create_task(request: TaskCreateRequest):
     """创建新的抓取与导出任务"""
     if not request.target.strip():
         raise HTTPException(status_code=400, detail="目标博主链接或文章ID不能为空")
-    
+
     task_id = task_manager.create_task(request)
     return {"task_id": task_id, "status": "pending", "message": "任务已创建并进入调度队列"}
+
+
+# ==================== 本地住宅IP直连源码分块上传 ====================
+# 背景：扩展在用户本机抓到的 1894 篇网页源码有数百 MB，若随创建任务一次性提交，
+# 会超过 nginx / Cloudflare 的 100M 请求体上限，返回 413 HTML 错误页导致前端
+# 报 "Unexpected token '<'"。因此前端先分块（每块约 20 篇）上传到服务器临时文件，
+# 创建任务时只带文章清单 + relay_upload_id，后端处理时按 URL 从临时文件取源码。
+
+class RelayChunkUpload(BaseModel):
+    upload_id: str = Field(..., description="本次批量上传的唯一ID，由前端生成")
+    chunk_index: int = Field(..., description="当前块序号（从0开始）")
+    total_chunks: int = Field(..., description="总块数（用于前端对账）")
+    articles: List[Dict[str, Any]] = Field(..., description="本块文章列表，每项含 url/title/raw_html 等")
+
+# 临时文件目录：data/relay_uploads/{upload_id}.jsonl，每行一篇（JSON Lines 格式，方便按行追加）
+RELAY_UPLOAD_DIR = BASE_DIR / "data" / "relay_uploads"
+
+def _sweep_stale_relay_uploads(max_age_hours: int = 24):
+    """清扫超过 24 小时的残留源码临时文件（任务异常中断没来得及删的，防止占满磁盘）"""
+    try:
+        if not RELAY_UPLOAD_DIR.exists():
+            return
+        now = time.time()
+        for f in RELAY_UPLOAD_DIR.glob("*.jsonl"):
+            if now - f.stat().st_mtime > max_age_hours * 3600:
+                f.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+@app.post("/api/relay/upload-chunk")
+async def relay_upload_chunk(request: Request):
+    """接收本地直连抓取源码的一个分块，追加写入临时文件。
+
+    用 Request 直接读原始字节，绕开 FastAPI 的 JSON 自动解析——
+    请求体兼容两种格式（按魔数自动识别）：
+    - 原始 JSON（application/json，老浏览器明文兜底）
+    - gzip 压缩的 JSON（application/octet-stream，1f 8b 魔数，新版前端）
+      千篇级任务的源码 JSON 压缩比约 6~8 倍，1.2GB 上传量可压到 ~200MB，大幅节省服务器流量。
+    """
+    raw = await request.body()
+    try:
+        # gzip 文件头魔数：0x1f 0x8b，据此判断是否需要先解压
+        if len(raw) >= 2 and raw[0] == 0x1F and raw[1] == 0x8B:
+            import gzip as _gzip
+            raw = _gzip.decompress(raw)
+        chunk = RelayChunkUpload(**json.loads(raw))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"请求体解析失败: {e}")
+
+    # upload_id 白名单校验：只允许字母数字下划线短横线，防止路径穿越攻击
+    if not re.fullmatch(r"[A-Za-z0-9_\-]{6,64}", chunk.upload_id):
+        raise HTTPException(status_code=400, detail="upload_id 格式非法")
+    if not chunk.articles:
+        raise HTTPException(status_code=400, detail="分块内容为空")
+
+    RELAY_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    # 每次接收新上传时顺手清扫一次历史残留（比定时任务更省事，频率也够）
+    _sweep_stale_relay_uploads()
+
+    target_file = RELAY_UPLOAD_DIR / f"{chunk.upload_id}.jsonl"
+    with open(target_file, "a", encoding="utf-8") as f:
+        for art in chunk.articles:
+            # 每行一篇的 JSON Lines 格式：后端可以按行流式读取，不必整包载入内存
+            f.write(json.dumps(art, ensure_ascii=False) + "\n")
+
+    return {"success": True, "received": len(chunk.articles), "chunk_index": chunk.chunk_index, "total_chunks": chunk.total_chunks}
+
+@app.get("/api/relay/upload-status")
+async def relay_upload_status(upload_id: str):
+    """查询某次分块上传已落盘的行数，前端据此断点续传（整块传完的直接跳过）"""
+    # upload_id 白名单校验，防止路径穿越
+    if not re.fullmatch(r"[A-Za-z0-9_\-]{6,64}", upload_id):
+        raise HTTPException(status_code=400, detail="upload_id 格式非法")
+    f = RELAY_UPLOAD_DIR / f"{upload_id}.jsonl"
+    if not f.exists():
+        return {"exists": False, "lines": 0}
+    lines = 0
+    try:
+        with open(f, "rb") as rf:
+            for _ in rf:
+                lines += 1
+    except Exception:
+        lines = 0
+    return {"exists": True, "lines": lines}
 
 @app.get("/api/tasks")
 async def list_tasks(client_id: Optional[str] = None):
     """获取指定客户端的历史任务 (未提供 client_id 时返回空以保护多用户隐私)"""
     return task_manager.list_tasks(client_id=client_id)
+
+# ==================== 中断续跑：检测残留 / 续跑 / 丢弃 ====================
+# 用途：服务被关、进程被杀、或浏览器关闭后，正在跑的抓取任务会"凭空消失"。
+# 这些接口让前端一打开页面就能查到上次没跑完的任务，弹窗询问用户是否继续。
+# 续跑原理：快照里存了完整原始请求，用同一请求重跑，已抓成功的篇目命中 SQLite 缓存秒过不重复下载。
+
+@app.get("/api/tasks/incomplete")
+async def list_incomplete_tasks(client_id: Optional[str] = None):
+    """列出当前客户端所有未跑完的残留任务(从磁盘快照恢复)"""
+    return task_manager.list_incomplete_tasks(client_id=client_id)
+
+class ResumeOrDiscardRequest(BaseModel):
+    client_id: Optional[str] = None
+
+@app.post("/api/tasks/incomplete/{task_id}/resume")
+async def resume_incomplete_task(task_id: str, req: ResumeOrDiscardRequest):
+    """从快照重建任务继续跑；返回 task_id 供前端监听实时进度"""
+    tid, err = task_manager.resume_incomplete_task(task_id, client_id=req.client_id)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    return {"task_id": tid, "status": "pending", "message": "任务已从中断处继续执行"}
+
+@app.post("/api/tasks/incomplete/{task_id}/discard")
+async def discard_incomplete_task(task_id: str, req: ResumeOrDiscardRequest):
+    """用户选择「不继续」，删除残留任务快照"""
+    ok = task_manager.discard_incomplete_task(task_id, client_id=req.client_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="未找到对应的未完成任务")
+    return {"success": True, "message": "已放弃该未完成任务"}
 
 @app.get("/api/tasks/{task_id}")
 async def get_task_status(task_id: str):
@@ -345,6 +602,127 @@ async def download_file(filename: str):
         }
     )
 
+# =====================================================================
+# 本地版文件系统服务（仅本地模式可用，公网服务器版自动 403）
+# 用途：让用户通过前端弹窗浏览本机目录，把导出产物直接复制到指定文件夹，
+#       绕开"浏览器网页无法指定下载保存路径"的安全限制。
+# 安全：require_local 校验请求 Host 头必须是 127.0.0.1/localhost/::1。
+#       （不能用 request.client.host：服务器版经 nginx 反代后 client 恒为 127.0.0.1，
+#        而 Host 头透传的是用户真实访问的域名，能准确区分本地版与公网版。）
+# =====================================================================
+async def require_local(request: Request):
+    """本地模式保护依赖：仅放行本地访问的文件系统接口"""
+    host_header = (request.headers.get("host") or "").split(":")[0].strip().lower()
+    if host_header not in ("127.0.0.1", "localhost", "::1"):
+        raise HTTPException(status_code=403, detail="该能力仅在本地模式 (127.0.0.1) 下可用")
+
+
+@app.get("/api/fs/browse", dependencies=[Depends(require_local)])
+async def fs_browse(path: Optional[str] = None):
+    """浏览本机文件系统目录，返回子目录与文件列表（供前端文件夹选择弹窗使用）
+
+    参数：path 为要浏览的绝对路径，缺省时从用户主目录开始。
+    返回：{"current": 当前目录, "parent": 上级目录(根目录时为null),
+           "entries": [{"name","path","is_dir"}]}
+    """
+    if not path:
+        path = str(Path.home()) if sys.platform == "win32" else "/"
+    try:
+        cur = Path(path)
+        if not cur.is_dir():
+            return {
+                "current": str(cur), "parent": None, "entries": [],
+                "error": f"不是有效目录：{cur}"
+            }
+    except Exception as e:
+        return {"current": path, "parent": None, "entries": [], "error": str(e)}
+
+    entries = []
+    try:
+        # Windows 系统盘根目录常见的大型系统隐藏文件，纯属噪音，直接过滤掉
+        # 否则用户会看到 pagefile.sys/swapfile.sys/hiberfil.sys 等看不懂的文件，选择体验差
+        JUNK_SYSTEM_NAMES = {"pagefile.sys", "swapfile.sys", "hiberfil.sys", "System Volume Information", "$RECYCLE.BIN"}
+        with os.scandir(cur) as it:
+            for e in it:
+                # 跳过隐藏文件/目录（以 . 开头）与软链接，避免干扰选择
+                if e.name.startswith("."):
+                    continue
+                # 跳过系统垃圾文件与回收站/系统卷信息等无意义目录
+                if e.name in JUNK_SYSTEM_NAMES:
+                    continue
+                try:
+                    is_dir = e.is_dir()
+                except Exception:
+                    continue
+                entries.append({"name": e.name, "path": str(Path(e.path)), "is_dir": is_dir})
+    except PermissionError:
+        return {"current": str(cur), "parent": None, "entries": [], "error": "没有权限访问该目录"}
+
+    # 目录优先、名称字母序排序，方便快速定位
+    entries.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
+    parent = str(cur.parent) if cur.parent != cur else None
+
+    # Windows 下同时返回全部磁盘（C:\ D:\ E:\ …），供前端渲染"快速切换磁盘"栏，
+    # 否则用户停在 C 盘根目录时「上级」无效，根本进不了其他盘。
+    drives: list = []
+    if sys.platform == "win32":
+        import string as _string
+        for d in _string.ascii_uppercase:
+            dp = Path(f"{d}:\\")
+            try:
+                if dp.exists():
+                    drives.append(str(dp))
+            except Exception:
+                continue
+    return {"current": str(cur), "parent": parent, "entries": entries, "drives": drives}
+
+
+@app.post("/api/fs/mkdir", dependencies=[Depends(require_local)])
+async def fs_mkdir(data: dict):
+    """在指定路径下新建文件夹（支持一次性创建多级目录）"""
+    raw = (data.get("path") or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="路径不能为空")
+    try:
+        p = Path(raw)
+        p.mkdir(parents=True, exist_ok=True)
+        return {"path": str(p), "created": p.is_dir()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建目录失败：{e}")
+
+
+@app.post("/api/fs/save-file", dependencies=[Depends(require_local)])
+async def fs_save_file(data: dict):
+    """把 downloads/ 目录下的某个导出产物复制到用户指定的文件夹
+
+    防路径穿越：源文件必须真实存在于 OUTPUT_DIR 内（resolve 后前缀校验）。
+    重名处理：目标目录已存在同名文件时自动追加 " (1)"、" (2)" 后缀。
+    复制使用线程池执行，避免阻塞异步事件循环（大 ZIP 也能秒级复制）。
+    """
+    filename = (data.get("filename") or "").strip()
+    dest_dir = (data.get("dest_dir") or "").strip()
+    if not filename or not dest_dir:
+        raise HTTPException(status_code=400, detail="filename 与 dest_dir 均为必填项")
+
+    src = (OUTPUT_DIR / filename).resolve()
+    out_root = OUTPUT_DIR.resolve()
+    if not src.is_file() or not str(src).startswith(str(out_root)):
+        raise HTTPException(status_code=400, detail="源文件不存在或超出下载目录范围")
+
+    try:
+        dest = Path(dest_dir)
+        dest.mkdir(parents=True, exist_ok=True)
+        dst = dest / src.name
+        idx = 1
+        while dst.exists():
+            dst = dest / f"{src.stem} ({idx}){src.suffix}"
+            idx += 1
+        await asyncio.to_thread(shutil.copy2, src, dst)
+        return {"saved_path": str(dst)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"复制文件失败：{e}")
+
+
 @app.get("/api/zhihu/status")
 async def get_zhihu_auth_status():
     """获取知乎当前登录凭证与连接状态"""
@@ -362,13 +740,75 @@ async def trigger_zhihu_qr_login():
 
 @app.post("/api/zhihu/set-cookie")
 async def set_manual_zhihu_cookie(data: dict):
-    """手动保存知乎 Cookie 字符串"""
+    """手动/扩展保存知乎 Cookie 字符串，保存前检测是否包含关键登录凭证 z_c0"""
     cookie_str = data.get("cookie", "")
     if not cookie_str.strip():
         raise HTTPException(status_code=400, detail="Cookie 不能为空")
     cookies = parse_cookie_string(cookie_str)
+    has_zc0 = "z_c0" in cookies
     save_zhihu_cookies(cookies)
-    return await check_zhihu_auth_status()
+    status = await check_zhihu_auth_status()
+    status["has_z_c0"] = has_zc0
+    if not has_zc0:
+        status["warning"] = "已保存的 Cookie 中未包含 z_c0，知乎仍会拒绝主页访问。请确认当前浏览器已在 www.zhihu.com 登录，或手动粘贴含 z_c0 的完整 Cookie。"
+    return status
+
+@app.get("/api/weibo/status")
+async def get_weibo_auth_status():
+    """获取微博当前登录凭证与连接状态"""
+    from app.core.weibo_auth import check_weibo_auth_status
+    return await check_weibo_auth_status()
+
+@app.post("/api/weibo/sync-browser")
+async def sync_weibo_browser():
+    """一键同步本机 Edge / Chrome 浏览器中的微博登录态"""
+    from app.core.weibo_auth import sync_local_weibo_cookies
+    return await sync_local_weibo_cookies()
+
+@app.post("/api/weibo/qr-login")
+async def trigger_weibo_qr_login():
+    """唤起浏览器弹窗进行微博扫码登录"""
+    from app.core.weibo_auth import launch_weibo_qr_login
+    return await launch_weibo_qr_login()
+
+@app.post("/api/weibo/set-cookie")
+async def set_weibo_cookie_api(data: dict):
+    """保存微博 Cookie (支持字符串或字典)"""
+    from app.core.weibo_auth import save_weibo_cookies, parse_weibo_cookie_string, check_weibo_auth_status
+    cookies = data.get("cookies")
+    if not isinstance(cookies, dict) or not cookies:
+        cookie_str = data.get("cookie", "")
+        if not cookie_str.strip():
+            raise HTTPException(status_code=400, detail="Cookie 不能为空")
+        cookies = parse_weibo_cookie_string(cookie_str)
+    save_weibo_cookies(cookies)
+    return await check_weibo_auth_status()
+
+@app.post("/api/zhihu/logout")
+async def logout_zhihu():
+    """清除本地保存的知乎登录凭证"""
+    from app.core.zhihu_auth import save_zhihu_cookies, SESSION_FILE
+    if SESSION_FILE.exists():
+        try:
+            SESSION_FILE.unlink()
+        except Exception:
+            save_zhihu_cookies({})
+    else:
+        save_zhihu_cookies({})
+    return {"success": True, "message": "已清除知乎本地登录凭证"}
+
+@app.post("/api/weibo/logout")
+async def logout_weibo():
+    """清除本地保存的微博登录凭证"""
+    from app.core.weibo_auth import save_weibo_cookies, WEIBO_AUTH_FILE
+    if WEIBO_AUTH_FILE.exists():
+        try:
+            WEIBO_AUTH_FILE.unlink()
+        except Exception:
+            save_weibo_cookies({})
+    else:
+        save_weibo_cookies({})
+    return {"success": True, "message": "已清除微博本地登录凭证"}
 
 @app.get("/api/wechat/status")
 async def get_wechat_auth_status():
@@ -457,27 +897,9 @@ async def set_wechat_auth(data: dict):
     )
     return await check_wechat_auth_status()
 
-@app.get("/api/weibo/status")
-async def get_weibo_auth_status():
-    """获取微博当前登录凭证与连接状态"""
-    from app.core.weibo_auth import check_weibo_auth_status
-    return await check_weibo_auth_status()
-
-@app.post("/api/weibo/set-cookie")
-async def set_manual_weibo_cookie(data: dict):
-    """保存微博 Cookie 字符串"""
-    cookie_str = data.get("cookie", "")
-    if not cookie_str.strip():
-        raise HTTPException(status_code=400, detail="Cookie 不能为空")
-    from app.core.zhihu_auth import parse_cookie_string
-    from app.core.weibo_auth import save_weibo_cookies, check_weibo_auth_status
-    cookies = parse_cookie_string(cookie_str)
-    save_weibo_cookies(cookies)
-    return await check_weibo_auth_status()
-
 @app.get("/api/extension/download")
 async def download_extension_zip():
-    """动态打包并下载浏览器同步扩展 (支持无感同步公众号、知乎、微博凭证)"""
+    """动态打包并下载浏览器同步与住宅IP中继扩展 (v1.4.0)"""
     import io
     import zipfile
     ext_dir = frontend_dir / "extension"
@@ -488,14 +910,14 @@ async def download_extension_zip():
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for f in ext_dir.rglob("*"):
             if f.is_file():
-                arcname = f.relative_to(ext_dir)
+                arcname = f.relative_to(ext_dir.parent)
                 zf.write(f, arcname)
     buf.seek(0)
     return Response(
         content=buf.getvalue(),
         media_type="application/zip",
         headers={
-            "Content-Disposition": "attachment; filename=BlogDistiller-Extension.zip"
+            "Content-Disposition": "attachment; filename=BlogDistiller-Extension-v1.4.0.zip"
         }
     )
 
@@ -840,7 +1262,7 @@ async def search_wechat_biz(query: str):
                     "nickname": item.get("nickname", query_str),
                     "fakeid": item.get("fakeid", ""),
                     "avatar": av_url,
-                    "signature": item.get("signature", f"微信官方认证公众号「{query_str}」"),
+                    "signature": item.get("signature", f"微信公众号「{query_str}」"),
                     "alias": item.get("alias", ""),
                     "verify_status": item.get("verify_status", 1)
                 }]
@@ -900,16 +1322,16 @@ async def search_wechat_biz(query: str):
         except Exception:
             pass
 
-    # 兜底返回有效公众号信息，确保前端能立即展示精美卡片
+    # 兜底返回占位名片（如实标注：未经微信认证核验，仅作输入回显，避免误导用户以为是已认证官方号）
     default_avatar = "/assets/avatar.png" if "艺杯羹" in query_str else generate_preset_svg_avatar(query_str)
     return {
         "list": [{
             "nickname": query_str,
             "fakeid": "",
             "avatar": default_avatar,
-            "signature": f"微信官方认证公众号「{query_str}」· 支持全量文章提取与排版",
+            "signature": f"占位名片·未经微信认证核验「{query_str}」；粘贴单篇/合集链接可免登录提取，全量检索需连接公众号后台",
             "alias": "",
-            "verify_status": 1
+            "verify_status": 0
         }]
     }
     
@@ -1016,12 +1438,51 @@ async def api_admin_update_contributor(contributor_id: str, data: dict = Body(..
     return {"success": True, "contributor": result.dict() if result else None}
 
 
-@app.delete("/api/community-wall/admin/{contributor_id}")
-async def api_admin_delete_contributor(contributor_id: str):
-    """管理后台：删除贡献者"""
-    if delete_contributor(contributor_id):
-        return {"success": True}
-    raise HTTPException(status_code=404, detail="贡献者不存在")
+# =========================================================================
+# 客户端版本与安装包分发接口 (Local-First Desktop Client Distribution)
+# =========================================================================
+
+@app.get("/api/client/version")
+async def get_client_version():
+    """获取最新客户端版本信息与下载链接"""
+    return {
+        "version": "1.3.0",
+        "release_notes": "支持本地优先桌面客户端架构，全流程本地运算，彻底规避云端流量、内存瓶颈与网络风控。",
+        "standard_download_url": "/api/client/download",
+        "win7_download_url": "/api/client/download/win7",
+        "mandatory": False,
+    }
+
+@app.get("/api/client/download")
+async def download_client_standard():
+    """下载标准版桌面客户端 (Windows 10/11)"""
+    dist_dir = BASE_DIR / "dist"
+    candidates = [
+        dist_dir / "BlogDistiller-Setup-x64.exe",
+        dist_dir / "BlogDistiller Setup 1.3.0.exe",
+        dist_dir / "BlogDistiller Setup 1.2.0.exe",
+    ]
+    for p in candidates:
+        if p.exists():
+            return FileResponse(p, filename="BlogDistiller-Setup-x64.exe", media_type="application/octet-stream")
+    if dist_dir.exists():
+        exes = sorted(dist_dir.glob("*.exe"), key=lambda f: f.stat().st_mtime, reverse=True)
+        if exes:
+            return FileResponse(exes[0], filename=exes[0].name, media_type="application/octet-stream")
+    raise HTTPException(status_code=404, detail="标准版客户端安装包尚未就绪，请稍后重试或查看发布页面")
+
+@app.get("/api/client/download/win7")
+async def download_client_win7():
+    """下载 Windows 7/8.1 兼容版桌面客户端"""
+    dist_dir = BASE_DIR / "dist"
+    candidates = [
+        dist_dir / "BlogDistiller-Win7-Setup-x64.exe",
+        dist_dir / "BlogDistiller-Win7.exe",
+    ]
+    for p in candidates:
+        if p.exists():
+            return FileResponse(p, filename="BlogDistiller-Win7-Setup-x64.exe", media_type="application/octet-stream")
+    raise HTTPException(status_code=404, detail="Win7 兼容版安装包正在打包中，敬请期待")
 
 
 # 明确路由

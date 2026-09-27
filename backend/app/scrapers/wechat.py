@@ -1597,9 +1597,13 @@ class WeChatScraper(BaseScraper):
         author = "微信公众号"
         
         try:
-            resp = await self.client.get(url, timeout=20.0)
-            if resp.status_code == 200:
-                resp_html = resp.text
+            resp_html = article_meta.get("raw_html")
+            if not resp_html:
+                resp = await self.client.get(url, timeout=20.0)
+                if resp.status_code == 200:
+                    resp_html = resp.text
+
+            if resp_html:
                 soup = BeautifulSoup(resp_html, "lxml")
                 
                 # 1. 提取标题 (支持长文章、短图文、小绿书)
