@@ -3733,7 +3733,7 @@ class LocalPythonManager {
                 PYTHONUNBUFFERED: "1"
             };
 
-            this.child = spawn(pythonPath, args, {
+            this.child = spawn(pythonCmd, args, {
                 cwd: projectRoot,
                 stdio: ["ignore", "pipe", "pipe"],
                 windowsHide: true,
@@ -3844,36 +3844,72 @@ class LocalPythonManager {
 let bootPageActive = false;
 
 // 向初始化页推送进度文案（内核部署可能耗时数分钟，让用户知道没卡死）
+// 注意：初始化页状态元素 id 是 "st"（见 createMainWindow 的 bootHtml）；
+// 必须在 IIFE 内更新——直接注入顶层 `const el` 会在第二次调用时
+// 因同一全局作用域重复声明而抛 SyntaxError，之后所有进度推送全部静默失效
 function setBootStatus(text) {
     if (!mainWindow || !bootPageActive) return;
     mainWindow.webContents.executeJavaScript(
-        `const el=document.getElementById('bootStatus'); if(el){el.textContent=${JSON.stringify(text)};}`,
+        `(() => { const el = document.getElementById('st'); if (el) el.textContent = ${JSON.stringify(text)}; })()`,
         true
     ).catch(() => {});
 }
 
-// 内核就绪后切入新版多平台工作台；8 秒内连不上则回退内置旧版渲染模版兜底
+// 内核就绪后切入新版多平台工作台。
+// 旧逻辑：8 秒内连不上就静默回退内置旧版渲染模版——本地服务可能稍后才就绪，
+// 用户却被永久留在 v1.2.0 旧界面上，且毫无提示。
+// 新逻辑：持续轮询本地服务健康检查（最长 3 分钟，覆盖首次启动部署依赖的场景），
+// 就绪后加载新版工作台；超时则在初始化页明确报错并载入诚实的错误兜底页，
+// 绝不再静默回退旧版假工作台。
 function navigateMainWindowToWorkbench(port) {
     if (!mainWindow) return;
-    bootPageActive = false;
     const localUrl = `http://127.0.0.1:${port}/app?client_mode=1&port=${port}`;
+    const healthUrl = `http://127.0.0.1:${port}/api/health`;
     console.log(`[BlogDistiller] 准备加载本地桌面界面: ${localUrl}`);
 
-    let retryCount = 0;
-    const maxRetries = 10;
-    const loadLocalInterface = () => {
-        mainWindow.loadURL(localUrl).catch((err) => {
-            console.warn(`[BlogDistiller] 正在等待本地服务启动就绪... (${err.message}) [${retryCount + 1}/${maxRetries}]`);
-            if (retryCount < maxRetries) {
-                retryCount++;
-                setTimeout(loadLocalInterface, 800);
-            } else {
-                console.warn("[BlogDistiller] 本地服务就绪超时，回退至内置渲染模版");
-                mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
-            }
+    const POLL_INTERVAL_MS = 2000;
+    const MAX_POLL_MS = 3 * 60 * 1000; // 首次启动要部署 Python 内核依赖，最长等 3 分钟
+    const pollStart = Date.now();
+
+    const pollHealthOnce = () => new Promise((resolve) => {
+        const req = http.get(healthUrl, { timeout: 1500 }, (res) => {
+            res.resume();
+            resolve(res.statusCode === 200);
         });
+        req.on("error", () => resolve(false));
+        req.on("timeout", () => { req.destroy(); resolve(false); });
+    });
+
+    const enterWorkbench = async () => {
+        let serviceReady = false;
+        while (Date.now() - pollStart < MAX_POLL_MS) {
+            if (await pollHealthOnce()) { serviceReady = true; break; }
+            const elapsedSec = Math.round((Date.now() - pollStart) / 1000);
+            setBootStatus(`正在等待本地服务就绪…（已等待 ${elapsedSec} 秒，首次启动部署依赖可能需要数分钟）`);
+            await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        }
+
+        if (!serviceReady) {
+            console.error("[BlogDistiller] 本地服务 3 分钟内未就绪，展示明确错误，不再回退旧界面");
+            setBootStatus("❌ 本地服务启动超时。请关闭本应用后重新打开重试；若反复失败，请检查网络代理或杀毒软件是否拦截。");
+            mainWindow.loadFile(path.join(__dirname, "renderer", "index.html")).catch(() => {});
+            return;
+        }
+
+        bootPageActive = false;
+        try {
+            await mainWindow.loadURL(localUrl);
+            console.log("[BlogDistiller] 新版工作台加载成功");
+        } catch (err) {
+            console.warn(`[BlogDistiller] 工作台首次加载失败，1 秒后重试: ${err.message}`);
+            setTimeout(() => {
+                mainWindow.loadURL(localUrl).catch((e2) => {
+                    console.error("[BlogDistiller] 工作台加载失败:", e2.message);
+                });
+            }, 1000);
+        }
     };
-    loadLocalInterface();
+    enterWorkbench();
 }
 
 function createMainWindow(port = null) {
