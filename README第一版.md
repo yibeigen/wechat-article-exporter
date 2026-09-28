@@ -29,9 +29,9 @@
 
   <br>
 
-  | 🌐 官方介绍主页 | 💻 桌面端下载 (GitHub Releases) | 🔑 免费获取激活口令 |
-  | :---: | :---: | :---: |
-  | [**doc.305758.xyz**](https://doc.305758.xyz) | [**点击下载 Windows 客户端**](https://github.com/yibeigen/wechat-article-exporter/releases) | 关注公众号【**艺杯羹**】回复「**文章**」 |
+  | 🌐 官方介绍主页 | 🚀 在线导出工作台 | 💻 桌面端下载 (GitHub Releases) | 🔑 免费获取激活口令 |
+  | :---: | :---: | :---: | :---: |
+  | [**doc.305758.xyz**](https://doc.305758.xyz) | [**doc.305758.xyz/app**](https://doc.305758.xyz/app) | [**点击下载 Windows 客户端**](https://github.com/yibeigen/wechat-article-exporter/releases) | 关注公众号【**艺杯羹**】回复「**文章**」 |
 
 </div>
 
