@@ -3564,7 +3564,7 @@ function createMainWindow(port = 8000) {
         height: 840,
         minWidth: 1020,
         minHeight: 700,
-        title: "BlogDistiller (博萃) · 微信文章导出助手",
+        title: "BlogDistiller (博萃) · 文章导出助手",
         icon: path.join(__dirname, "renderer", "assets", "logo_icon.png"),
         autoHideMenuBar: true,
         backgroundColor: "#f7f6f2",

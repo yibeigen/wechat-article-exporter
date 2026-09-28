@@ -10,7 +10,7 @@
 # ============================================================
 
 appId: com.yibeigen.blogdistiller
-productName: "BlogDistiller 微信文章导出助手"
+productName: "BlogDistiller 文章导出助手"
 copyright: "Copyright © 2026 艺杯羹"
 npmRebuild: false
 directories:
@@ -57,4 +57,4 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: "BlogDistiller 微信文章导出助手"
+  shortcutName: "BlogDistiller 文章导出助手"

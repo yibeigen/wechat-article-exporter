@@ -1,8 +1,8 @@
 {
   "name": "blogdistiller-desktop",
-  "productName": "BlogDistiller 微信文章导出助手",
+  "productName": "BlogDistiller 文章导出助手",
   "version": "1.2.0",
-  "description": "BlogDistiller —— 微信公众号文章全量抓取与排版导出桌面客户端",
+  "description": "BlogDistiller —— 多平台博主文章批量抓取与排版导出桌面客户端",
   "private": true,
   "main": "./main.js",
   "author": "艺杯羹",
@@ -14,7 +14,7 @@
   },
   "build": {
     "appId": "com.yibeigen.blogdistiller",
-    "productName": "BlogDistiller 微信文章导出助手",
+    "productName": "BlogDistiller 文章导出助手",
     "copyright": "Copyright © 2026 艺杯羹",
     "npmRebuild": false,
     "directories": {
@@ -68,7 +68,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "BlogDistiller 微信文章导出助手"
+      "shortcutName": "BlogDistiller 文章导出助手"
     }
   },
   "dependencies": {
