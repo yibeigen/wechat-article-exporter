@@ -1,7 +1,10 @@
 # BlogDistiller · 版本发布与制品打包脚本
+# 用法：设置环境变量 GITHUB_TOKEN 后运行 `py -3 scripts/publish_release.py`
+#       （也兼容旧方式：py -3 scripts/publish_release.py <GITHUB_TOKEN>）
+# 特性：幂等可重跑——已上传的附件自动改名复用/跳过，缺失的才补传，网络中断自动重试
 import os
 import sys
-import json
+import time
 import httpx
 from pathlib import Path
 
@@ -9,29 +12,40 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 REPO = "yibeigen/wechat-article-exporter"
-TAG = "v1.2.0"
-TITLE = "BlogDistiller (博萃) 文章导出助手 v1.2.0 官方正式版"
+TAG = "v1.2.1"
+TITLE = "BlogDistiller (博萃) 文章导出助手 v1.2.1 官方正式版"
 DIST_DIR = Path(r"E:\Tools\Web\下载各个平台\dist")
+API_BASE = f"https://api.github.com/repos/{REPO}"
 
-BODY = """# 🎉 BlogDistiller (博萃) 文章导出助手 v1.2.0 正式发布！
+# 发布说明（全中文）。注意：GitHub 附件名只保留英文/数字/点/横线，
+# 中文名会被自动改写，所以这里写的文件名必须与下方 ASSETS 的英文附件名一致
+BODY = """# 🎉 BlogDistiller (博萃) 文章导出助手 v1.2.1 正式发布！
 
 BlogDistiller 是一款多平台博主文章批量抓取、去广告清洗与多格式合并导出工具，
 支持 **微信公众号 · 知乎 · 微博 · 新浪博客 · 简书 · CSDN · 掘金 · 博客园 · 51CTO** 等 9 大主流平台。
 
 ### 🆕 本版本更新：
-1. **✒️ 品牌更名**：产品名由「微信文章导出助手」正式更名为「**文章导出助手**」，不再局限于单一平台；
-2. **🪟 新增 Win7 专属版**：基于 Electron 22 + Python 3.8.10 稳定技术链构建，完美兼容 Windows 7 / 8.1 老电脑；
-3. **🏠 本地优先架构**：全流程本地运算，抓取走您自己的家庭网络，彻底规避云端流量与风控瓶颈；
-4. **📥 断点续跑**：任务中断后重启服务可一键续跑，已抓取篇目自动跳过，不重复下载。
+1. **🛠️ 关键修复**：修复桌面客户端安装后打开显示旧版微信单平台界面的问题——新版多平台工作台页面已完整打入安装包；
+2. **🚀 首次启动自动部署**：应用首次启动会自动创建独立运行环境并安装本地 Python 内核（需电脑已安装 Python，界面将显示初始化进度，请保持网络畅通）；
+3. **✒️ 品牌更名**：产品名由「微信文章导出助手」正式更名为「**文章导出助手**」，不再局限于单一平台；
+4. **🪟 新增 Win7 专属版**：基于 Electron 22 + Python 3.8.10 稳定技术链构建，完美兼容 Windows 7 / 8.1 老电脑；
+5. **🏠 本地优先架构**：全流程本地运算，抓取走您自己的家庭网络，彻底规避云端流量与风控瓶颈。
 
 ---
 
-### 📥 下载与使用指引（按您的系统版本二选一）：
-- **Windows 10 / 11 用户**：下载 `BlogDistiller 文章导出助手 Setup 1.2.0.exe` 双击安装；
-- **Windows 7 / 8.1 用户**：下载 Win7 专属版安装包 `BlogDistiller-Win7-Setup-x64.exe` 双击安装。
+### 📥 下载与使用指引（按您的系统版本二选一，见下方 Assets 附件）：
+- **Windows 10 / 11 用户**：下载附件 `BlogDistiller-Setup-1.2.1.exe` 双击安装；
+- **Windows 7 / 8.1 用户**：下载附件 `BlogDistiller-Win7-Setup-x64.exe` 双击安装。
 
-> 💡 安装包首次启动会自动部署本地 Python 运行内核，请耐心等待片刻。
+> 💡 首次启动会自动部署本地 Python 运行内核并安装渲染组件，请耐心等待片刻；若电脑未安装 Python，请先到 python.org 安装（Win10/11 装 3.10+，Win7 装 3.8.10），安装时务必勾选 **Add Python to PATH**。
 """
+
+# 附件清单：(本地文件路径, GitHub 附件名)。附件名必须全英文，否则会被 GitHub 改写
+ASSETS = [
+    (DIST_DIR / "BlogDistiller 文章导出助手 Setup 1.2.1.exe", "BlogDistiller-Setup-1.2.1.exe"),
+    (DIST_DIR / "win7" / "BlogDistiller 文章导出助手 Setup 1.2.1.exe", "BlogDistiller-Win7-Setup-x64.exe"),
+]
+
 
 def publish_github_release(token: str):
     headers = {
@@ -39,64 +53,99 @@ def publish_github_release(token: str):
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "BlogDistiller-Release-Bot"
     }
-    
-    print(f"🚀 正在连接 GitHub API 创建 Release: {TAG} ...")
-    create_url = f"https://api.github.com/repos/{REPO}/releases"
-    payload = {
-        "tag_name": TAG,
-        "name": TITLE,
-        "body": BODY,
-        "draft": False,
-        "prerelease": False
-    }
-    
-    with httpx.Client(timeout=60.0) as client:
-        resp = client.post(create_url, json=payload, headers=headers)
-        if resp.status_code not in (200, 201):
-            print(f"❌ 创建 Release 失败: {resp.status_code} - {resp.text}")
-            return
-        
-        release_data = resp.json()
-        upload_url = release_data["upload_url"].split("{")[0]
-        print(f"✅ Release 创建成功！ID: {release_data['id']}")
-        
-        # 上传二进制文件（标准版 exe 在 dist 根目录，Win7 版 exe 在 dist/win7/ 子目录）
-        assets = [
-            DIST_DIR / "BlogDistiller 文章导出助手 Setup 1.2.0.exe",
-            DIST_DIR / "win7" / "BlogDistiller 文章导出助手 Setup 1.2.0.exe",
-        ]
 
-        for asset in assets:
-            if not asset.exists():
-                print(f"⚠️ 文件不存在跳过: {asset}")
+    with httpx.Client(timeout=httpx.Timeout(600.0, write=600.0)) as client:
+        # 第一步：幂等获取 Release——已存在就复用，不存在才创建（脚本可安全重跑）
+        print(f"🚀 正在查询 Release: {TAG} ...")
+        resp = client.get(f"{API_BASE}/releases/tags/{TAG}", headers=headers)
+        if resp.status_code == 200:
+            release_data = resp.json()
+            print(f"ℹ️ Release 已存在，直接复用 (ID: {release_data['id']})")
+        else:
+            print(f"🚀 正在创建 Release: {TAG} ...")
+            resp = client.post(f"{API_BASE}/releases", headers=headers, json={
+                "tag_name": TAG, "name": TITLE, "body": BODY,
+                "draft": False, "prerelease": False
+            })
+            if resp.status_code not in (200, 201):
+                print(f"❌ 创建 Release 失败: {resp.status_code} - {resp.text}")
+                return
+            release_data = resp.json()
+        release_id = release_data["id"]
+        upload_url = release_data["upload_url"].split("{")[0]
+
+        # 第二步：把发布说明同步为最新内容（本地 BODY 为准，保证文件名与附件对得上）
+        resp = client.patch(f"{API_BASE}/releases/{release_id}", headers=headers,
+                            json={"name": TITLE, "body": BODY})
+        print("✅ 发布说明已更新" if resp.status_code == 200 else f"⚠️ 发布说明更新失败: {resp.status_code}")
+
+        # 第三步：拉取当前已有附件列表，用于幂等判断
+        resp = client.get(f"{API_BASE}/releases/{release_id}/assets", headers=headers)
+        existing = resp.json() if resp.status_code == 200 else []
+        print(f"📋 当前已有附件: {[a['name'] for a in existing] or '无'}")
+
+        for path, asset_name in ASSETS:
+            if not path.exists():
+                print(f"⚠️ 本地文件不存在跳过: {path}")
+                continue
+            size = path.stat().st_size
+
+            # 情况 A：目标附件名已存在且大小一致 → 无需处理
+            hit = next((a for a in existing if a["name"] == asset_name), None)
+            if hit and hit["size"] == size:
+                print(f"✅ 附件已存在，跳过: {asset_name}")
                 continue
 
-            print(f"📦 正在上传文件: {asset.name} ({asset.stat().st_size / (1024*1024):.1f} MB) ...")
+            # 情况 B：同名但大小不一致（历史残留）→ 删除后重传
+            if hit:
+                print(f"🗑️ 同名附件大小不符，删除重传: {asset_name}")
+                client.delete(f"{API_BASE}/releases/assets/{hit['id']}", headers=headers)
+
+            # 情况 C：之前传过但名字被 GitHub 改写了（大小一致视为同一文件）→ 直接改名复用，省去重传
+            same_size = next((a for a in existing if a["size"] == size and a["name"] != asset_name), None)
+            if same_size:
+                resp = client.patch(f"{API_BASE}/releases/assets/{same_size['id']}", headers=headers,
+                                    json={"name": asset_name})
+                if resp.status_code == 200:
+                    print(f"✏️ 已有附件改名复用: {same_size['name']} → {asset_name}")
+                    continue
+                print(f"⚠️ 改名失败({resp.status_code})，改为重新上传")
+
+            # 情况 D：缺失 → 上传，网络中断自动重试 3 次（退避 5/10/20 秒）
+            print(f"📦 正在上传: {asset_name} ({size / (1024*1024):.1f} MB) ...")
             upload_headers = {
                 "Authorization": f"token {token}",
                 "Content-Type": "application/octet-stream",
                 "User-Agent": "BlogDistiller-Release-Bot"
             }
-            with open(asset, "rb") as f:
-                # 关键：中文+空格文件名必须通过 params 传参让 httpx 自动完成 URL 编码，
-                # 直接拼在 URL 字符串里会因非法字符导致上传失败
-                upload_resp = client.post(
-                    upload_url,
-                    params={"name": asset.name},
-                    content=f.read(),
-                    headers=upload_headers,
-                    timeout=httpx.Timeout(600.0, write=600.0)
-                )
-            if upload_resp.status_code in (200, 201):
-                print(f"✅ 上传成功: {asset.name}")
+            for attempt in range(1, 4):
+                try:
+                    with open(path, "rb") as f:
+                        # 中文/空格文件名必须经 params 让 httpx 自动 URL 编码，不能手拼 URL
+                        upload_resp = client.post(
+                            upload_url,
+                            params={"name": asset_name},
+                            content=f.read(),
+                            headers=upload_headers,
+                        )
+                    if upload_resp.status_code in (200, 201):
+                        print(f"✅ 上传成功: {asset_name}")
+                        break
+                    print(f"❌ 上传失败: {asset_name} - {upload_resp.status_code} - {upload_resp.text}")
+                except Exception as e:
+                    print(f"⚠️ 第 {attempt} 次上传网络异常: {type(e).__name__}: {e}")
+                if attempt < 3:
+                    wait = 5 * attempt * 2
+                    print(f"⏳ {wait} 秒后重试...")
+                    time.sleep(wait)
             else:
-                print(f"❌ 上传失败: {asset.name} - {upload_resp.status_code} - {upload_resp.text}")
+                print(f"❌ 连续 3 次上传失败，放弃: {asset_name}")
 
-    print(f"\n🎉 官方正式版 v1.2.0 发布完毕！\n👉 查看链接: https://github.com/{REPO}/releases/tag/{TAG}")
+    print(f"\n🎉 官方正式版 {TAG} 发布完毕！\n👉 查看链接: https://github.com/{REPO}/releases/tag/{TAG}")
+
 
 if __name__ == "__main__":
-    # Token 优先从环境变量 GITHUB_TOKEN 读取，避免在命令行参数中明文暴露；
-    # 也兼容旧的 argv 传参方式：python scripts/publish_release.py <GITHUB_TOKEN>
+    # Token 优先从环境变量 GITHUB_TOKEN 读取，避免在命令行参数中明文暴露
     github_token = os.environ.get("GITHUB_TOKEN") or (sys.argv[1] if len(sys.argv) > 1 else "")
     if not github_token:
         print("用法：先设置环境变量 GITHUB_TOKEN，或 python scripts/publish_release.py <GITHUB_TOKEN>")

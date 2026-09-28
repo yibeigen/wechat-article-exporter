@@ -1,7 +1,7 @@
 {
   "name": "blogdistiller-desktop",
   "productName": "BlogDistiller 文章导出助手",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "BlogDistiller —— 多平台博主文章批量抓取与排版导出桌面客户端",
   "private": true,
   "main": "./main.js",
@@ -48,6 +48,11 @@
       {
         "from": "../backend",
         "to": "backend",
+        "filter": ["**/*", "!**/__pycache__", "!**/*.pyc"]
+      },
+      {
+        "from": "../frontend",
+        "to": "frontend",
         "filter": ["**/*", "!**/__pycache__", "!**/*.pyc"]
       },
       {

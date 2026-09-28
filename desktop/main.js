@@ -9,7 +9,7 @@ const net = require("net");
 const tls = require("tls");
 const url = require("url");
 const os = require("os");
-const { exec, execFile, spawn, execSync } = require("child_process");
+const { exec, execFile, spawn, execSync, spawnSync } = require("child_process");
 const forge = require("node-forge");
 const docx = require("docx");
 const writeXlsxFile = require("write-excel-file/node");
@@ -3382,7 +3382,10 @@ class LocalPythonManager {
         return process.cwd();
     }
 
-    getPythonPath() {
+    // 解析可用的 Python 解释器，返回 { cmd, prefix }：
+    // - prefix 用于 py 启动器（spawn 时需带上 ["-3"] 参数）
+    // - 全部候选都不可用时返回 null，由上层决定是否自动部署内核
+    resolvePython() {
         const root = this.getProjectRoot();
         const candidates = [
             path.join(process.resourcesPath, "python", "python.exe"),
@@ -3392,15 +3395,90 @@ class LocalPythonManager {
             path.join(root, ".venv", "bin", "python"),
             path.join(__dirname, "..", ".venv", "Scripts", "python.exe"),
             path.join(process.cwd(), ".venv", "Scripts", "python.exe"),
-            path.join(__dirname, ".venv", "Scripts", "python.exe"),
-            process.platform === "win32" ? "python.exe" : "python3"
+            path.join(__dirname, ".venv", "Scripts", "python.exe")
         ];
         for (const c of candidates) {
             if (path.isAbsolute(c) && fs.existsSync(c)) {
-                return c;
+                return { cmd: c, prefix: [] };
             }
         }
-        return process.platform === "win32" ? "python.exe" : "python3";
+        // 兜底一：Windows 官方 py 启动器（装过官方 Python 的电脑基本都有，不依赖 PATH 里的 python.exe）
+        if (process.platform === "win32") {
+            try {
+                const r = spawnSync("py", ["-3", "--version"], { encoding: "utf8", timeout: 8000, windowsHide: true });
+                if (!r.error) return { cmd: "py", prefix: ["-3"] };
+            } catch (_) {}
+        }
+        // 兜底二：PATH 里的 python/python3
+        try {
+            const name = process.platform === "win32" ? "python.exe" : "python3";
+            const r = spawnSync(name, ["--version"], { encoding: "utf8", timeout: 8000, windowsHide: true });
+            if (!r.error) return { cmd: name, prefix: [] };
+        } catch (_) {}
+        return null;
+    }
+
+    // 统一的命令执行封装：超时自动杀进程，永不抛异常（失败以 ok:false 表达）
+    runCmd(cmd, args, timeoutMs = 120000) {
+        return new Promise((resolve) => {
+            execFile(cmd, args, { timeout: timeoutMs, windowsHide: true, encoding: "utf8" }, (err, stdout, stderr) => {
+                resolve({ ok: !err, stdout: String(stdout || ""), stderr: String(stderr || "") });
+            });
+        });
+    }
+
+    // 依赖体检：快速探测该解释器是否能 import 后端全部核心依赖（30 秒内完成）
+    async checkDeps(cmd, prefix) {
+        const probe = "import fastapi,uvicorn,httpx,bs4,markdownify,lxml,docx,jinja2,pydantic,PIL";
+        const r = await this.runCmd(cmd, [...prefix, "-c", probe], 30000);
+        return r.ok;
+    }
+
+    // 首次运行内核自动部署：在用户目录创建独立 venv 并安装后端依赖（与 start.bat 本地包逻辑一致）
+    // 成功返回可用的解释器 { cmd, prefix }，失败返回 null
+    async ensureKernel(cmd, prefix, projectRoot) {
+        const baseDir = path.join(process.env.LOCALAPPDATA || app.getPath("userData"), "BlogDistillerKernel");
+        const venvDir = path.join(baseDir, "venv");
+        const isWin = process.platform === "win32";
+        const venvPy = isWin ? path.join(venvDir, "Scripts", "python.exe") : path.join(venvDir, "bin", "python");
+        const reqFile = path.join(projectRoot, "requirements.txt");
+
+        // 已有内核缓存则直接校验复用（二次启动秒过）
+        if (fs.existsSync(venvPy)) {
+            setBootStatus("检测到本地内核缓存，正在校验依赖…");
+            if (await this.checkDeps(venvPy, [])) {
+                console.log("[LocalPython] 复用已缓存的本地内核:", venvPy);
+                return { cmd: venvPy, prefix: [] };
+            }
+            // 缓存损坏（装了一半断电/断网）则推倒重建
+            try { fs.rmSync(venvDir, { recursive: true, force: true }); } catch (_) {}
+        }
+
+        setBootStatus("正在创建独立运行环境 (venv)…");
+        const mk = await this.runCmd(cmd, [...prefix, "-m", "venv", venvDir], 180000);
+        if (!mk.ok || !fs.existsSync(venvPy)) {
+            console.error("[LocalPython] 创建 venv 失败:", mk.stderr || mk.err);
+            return null;
+        }
+
+        if (!fs.existsSync(reqFile)) {
+            console.error("[LocalPython] 未找到依赖清单 requirements.txt:", reqFile);
+            return null;
+        }
+        setBootStatus("正在安装核心依赖（约 2~5 分钟，视网速而定）…");
+        let pip = await this.runCmd(venvPy, ["-m", "pip", "install", "-r", reqFile, "--disable-pip-version-check", "-q"], 600000);
+        if (!pip.ok) {
+            setBootStatus("默认源安装较慢或失败，切换国内镜像源重试…");
+            pip = await this.runCmd(venvPy, ["-m", "pip", "install", "-r", reqFile, "--disable-pip-version-check", "-q", "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"], 600000);
+        }
+        if (!pip.ok) {
+            console.error("[LocalPython] 依赖安装失败:", pip.stderr);
+            return null;
+        }
+
+        // Playwright 渲染内核（知乎专栏等动态页面需要）放到服务就绪后后台安装，不阻塞进工作台
+        this.needPlaywrightSetup = true;
+        return { cmd: venvPy, prefix: [] };
     }
 
     getRunScriptPath() {
@@ -3444,12 +3522,10 @@ class LocalPythonManager {
 
         const port = await this.findFreePort(8000, 8050);
         this.port = port;
-        const pythonPath = this.getPythonPath();
         const projectRoot = this.getProjectRoot();
         const runScript = this.getRunScriptPath();
 
         console.log(`[LocalPython] 正在启动本地 Python 服务...`);
-        console.log(`[LocalPython] Python 解释器: ${pythonPath}`);
         console.log(`[LocalPython] 项目根目录: ${projectRoot}`);
         console.log(`[LocalPython] 启动脚本: ${runScript}, 监听端口: ${port}`);
 
@@ -3461,7 +3537,37 @@ class LocalPythonManager {
         }
 
         try {
-            const args = [runScript, "--port", String(port), "--host", "127.0.0.1", "--no-reload"];
+            // ===== Python 解释器解析 + 首次运行内核自动部署 =====
+            setBootStatus("正在检测本地 Python 运行环境…");
+            const resolved = this.resolvePython();
+            if (!resolved) {
+                const err = "未检测到可用的 Python 环境，请安装 Python 3.8 或 3.10+（安装时勾选 Add to PATH）后重试";
+                console.error(`[LocalPython] ${err}`);
+                this.lastError = err;
+                setBootStatus("❌ " + err);
+                return this.getStatus();
+            }
+            console.log(`[LocalPython] Python 解释器: ${resolved.cmd} ${resolved.prefix.join(" ")}`);
+            let pythonCmd = resolved.cmd;
+            let pyPrefix = resolved.prefix;
+
+            // 依赖体检不通过 → 自动部署独立内核（venv + pip 装依赖），与源码包 start.bat 行为对齐
+            if (!(await this.checkDeps(pythonCmd, pyPrefix))) {
+                setBootStatus("首次运行：正在自动部署本地 Python 内核，请保持网络畅通…");
+                const kernel = await this.ensureKernel(pythonCmd, pyPrefix, projectRoot);
+                if (!kernel) {
+                    const err = "本地 Python 内核自动部署失败，请检查网络后重启应用重试";
+                    console.error(`[LocalPython] ${err}`);
+                    this.lastError = err;
+                    setBootStatus("❌ " + err);
+                    return this.getStatus();
+                }
+                pythonCmd = kernel.cmd;
+                pyPrefix = kernel.prefix;
+            }
+            // ===== 内核部署逻辑结束 =====
+
+            const args = [...pyPrefix, runScript, "--port", String(port), "--host", "127.0.0.1", "--no-reload"];
             const childEnv = {
                 ...process.env,
                 PYTHONUNBUFFERED: "1"
@@ -3505,6 +3611,21 @@ class LocalPythonManager {
                 console.log(`[LocalPython] 本地 Python 服务就绪! PID: ${this.child.pid}, Port: ${port}`);
                 this.running = true;
                 this.lastError = null;
+                // 后台静默安装 Playwright Chromium 渲染内核（知乎专栏等动态页面通道用）
+                // 不阻塞工作台加载；未装完前相关通道会提示重试，其余功能不受影响
+                if (this.needPlaywrightSetup) {
+                    this.needPlaywrightSetup = false;
+                    try {
+                        const pwChild = spawn(pythonCmd, [...pyPrefix, "-m", "playwright", "install", "chromium"], {
+                            cwd: projectRoot, stdio: "ignore", windowsHide: true, detached: true
+                        });
+                        pwChild.on("error", (e) => console.warn("[LocalPython] Playwright 内核后台安装失败:", e.message));
+                        pwChild.unref();
+                        console.log("[LocalPython] 已在后台开始安装 Playwright Chromium 内核…");
+                    } catch (e) {
+                        console.warn("[LocalPython] Playwright 内核后台安装异常:", e.message);
+                    }
+                }
             } else {
                 console.warn(`[LocalPython] 服务未在预期时间内响应健康检查，但进程已创建 (PID: ${this.child ? this.child.pid : '未知'})`);
                 this.running = true;
@@ -3558,7 +3679,44 @@ class LocalPythonManager {
 // =========================================================================
 // 7. 窗口创建与主进程调度
 // =========================================================================
-function createMainWindow(port = 8000) {
+// ===== 初始化进度页与工作台导航 =====
+// bootPageActive 标记当前窗口是否停在初始化进度页（此时才允许 setBootStatus 推送文案）
+let bootPageActive = false;
+
+// 向初始化页推送进度文案（内核部署可能耗时数分钟，让用户知道没卡死）
+function setBootStatus(text) {
+    if (!mainWindow || !bootPageActive) return;
+    mainWindow.webContents.executeJavaScript(
+        `const el=document.getElementById('bootStatus'); if(el){el.textContent=${JSON.stringify(text)};}`,
+        true
+    ).catch(() => {});
+}
+
+// 内核就绪后切入新版多平台工作台；8 秒内连不上则回退内置旧版渲染模版兜底
+function navigateMainWindowToWorkbench(port) {
+    if (!mainWindow) return;
+    bootPageActive = false;
+    const localUrl = `http://127.0.0.1:${port}/app?client_mode=1&port=${port}`;
+    console.log(`[BlogDistiller] 准备加载本地桌面界面: ${localUrl}`);
+
+    let retryCount = 0;
+    const maxRetries = 10;
+    const loadLocalInterface = () => {
+        mainWindow.loadURL(localUrl).catch((err) => {
+            console.warn(`[BlogDistiller] 正在等待本地服务启动就绪... (${err.message}) [${retryCount + 1}/${maxRetries}]`);
+            if (retryCount < maxRetries) {
+                retryCount++;
+                setTimeout(loadLocalInterface, 800);
+            } else {
+                console.warn("[BlogDistiller] 本地服务就绪超时，回退至内置渲染模版");
+                mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+            }
+        });
+    };
+    loadLocalInterface();
+}
+
+function createMainWindow(port = null) {
     mainWindow = new BrowserWindow({
         width: 1280,
         height: 840,
@@ -3578,28 +3736,15 @@ function createMainWindow(port = 8000) {
         }
     });
 
-    const clientModePort = port || 8000;
-    const localUrl = `http://127.0.0.1:${clientModePort}/app?client_mode=1&port=${clientModePort}`;
-    const builtinRendererPath = path.join(__dirname, "renderer", "index.html");
+    // 未传 port：先展示初始化进度页，等内核部署完成后由 navigateMainWindowToWorkbench 切入工作台
+    if (!port) {
+        bootPageActive = true;
+        const bootHtml = `<!doctype html><html><head><meta charset="utf-8"><title>BlogDistiller 初始化中</title><style>body{font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif;background:#f7f6f2;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{text-align:center;max-width:560px;padding:40px}.spin{width:44px;height:44px;border:4px solid #d1d5db;border-top-color:#059669;border-radius:50%;margin:0 auto 22px;animation:s 1s linear infinite}@keyframes s{to{transform:rotate(360deg)}}h1{font-size:1.25rem;color:#111827;margin:0 0 10px}p{color:#6b7280;font-size:.92rem;line-height:1.7;margin:0}#st{margin-top:18px;color:#059669;font-weight:600;min-height:1.4em}</style></head><body><div class="card"><div class="spin"></div><h1>BlogDistiller · 博萃 正在初始化</h1><p>首次启动需要部署本地 Python 运行内核，请保持网络畅通并耐心等待，完成后将自动进入工作台。</p><div id="st">正在启动…</div></div></body></html>`;
+        mainWindow.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(bootHtml)).catch(() => {});
+        return;
+    }
 
-    console.log(`[BlogDistiller] 准备加载本地桌面界面: ${localUrl}`);
-
-    // 本地优先自治：直接加载本地 Python 服务渲染界面，零云端依赖与网络延迟
-    let retryCount = 0;
-    const maxRetries = 10;
-    const loadLocalInterface = () => {
-        mainWindow.loadURL(localUrl).catch((err) => {
-            console.warn(`[BlogDistiller] 正在等待本地服务启动就绪... (${err.message}) [${retryCount + 1}/${maxRetries}]`);
-            if (retryCount < maxRetries) {
-                retryCount++;
-                setTimeout(loadLocalInterface, 800);
-            } else {
-                console.warn("[BlogDistiller] 本地服务就绪超时，回退至内置渲染模版");
-                mainWindow.loadFile(builtinRendererPath);
-            }
-        });
-    };
-    loadLocalInterface();
+    navigateMainWindowToWorkbench(port);
 
     // 快捷键支持：F5 / Ctrl+R 刷新界面，F12 / Ctrl+Shift+I 开启开发者调试工具
     mainWindow.webContents.on('before-input-event', (event, input) => {
@@ -3633,13 +3778,15 @@ app.on("second-instance", () => {
 app.whenReady().then(async () => {
     localPythonManager = new LocalPythonManager(app);
     let pythonStatus = { port: 8000 };
+
+    // 先把窗口立起来显示初始化进度页，再启动本地内核（首次启动会自动部署 Python 环境，耗时数分钟）
+    createMainWindow(null);
     try {
         pythonStatus = await localPythonManager.start();
     } catch (err) {
         console.error("[BlogDistiller] 本地 Python 引擎启动异常:", err);
     }
-
-    createMainWindow(pythonStatus.port);
+    navigateMainWindowToWorkbench(pythonStatus.port || 8000);
 
     let proxyPort = 8899;
     try {

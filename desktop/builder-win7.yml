@@ -37,10 +37,16 @@ win:
       arch:
         - x64
 
-# 随客户端附带后端 + 启动脚本 + Win7 专属依赖清单
+# 随客户端附带后端 + 前端工作台页面 + 启动脚本 + Win7 专属依赖清单
 extraResources:
   - from: "../backend"
     to: "backend"
+    filter:
+      - "**/*"
+      - "!**/__pycache__"
+      - "!**/*.pyc"
+  - from: "../frontend"
+    to: "frontend"
     filter:
       - "**/*"
       - "!**/__pycache__"
