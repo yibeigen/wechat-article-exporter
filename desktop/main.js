@@ -14,6 +14,7 @@ const forge = require("node-forge");
 const docx = require("docx");
 const writeXlsxFile = require("write-excel-file/node");
 const { imageSize } = require("image-size");
+const { unzipSync } = require("fflate");
 const { parseHTML } = require("linkedom");
 const TurndownService = require("turndown");
 const turndownService = new TurndownService({
@@ -3481,6 +3482,147 @@ class LocalPythonManager {
         return { cmd: venvPy, prefix: [] };
     }
 
+    // 判断是否为我们自下载的便携内嵌内核（目录特征：BlogDistillerKernel/python）
+    isEmbeddedKernel(cmd) {
+        return cmd.includes(path.join("BlogDistillerKernel", "python"));
+    }
+
+    // 带进度地下载文件，返回 Buffer；失败抛异常由调用方兜底
+    async downloadFile(url) {
+        const resp = await fetch(url, { redirect: "follow" });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const total = Number(resp.headers.get("content-length") || 0);
+        const reader = resp.body.getReader();
+        const chunks = [];
+        let got = 0;
+        let lastPct = -1;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            got += value.length;
+            if (total) {
+                const pct = Math.floor((got / total) * 100);
+                if (pct >= lastPct + 10) {
+                    lastPct = pct;
+                    setBootStatus(`下载进度 ${pct}%（${(got / 1024 / 1024).toFixed(1)} MB）…`);
+                }
+            }
+        }
+        return Buffer.concat(chunks);
+    }
+
+    // 裸机兜底：电脑上完全没有 Python 时，自动下载官方便携内嵌版 Python 并启用 pip
+    // - Windows 7/8（内核版本 6.x）只能用 Python 3.8.10；Windows 10/11 用 3.12.6
+    // - 优先国内镜像（华为云/npmmirror），python.org 官方兜底
+    async ensureEmbeddedPython() {
+        if (process.platform !== "win32") return null;
+        const baseDir = path.join(process.env.LOCALAPPDATA || app.getPath("userData"), "BlogDistillerKernel");
+        const pyDir = path.join(baseDir, "python");
+        const pyExe = path.join(pyDir, "python.exe");
+        const legacy = parseInt(os.release().split(".")[0], 10) < 10; // 6.x = Win7/8/8.1
+        const pyVer = legacy ? "3.8.10" : "3.12.6";
+
+        // 已有内核缓存则校验复用（二次启动秒过）；校验不过则清掉重下
+        if (fs.existsSync(pyExe)) {
+            setBootStatus("检测到已下载的 Python 内核，正在校验…");
+            if (await this.checkDeps(pyExe, [])) {
+                console.log("[LocalPython] 复用已下载的内嵌 Python 内核:", pyExe);
+                return { cmd: pyExe, prefix: [] };
+            }
+            try { fs.rmSync(pyDir, { recursive: true, force: true }); } catch (_) {}
+        }
+
+        const zipName = `python-${pyVer}-embed-amd64.zip`;
+        const mirrors = [
+            `https://mirrors.huaweicloud.com/python/${pyVer}/${zipName}`,
+            `https://registry.npmmirror.com/-/binary/python/${pyVer}/${zipName}`,
+            `https://www.python.org/ftp/python/${pyVer}/${zipName}`
+        ];
+        let zipBuf = null;
+        for (let i = 0; i < mirrors.length; i++) {
+            try {
+                setBootStatus(`正在下载便携 Python 内核 ${pyVer}（约 12MB）— 线路 ${i + 1}/${mirrors.length}…`);
+                zipBuf = await this.downloadFile(mirrors[i]);
+                if (zipBuf && zipBuf.length > 1000000) break; // 简单体积校验，防止拿到错误页
+                zipBuf = null;
+            } catch (e) {
+                console.warn(`[LocalPython] 内核下载线路 ${i + 1} 失败:`, e.message);
+                zipBuf = null;
+            }
+        }
+        if (!zipBuf) return null;
+
+        setBootStatus("正在解压 Python 内核…");
+        try {
+            const files = unzipSync(zipBuf);
+            fs.mkdirSync(pyDir, { recursive: true });
+            for (const [name, content] of Object.entries(files)) {
+                const target = path.join(pyDir, name);
+                if (name.endsWith("/") || name.endsWith("\\")) {
+                    fs.mkdirSync(target, { recursive: true });
+                    continue;
+                }
+                fs.mkdirSync(path.dirname(target), { recursive: true });
+                fs.writeFileSync(target, Buffer.from(content));
+            }
+        } catch (e) {
+            console.error("[LocalPython] 解压 Python 内核失败:", e);
+            return null;
+        }
+
+        // 关键：内嵌版默认不加载 site-packages，必须重写 ._pth 才能让 pip 装的依赖被 import
+        try {
+            const pthName = legacy ? "python38._pth" : "python312._pth";
+            fs.writeFileSync(path.join(pyDir, pthName), `python${legacy ? "38" : "312"}.zip\n.\nLib/site-packages\nimport site\n`);
+        } catch (e) {
+            console.error("[LocalPython] 写入 ._pth 失败:", e);
+            return null;
+        }
+
+        // 安装 pip（3.8 需用官方保留的 legacy 引导脚本）
+        setBootStatus("正在初始化包管理器 (pip)…");
+        const getpipUrl = legacy ? "https://bootstrap.pypa.io/pip/3.8/get-pip.py" : "https://bootstrap.pypa.io/get-pip.py";
+        try {
+            const getpip = await this.downloadFile(getpipUrl);
+            const getpipPath = path.join(baseDir, "get-pip.py");
+            fs.writeFileSync(getpipPath, getpip);
+            const gp = await this.runCmd(pyExe, [getpipPath, "--no-warn-script-location", "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"], 300000);
+            if (!gp.ok) {
+                console.error("[LocalPython] pip 初始化失败:", gp.stderr);
+                return null;
+            }
+        } catch (e) {
+            console.error("[LocalPython] 下载 get-pip 失败:", e.message);
+            return null;
+        }
+
+        return { cmd: pyExe, prefix: [] };
+    }
+
+    // 给内嵌 Python 安装后端依赖：内嵌版不支持 venv，直接 pip --target 装进它自己的 site-packages
+    async installDepsIntoEmbedded(pyExe, projectRoot) {
+        const reqFile = path.join(projectRoot, "requirements.txt");
+        if (!fs.existsSync(reqFile)) {
+            console.error("[LocalPython] 未找到依赖清单 requirements.txt:", reqFile);
+            return null;
+        }
+        const siteDir = path.join(path.dirname(pyExe), "Lib", "site-packages");
+        setBootStatus("正在安装核心依赖（约 3~8 分钟，视网速而定）…");
+        let r = await this.runCmd(pyExe, ["-m", "pip", "install", "--target", siteDir, "-r", reqFile, "--disable-pip-version-check", "-q"], 900000);
+        if (!r.ok) {
+            setBootStatus("默认源安装较慢或失败，切换国内镜像源重试…");
+            r = await this.runCmd(pyExe, ["-m", "pip", "install", "--target", siteDir, "-r", reqFile, "--disable-pip-version-check", "-q", "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"], 900000);
+        }
+        if (!r.ok) {
+            console.error("[LocalPython] 依赖安装失败:", r.stderr);
+            return null;
+        }
+        // Playwright 渲染内核放到服务就绪后后台安装
+        this.needPlaywrightSetup = true;
+        return { cmd: pyExe, prefix: [] };
+    }
+
     getRunScriptPath() {
         const root = this.getProjectRoot();
         return path.join(root, "run.py");
@@ -3540,21 +3682,39 @@ class LocalPythonManager {
             // ===== Python 解释器解析 + 首次运行内核自动部署 =====
             setBootStatus("正在检测本地 Python 运行环境…");
             const resolved = this.resolvePython();
-            if (!resolved) {
-                const err = "未检测到可用的 Python 环境，请安装 Python 3.8 或 3.10+（安装时勾选 Add to PATH）后重试";
-                console.error(`[LocalPython] ${err}`);
-                this.lastError = err;
-                setBootStatus("❌ " + err);
-                return this.getStatus();
-            }
-            console.log(`[LocalPython] Python 解释器: ${resolved.cmd} ${resolved.prefix.join(" ")}`);
-            let pythonCmd = resolved.cmd;
-            let pyPrefix = resolved.prefix;
+            let pythonCmd = null;
+            let pyPrefix = [];
 
-            // 依赖体检不通过 → 自动部署独立内核（venv + pip 装依赖），与源码包 start.bat 行为对齐
+            if (resolved) {
+                console.log(`[LocalPython] Python 解释器: ${resolved.cmd} ${resolved.prefix.join(" ")}`);
+                pythonCmd = resolved.cmd;
+                pyPrefix = resolved.prefix;
+            } else {
+                // 裸机兜底：完全没有 Python → 自动下载官方便携内嵌版（Win7 用 3.8.10，Win10/11 用 3.12.6）
+                setBootStatus("未检测到 Python，正在自动下载便携 Python 内核（约 12MB）…");
+                const emb = await this.ensureEmbeddedPython();
+                if (!emb) {
+                    const err = "Python 内核自动下载失败，请检查网络后重启应用，或到 python.org 手动安装 Python";
+                    console.error(`[LocalPython] ${err}`);
+                    this.lastError = err;
+                    setBootStatus("❌ " + err);
+                    return this.getStatus();
+                }
+                pythonCmd = emb.cmd;
+                pyPrefix = emb.prefix;
+            }
+
+            // 依赖体检不通过 → 自动安装依赖：
+            // - 内嵌内核：pip --target 直接装进其 site-packages（内嵌版不支持 venv）
+            // - 系统 Python：创建独立 venv 内核安装（与源码包 start.bat 行为对齐）
             if (!(await this.checkDeps(pythonCmd, pyPrefix))) {
                 setBootStatus("首次运行：正在自动部署本地 Python 内核，请保持网络畅通…");
-                const kernel = await this.ensureKernel(pythonCmd, pyPrefix, projectRoot);
+                let kernel = null;
+                if (this.isEmbeddedKernel(pythonCmd)) {
+                    kernel = await this.installDepsIntoEmbedded(pythonCmd, projectRoot);
+                } else {
+                    kernel = await this.ensureKernel(pythonCmd, pyPrefix, projectRoot);
+                }
                 if (!kernel) {
                     const err = "本地 Python 内核自动部署失败，请检查网络后重启应用重试";
                     console.error(`[LocalPython] ${err}`);
