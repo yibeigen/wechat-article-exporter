@@ -6987,7 +6987,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
         loadHistory();
         restoreClientSettingsFromBackend(); // 启动时从后端设置文件回填缺失设置（防浏览器存储丢失）
         restoreDefaultDirOnBoot(); // 启动时恢复默认保存文件夹设置（重启后不再显示"未设置"）
-        checkDailyCommunityModal();
+        // 控制台工作台不执行弹窗: checkDailyCommunityModal();
         checkWeChatAuth();
         setTimeout(checkWeChatAuth, 1200);
         // 页面加载后检测是否有上次未完成的抓取任务，有则弹窗询问是否续跑

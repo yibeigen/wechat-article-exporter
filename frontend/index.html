@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">
 <head>
     <meta charset="UTF-8">
@@ -1740,10 +1740,10 @@
 
     <!-- 官方社群与公众号关注交流通知弹窗 (每日频控自动弹出 1 次) -->
     <div id="communityModal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); align-items: center; justify-content: center;">
-        <div style="background: var(--bg-surface); border: 1px solid var(--border-main); border-radius: 16px; width: 90%; max-width: 480px; box-shadow: var(--shadow-xl); overflow: hidden; animation: popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);">
+        <div style="background: var(--bg-surface); border: 1px solid var(--border-main); border-radius: 16px; width: 90%; max-width: 500px; box-shadow: var(--shadow-xl); overflow: hidden; animation: popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);">
             <div style="padding: 16px 20px; border-bottom: 1px solid var(--border-main); display: flex; justify-content: space-between; align-items: center;">
                 <div style="font-size: 1.05rem; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
-                    <span>📢 官方交流群 & 新版功能通知</span>
+                    <span>官方交流群 & 新版功能通知</span>
                 </div>
                 <button type="button" onclick="closeCommunityModal()" style="background: none; border: none; font-size: 1.4rem; color: var(--text-muted); cursor: pointer; line-height: 1;">&times;</button>
             </div>
@@ -1753,30 +1753,57 @@
                 </div>
                 <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; margin-bottom: 14px; text-align: left; background: var(--bg-subtle); padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-main);">
                     专为知识创作者与研究者打造，现已支持微信公众号、知乎、微博、新浪博客、简书、CSDN、51CTO、掘金、博客园 9 大平台博文一键批量提取、排版与离线电子书归档。<br><br>
-                    <b style="color:var(--accent-emerald);">📢 进群与技术支持：</b>欢迎微信扫码关注官方公众号【<b>艺杯羹</b>】，或添加作者微信 <code style="font-weight:700; color:var(--accent-emerald);">peace-83</code> 备注【进群】，第一时间交流心得与获取最新功能！
+                    <b style="color:var(--accent-emerald);">进群与技术支持：</b>欢迎直接扫描下方群二维码加入交流群，或关注官方公众号【<b>艺杯羹</b>】回复「文章」免费领激活口令！（若群码过期可添加作者微信 <code style="font-weight:700; color:var(--accent-emerald);">peace-83</code> 备注进群）
                 </p>
 
-                <!-- 二维码 -->
-                <div style="background: var(--bg-subtle); padding: 12px; border-radius: 12px; border: 1px solid var(--border-main); margin-bottom: 14px;">
-                    <img src="/assets/wechat_qr.png" alt="微信公众号" onclick="openImageLightbox('/assets/wechat_qr.png', '微信公众号【艺杯羹】')" title="点击放大查看" style="width: 100%; max-width: 220px; height: auto; border-radius: 6px; border: 1px solid var(--border-main); display: block; margin: 0 auto 6px; cursor: zoom-in;">
-                    <div style="font-size: 0.78rem; font-weight: 700; color: var(--accent-emerald);">
-                        微信扫码关注【艺杯羹】· 扫码回复「文章」领口令
+                <!-- 公众号二维码 + 微信群二维码（双入口并排引导） -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+                    <!-- 左侧：微信群二维码 -->
+                    <div onclick="openImageLightbox('/assets/wechat_group_qr.png?v=20260929', '博萃·文章导出交流群 · 扫码进群')" title="点击放大查看" style="background: var(--bg-subtle); border: 1px solid var(--border-main); border-radius: 10px; padding: 12px 8px 10px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 195px; text-align: center; cursor: pointer; transition: all 0.2s ease;">
+                        <div style="flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; margin-bottom: 8px;">
+                            <img src="/assets/wechat_group_qr.png?v=20260929" onerror="if(!this.dataset.fallback){this.dataset.fallback=1;this.src='assets/wechat_group_qr.png?v=20260929';}" alt="博萃·文章导出交流群" style="max-width: 100%; max-height: 125px; border-radius: 6px; border: 1px solid var(--border-main); box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                        </div>
+                        <div>
+                            <div style="font-size: 0.78rem; font-weight: 700; color: var(--accent-emerald); margin-bottom: 3px;">博萃·文章导出交流群</div>
+                            <div style="font-size: 0.68rem; color: var(--text-muted);">扫码一键入群 · 交流使用心得</div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧：公众号二维码 -->
+                    <div onclick="openImageLightbox('/assets/wechat_qr.png', '微信公众号【艺杯羹】· 扫码回复「文章」领口令')" title="点击放大查看" style="background: var(--bg-subtle); border: 1px solid var(--border-main); border-radius: 10px; padding: 12px 8px 10px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; height: 195px; text-align: center; cursor: pointer; transition: all 0.2s ease;">
+                        <div style="flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; margin-bottom: 8px;">
+                            <img src="/assets/wechat_qr.png" onerror="if(!this.dataset.fallback){this.dataset.fallback=1;this.src='assets/wechat_qr.png';}" alt="微信公众号【艺杯羹】" style="max-width: 100%; max-height: 125px; border-radius: 6px; border: 1px solid var(--border-main); box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                        </div>
+                        <div>
+                            <div style="font-size: 0.78rem; font-weight: 700; color: var(--accent-emerald); margin-bottom: 3px;">微信公众号【艺杯羹】</div>
+                            <div style="font-size: 0.68rem; color: var(--text-muted);">扫码回复「文章」领激活口令</div>
+                        </div>
                     </div>
                 </div>
 
-                <div style="display: flex; gap: 8px; justify-content: center;">
-                    <button type="button" onclick="copyText('艺杯羹', '公众号名称'); closeCommunityModal();" style="height: 38px; font-size: 0.85rem; padding: 0 16px; background: var(--accent-emerald); color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer;">
-                        📋 复制公众号名称 (艺杯羹)
+                <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                    <button type="button" onclick="copyText('艺杯羹', '公众号名称');" style="height: 38px; font-size: 0.82rem; padding: 0 14px; background: var(--accent-emerald); color: white; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; white-space: nowrap;">
+                        复制公众号名称 (艺杯羹)
                     </button>
-                    <button type="button" onclick="closeCommunityModal()" style="height: 38px; font-size: 0.85rem; padding: 0 14px; background: var(--bg-subtle); color: var(--text-primary); border: 1px solid var(--border-main); border-radius: 8px; font-weight: 600; cursor: pointer;">
+                    <button type="button" onclick="copyText('peace-83', '作者微信');" style="height: 38px; font-size: 0.82rem; padding: 0 14px; background: var(--bg-subtle); color: var(--text-primary); border: 1px solid var(--border-main); border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap;">
+                        复制作者微信 (peace-83)
+                    </button>
+                    <button type="button" onclick="closeCommunityModal()" style="height: 38px; font-size: 0.82rem; padding: 0 14px; background: var(--bg-subtle); color: var(--text-muted); border: 1px solid var(--border-main); border-radius: 8px; font-weight: 600; cursor: pointer; white-space: nowrap;">
                         我知道了
                     </button>
                 </div>
                 <div id="communityModalCountTip" style="font-size: 0.72rem; color: var(--text-muted); margin-top: 10px;">
-                    💡 提示：本通知每日仅提醒 1 次（今日已提醒）
+                    提示：本通知每日仅提醒 1 次（今日已提醒）
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- 图片大图放大预览 Lightbox Modal -->
+    <div id="imageLightboxModal" class="modal-overlay" onclick="this.style.display='none'" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999999; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); align-items: center; justify-content: center; flex-direction: column; cursor: zoom-out;">
+        <img id="lightboxImg" src="" alt="放大预览" style="max-width: 90vw; max-height: 80vh; border-radius: 12px; box-shadow: 0 20px 48px rgba(0,0,0,0.6); border: 2px solid rgba(255,255,255,0.2);">
+        <div id="lightboxCaption" style="color: #fff; font-size: 0.95rem; font-weight: 700; margin-top: 14px; letter-spacing: 0.5px;"></div>
+        <div style="color: rgba(255,255,255,0.6); font-size: 0.75rem; margin-top: 6px;">点击任意空白处关闭</div>
     </div>
 
     <!-- 全局 Toast 提示条 (置顶居中浮动、绝不遮挡、最高层级) -->
@@ -1855,7 +1882,7 @@
                 if (count < 1) {
                     const tip = document.getElementById('communityModalCountTip');
                     if (tip) {
-                        tip.innerText = `💡 提示：本交流通知每日仅提醒 1 次（今日已提醒）`;
+                        tip.innerText = `提示：本交流通知每日仅提醒 1 次（今日已提醒）`;
                     }
                     setTimeout(() => {
                         const modal = document.getElementById('communityModal');
