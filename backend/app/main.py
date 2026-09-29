@@ -7,7 +7,7 @@ import uuid
 import time
 import asyncio
 import shutil
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 if sys.platform == "win32":
     try:
@@ -33,6 +33,7 @@ import zipfile
 from app.config import OUTPUT_DIR, BASE_DIR
 from app.models import TaskCreateRequest, TaskProgress, TaskStatusEnum
 from app.task_manager import task_manager
+from app.scrapers.custom_urls import dedupe_wechat_title
 from app.community_wall import (
     list_contributors,
     add_contributor,
@@ -102,6 +103,60 @@ async def health_check():
         "client_mode": True,
         "version": "1.0.0"
     }
+
+
+# ===== 客户端本地设置持久化（桌面版防丢保险） =====
+# 背景：桌面版的关键用户设置（默认保存文件夹、表单配置、授权码）此前只存浏览器
+# localStorage，遇到端口漂移（origin 变了存储隔离）或 Chromium leveldb 在快速
+# 关闭-重启竞争下重建时，设置会"凭空丢失"。这里提供文件级 KV 兜底：
+# 数据落在 data/client_settings.json，与浏览器、端口完全解耦，重启永不丢。
+_CLIENT_SETTINGS_FILE = BASE_DIR / "data" / "client_settings.json"
+# 允许持久化的键白名单（防止任意键写入撑爆文件）
+_CLIENT_SETTING_KEYS = {
+    "blogdistiller_default_save_dir",
+    "blogdistiller_form_config",
+    "ybg_license_code",
+}
+_CLIENT_SETTING_VALUE_LIMIT = 64 * 1024  # 单键最大 64KB，足够表单 JSON，防异常写入
+
+@app.get("/api/client/settings")
+async def get_client_settings():
+    """读取客户端持久化设置 (键值对，值均为字符串)"""
+    if _CLIENT_SETTINGS_FILE.exists():
+        try:
+            data = json.loads(_CLIENT_SETTINGS_FILE.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            pass
+    return {}
+
+@app.post("/api/client/settings")
+async def set_client_settings(payload: Dict[str, Any] = Body(...)):
+    """合并写入客户端持久化设置 (仅白名单键；新值覆盖旧值，其他键保留)"""
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="payload 必须是键值对象")
+    # 读取现有设置（损坏时视为空，重建）
+    data: Dict[str, Any] = {}
+    if _CLIENT_SETTINGS_FILE.exists():
+        try:
+            loaded = json.loads(_CLIENT_SETTINGS_FILE.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                data = loaded
+        except Exception:
+            data = {}
+    # 只接受白名单键 + 值必须是字符串 + 限长，全部丢弃非法项
+    for k, v in (payload or {}).items():
+        if k in _CLIENT_SETTING_KEYS and isinstance(v, str) and len(v) <= _CLIENT_SETTING_VALUE_LIMIT:
+            data[k] = v
+    try:
+        _CLIENT_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _CLIENT_SETTINGS_FILE.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"设置写入失败: {e}")
+    return {"ok": True, "keys": list(data.keys())}
 
 @app.get("/api/platforms")
 async def get_supported_platforms():
@@ -240,6 +295,11 @@ async def _do_extract_links(request: ExtractLinksRequest, job_id: Optional[str] 
     try:
         author_info = await scraper.get_author_info()
         articles = await scraper.get_article_list(progress_callback=extract_progress_cb)
+        # 统一出口清洗：不管哪条通道（直链/专辑/正文解析）产出的标题都在这里去重，
+        # 防止个别通道（如微信合集页 DOM）输出「标题 标题」双份文本
+        for _art in articles:
+            if _art.get("title"):
+                _art["title"] = dedupe_wechat_title(_art["title"])
         return {
             "success": True,
             "platform": request.platform,
@@ -1491,6 +1551,61 @@ async def download_client_win7():
         if exes:
             return FileResponse(exes[0], filename="BlogDistiller-Win7-Setup-x64.exe", media_type="application/octet-stream")
     raise HTTPException(status_code=404, detail="Win7 兼容版安装包正在打包中，敬请期待")
+
+
+# =========================================================================
+# 客户端热更新接口（桌面客户端启动时自动同步 backend/frontend 差异文件）
+# =========================================================================
+# 白名单必须与客户端 desktop/main.js 的 hotfixAllowed()、清单生成器
+# scratch/hotfix_manifest.py 三方保持一致，新增可热更目录时同步改三处。
+
+# 热更允许的目录前缀（相对 BASE_DIR）；run.py 单独放行
+_HOTFIX_ALLOWED_PREFIXES = ("frontend/", "backend/")
+_HOTFIX_STANDALONE_FILES = ("run.py",)
+
+
+def _safe_hotfix_path(rel: str):
+    """校验热更请求的相对路径，防止目录穿越；合法返回绝对 Path，非法返回 None"""
+    if not rel or "\\" in rel:
+        return None
+    p = PurePosixPath(rel)
+    if p.is_absolute() or ".." in p.parts:
+        return None
+    rel_posix = str(p)
+    if rel_posix in _HOTFIX_STANDALONE_FILES:
+        target = BASE_DIR / rel_posix
+    elif rel_posix.startswith(_HOTFIX_ALLOWED_PREFIXES):
+        # 排除编译缓存与字节码（客户端不需要，也避免无谓下载）
+        if "__pycache__" in p.parts or rel_posix.endswith(".pyc"):
+            return None
+        target = BASE_DIR / rel_posix
+    else:
+        return None
+    if not target.is_file():
+        return None
+    return target
+
+
+@app.get("/api/client/hotfix/manifest")
+async def get_hotfix_manifest():
+    """客户端热更新清单：记录每个可热更文件的 sha256 指纹，客户端启动时比对差异"""
+    manifest_file = BASE_DIR / "hotfix" / "manifest.json"
+    if not manifest_file.is_file():
+        raise HTTPException(status_code=404, detail="暂无热更新清单（服务端尚未生成）")
+    return FileResponse(
+        str(manifest_file),
+        media_type="application/json",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.get("/api/client/hotfix/file")
+async def get_hotfix_file(path: str = Query(..., description="清单内的相对路径，如 frontend/app.html")):
+    """按清单路径下发单个热更文件（白名单校验，防目录穿越）"""
+    target = _safe_hotfix_path(path)
+    if target is None:
+        raise HTTPException(status_code=404, detail="文件不在热更白名单内或不存在")
+    return FileResponse(str(target), headers={"Cache-Control": "no-cache"})
 
 
 # 明确路由

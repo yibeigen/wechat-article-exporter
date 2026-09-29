@@ -95,6 +95,12 @@ def clean_html_content(raw_html: str, enable_noise_filter: bool = True, remove_w
             for attr in list(img.attrs):
                 if attr not in ["src", "alt", "title", "width", "height"]:
                     del img[attr]
+            # 微信编辑器的缺陷会把 JS 的 null 字面量写进 title 属性 (title="null")，
+            # markdownify 会将其转成 Markdown 的 title 语法 ![alt](url "null")，
+            # 导致下游 Word 导出器的图片识别正则匹配失败、图片退化为纯文本链接。
+            # 这里把这类无效 title 直接剥掉，保证输出干净的 ![alt](url) 图片语法。
+            if (img.get("title") or "").strip().lower() == "null":
+                del img["title"]
         else:
             img.decompose()
 

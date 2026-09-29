@@ -52,33 +52,66 @@ async def check_weibo_auth_status() -> Dict[str, Any]:
             "username": None
         }
         
+    # 探测接口选型说明（2026-09-29 实测结论）：
+    # 旧方案 weibo.com/ajax/profile/info 已不可用——微博对该接口做了非浏览器
+    # TLS 指纹拦截，httpx 无论带什么请求头都固定返回 400，导致旧代码长期
+    # 走“兜底假已连接”、用户看到假昵称“微博用户”。
+    # 新方案改用 m.weibo.cn/api/config：与实际抓取走完全相同的通道，
+    # 实测带 Cookie 返回 login=true、不带 Cookie 返回 login=false，
+    # 能精确区分“登录态有效 / 已失效”，状态显示与真实抓取能力永远一致。
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
         "Cookie": cookie_str,
-        "Referer": "https://weibo.com"
+        "Referer": "https://m.weibo.cn/",
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept": "application/json, text/plain, */*"
     }
-    
+
     try:
-        async with httpx.AsyncClient(timeout=8.0, follow_redirects=False) as client:
-            resp = await client.get("https://weibo.com/ajax/profile/info", headers=headers)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get("https://m.weibo.cn/api/config", headers=headers)
             if resp.status_code == 200:
-                data = resp.json()
-                user = data.get("data", {}).get("user", {})
+                data = resp.json().get("data", {}) or {}
+                if data.get("login"):
+                    # login=true → 登录态确凿有效
+                    # 顺手用返回的 uid 再查一次昵称，让界面显示真实账号名
+                    # （昵称查询失败不影响“已连接”的判定）
+                    username = "已登录用户"
+                    uid = str(data.get("uid") or "")
+                    if uid:
+                        try:
+                            r2 = await client.get(
+                                f"https://m.weibo.cn/api/container/getIndex?type=uid&value={uid}",
+                                headers=headers
+                            )
+                            user_info = r2.json().get("data", {}).get("userInfo", {}) or {}
+                            username = user_info.get("screen_name") or username
+                        except Exception:
+                            pass
+                    return {
+                        "authenticated": True,
+                        "message": "微博登录态有效",
+                        "username": username
+                    }
+                # login=false：Cookie 已被微博判定为未登录（过期/被踢）
                 return {
-                    "authenticated": True,
-                    "message": "微博登录态有效",
-                    "username": user.get("screen_name", "已登录用户"),
-                    "avatar": user.get("avatar_hd", "")
+                    "authenticated": False,
+                    "message": "微博登录态已失效，请点击【一键同步本机浏览器】或【官方扫码登录】重新连接",
+                    "username": None
                 }
+            # 非 200：探测通道异常，如实报告，绝不假装已连接
+            return {
+                "authenticated": False,
+                "message": f"微博状态探测异常 (HTTP {resp.status_code})，请点击刷新按钮重新检测",
+                "username": None
+            }
     except Exception:
-        pass
-        
-    # 如果接口返回异常但存在 SUB 键
-    return {
-        "authenticated": True,
-        "message": "已检测到微博 SUB 凭证",
-        "username": "微博用户"
-    }
+        # 网络异常导致探测失败：如实报告“未验证”，避免界面与抓取结果互相矛盾
+        return {
+            "authenticated": False,
+            "message": "微博状态探测失败（网络异常），请点击刷新按钮重新检测",
+            "username": None
+        }
 
 # ==============================================================================
 # 同步本机 Edge/Chrome 浏览器的微博 Cookie
@@ -100,7 +133,8 @@ async def sync_local_weibo_cookies() -> Dict[str, Any]:
     
     extracted_cookies = {}
     found_browser = ""
-    
+    db_locked = False  # 标记是否因浏览器正在运行导致 Cookie 数据库被锁（用于最后给出可操作的提示）
+
     for browser_name, user_data_dir in browser_dirs:
         local_state_path = user_data_dir / "Local State"
         cookie_db_path = user_data_dir / "Default" / "Network" / "Cookies"
@@ -118,7 +152,10 @@ async def sync_local_weibo_cookies() -> Dict[str, Any]:
             try:
                 shutil.copy2(cookie_db_path, temp_db)
             except Exception:
-                pass
+                # 新版 Edge/Chrome 运行时会独占锁定 Cookies 数据库（官方防窃取机制），
+                # 浏览器开着时复制必然失败。这里记下原因，最后给用户可操作的提示，
+                # 而不是弹一个让人摸不着头脑的笼统报错
+                db_locked = True
                 
             if not temp_db.exists():
                 continue
@@ -174,6 +211,15 @@ async def sync_local_weibo_cookies() -> Dict[str, Any]:
             "user_info": {"authenticated": False}
         }
     else:
+        # 失败提示要分清两种原因：数据库被浏览器锁住 vs 浏览器里根本没登录微博
+        if db_locked:
+            return {
+                "success": False,
+                "message": "Edge / Chrome 正在运行，新版浏览器会锁死 Cookie 数据库导致无法读取。\n\n"
+                           "解决办法（二选一）：\n"
+                           "1. 完全退出所有浏览器窗口（含托盘后台进程）后，再点【一键同步本机浏览器】；\n"
+                           "2. 直接点【官方扫码登录】扫码授权，无需关闭浏览器。"
+            }
         return {
             "success": False,
             "message": "未能直接从本机 Edge / Chrome 读取到微博登录态。\n建议点击【官方扫码登录】扫码授权，或在已登录微博的浏览器按 F12 复制 Cookie 手动填入。"

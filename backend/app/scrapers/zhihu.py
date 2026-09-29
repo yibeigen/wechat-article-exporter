@@ -604,53 +604,6 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
 
     return all_articles, warnings, declared_total
 
-def _scrape_detail_sync(url: str, cookies: Optional[Dict[str, str]]) -> Dict[str, str]:
-    """在工作线程中同步获取单篇文章正文与标题"""
-    import time
-    from playwright.sync_api import sync_playwright
-    
-    res = {"title": "", "html": ""}
-    try:
-        with sync_playwright() as p:
-            try:
-                browser = p.chromium.launch(channel="msedge", headless=True, args=['--disable-blink-features=AutomationControlled'])
-            except Exception:
-                browser = p.chromium.launch(headless=True, args=['--disable-blink-features=AutomationControlled'])
-            
-            context = browser.new_context(
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0'
-            )
-            if cookies:
-                cookie_objs = [{"name": k, "value": v, "domain": ".zhihu.com", "path": "/"} for k, v in cookies.items()]
-                context.add_cookies(cookie_objs)
-            else:
-                context.add_cookies([
-                    {"name": "d_c0", "value": "AGCYyO_uBxqPTv1-XpL4_4h3f8s9a0b1c2d=", "domain": ".zhihu.com", "path": "/"}
-                ])
-            
-            page = context.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=20000)
-            time.sleep(1.5)
-            
-            extracted = page.evaluate('''() => {
-                const titleEl = document.querySelector('h1.Post-Title, .QuestionHeader-title, h1');
-                const richEl = document.querySelector('.Post-RichText, .RichContent-inner, .RichText, .css-79elbk');
-                return {
-                    title: titleEl ? titleEl.innerText.trim() : '',
-                    html: richEl ? richEl.innerHTML : ''
-                };
-            }''')
-            
-            if extracted:
-                res["title"] = extracted.get("title", "")
-                res["html"] = extracted.get("html", "")
-                
-            browser.close()
-    except Exception as e:
-        print(f"详情同步抓取异常: {e}")
-        
-    return res
-
 class ZhihuScraper(BaseScraper):
     """知乎全维度博主内容抓取器 (支持专栏/个人主页/单篇内容溯源全量抓取)"""
     
@@ -658,6 +611,13 @@ class ZhihuScraper(BaseScraper):
         super().__init__(target, enable_noise_filter=enable_noise_filter, max_articles=max_articles, remove_image_watermark=remove_image_watermark)
         self.cookies = get_saved_zhihu_cookies()
         self.author_info_cache = {}
+        # ===== 详情抓取的浏览器复用（性能优化）=====
+        # 旧实现每篇文章都冷启动一个完整 Chromium（约 2~3 秒/篇），几百篇的任务白白浪费十几分钟。
+        # 新实现：首次抓取时在专用单线程内创建一次浏览器，之后逐篇复用同一个 page；
+        # Playwright sync API 对象必须固定在创建它的线程里使用，因此用 max_workers=1
+        # 的线程池保证所有详情抓取都跑在同一个线程上（任务本身也是串行 await，无并发冲突）。
+        self._detail_pool = None    # 惰性创建的单线程执行器
+        self._shared = None         # {"pw", "browser", "page"}，仅能在该执行器线程内访问
 
     def _is_direct_article_url(self) -> bool:
         return bool(re.search(r"zhuanlan\.zhihu\.com/p/\d+|zhihu\.com/question/\d+/answer/\d+|zhihu\.com/p/\d+", self.target))
@@ -687,6 +647,91 @@ class ZhihuScraper(BaseScraper):
     async def _resolve_author_from_single_content(self, url: str) -> Optional[Dict[str, str]]:
         """从单篇知乎文章或回答中，逆向溯源提取文章作者的 url_token 和昵称（线程隔离，防 Windows 异步冲突）"""
         return await asyncio.to_thread(_resolve_author_sync, url, self.cookies)
+
+    # ==============================================================
+    # 详情抓取：复用浏览器的实现（性能优化核心）
+    # 旧实现每篇都 `sync_playwright()` 冷启动完整 Chromium 再销毁（约 2~3 秒/篇），
+    # 几百篇的任务累计浪费十几分钟。新实现只在首篇创建一次浏览器，
+    # 之后每篇仅复用同一个 page 做 goto + 提取（防风控的 1.5 秒等待保留不变）。
+    # ==============================================================
+
+    def _scrape_detail_shared(self, url: str) -> Dict[str, str]:
+        """在专用单线程内用复用的浏览器页面抓取单篇正文与标题。
+        首次调用时惰性创建浏览器；本方法只允许在 _detail_pool 线程内执行。"""
+        import time
+        from playwright.sync_api import sync_playwright
+
+        res = {"title": "", "html": ""}
+        try:
+            # 首篇：创建一次浏览器运行时并注入登录态（后续所有篇目直接复用）
+            if self._shared is None:
+                pw = sync_playwright().start()
+                try:
+                    browser = pw.chromium.launch(channel="msedge", headless=True, args=['--disable-blink-features=AutomationControlled'])
+                except Exception:
+                    browser = pw.chromium.launch(headless=True, args=['--disable-blink-features=AutomationControlled'])
+
+                context = browser.new_context(
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0'
+                )
+                if self.cookies:
+                    cookie_objs = [{"name": k, "value": v, "domain": ".zhihu.com", "path": "/"} for k, v in self.cookies.items()]
+                    context.add_cookies(cookie_objs)
+                else:
+                    context.add_cookies([
+                        {"name": "d_c0", "value": "AGCYyO_uBxqPTv1-XpL4_4h3f8s9a0b1c2d=", "domain": ".zhihu.com", "path": "/"}
+                    ])
+                self._shared = {"pw": pw, "browser": browser, "page": context.new_page()}
+
+            page = self._shared["page"]
+            page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            time.sleep(1.5)  # 防风控拟人化等待，保持与旧版一致不压缩
+
+            extracted = page.evaluate('''() => {
+                const titleEl = document.querySelector('h1.Post-Title, .QuestionHeader-title, h1');
+                const richEl = document.querySelector('.Post-RichText, .RichContent-inner, .RichText, .css-79elbk');
+                return {
+                    title: titleEl ? titleEl.innerText.trim() : '',
+                    html: richEl ? richEl.innerHTML : ''
+                };
+            }''')
+
+            if extracted:
+                res["title"] = extracted.get("title", "")
+                res["html"] = extracted.get("html", "")
+        except Exception as e:
+            print(f"详情抓取异常（浏览器复用模式）: {e}")
+
+        return res
+
+    async def _scrape_detail_async(self, url: str) -> Dict[str, str]:
+        """把详情抓取提交到专用单线程执行器（保证 Playwright 对象始终在同一线程使用）"""
+        from concurrent.futures import ThreadPoolExecutor
+        if self._detail_pool is None:
+            self._detail_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="zhihu-detail")
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self._detail_pool, self._scrape_detail_shared, url)
+
+    async def close(self):
+        """任务结束清理：先在专用线程内关闭复用的浏览器，再关闭 HTTP 客户端"""
+        if self._detail_pool is not None:
+            pool, shared = self._detail_pool, self._shared
+            self._detail_pool, self._shared = None, None
+
+            def _cleanup_browser():
+                try:
+                    if shared:
+                        shared["browser"].close()
+                        shared["pw"].stop()
+                except Exception as e:
+                    print(f"知乎复用浏览器清理异常: {e}")
+
+            try:
+                pool.submit(_cleanup_browser).result(timeout=15)
+            except Exception:
+                pass
+            pool.shutdown(wait=False)
+        await super().close()
 
     async def get_author_info(self) -> Dict[str, Any]:
         """获取目标博主或专栏的元数据信息"""
@@ -844,9 +889,9 @@ class ZhihuScraper(BaseScraper):
         content_type = article_meta.get("content_type") or ("answer" if re.search(r"zhihu\.com/question/\d+/answer/\d+", url) else "article")
         column_title = article_meta.get("column_title")
 
-        # 如果列表未直接提供正文，使用 Playwright 同步引擎抓取详情
+        # 如果列表未直接提供正文，使用复用浏览器抓取详情（避免逐篇冷启动 Chromium）
         if not raw_html or len(raw_html.strip()) < 10:
-            extracted = await asyncio.to_thread(_scrape_detail_sync, url, self.cookies)
+            extracted = await self._scrape_detail_async(url)
             if extracted.get("title"):
                 title = extracted["title"]
             if extracted.get("html"):

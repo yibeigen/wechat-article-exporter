@@ -310,8 +310,9 @@ def collect_articles_image_urls(articles: List[ArticleItem]) -> Set[str]:
                     if val and val.startswith("http"):
                         all_img_urls.add(val)
         # Markdown 正文里也可能直接带图片链接，一并收集保证 DOCX/Word 不遗漏
+        # (兼容带 "title" 的图片语法，如微信残留的 ![](url "null")，防止收集端漏抓)
         if art.content_markdown:
-            for m in re.findall(r'!\[.*?\]\((https?://[^\s\)]+)\)', art.content_markdown):
+            for m in re.findall(r'!\[[^\]]*\]\(\s*(https?://[^\s\)"]+)', art.content_markdown):
                 if m.startswith("http"):
                     all_img_urls.add(m)
     return all_img_urls

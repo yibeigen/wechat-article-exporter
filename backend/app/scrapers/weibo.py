@@ -106,27 +106,54 @@ class WeiboScraper(BaseScraper):
                     created_at = mblog.get("created_at", "")
                     retweeted_status = mblog.get("retweeted_status")
                     
-                    # 优先提取长文/头条标题，或截取博文内容作为标题
+                    # ---------- 标题提取策略（2026-09-29 与用户对齐）----------
+                    # 微博分两类：头条文章有真标题；普通博文没有标题。
+                    # 旧逻辑无条件优先取 page_info.page_title（卡片标题），
+                    # 会产出“【超话】随笔”“xx的微博视频”这类噪音标题。
+                    # 新策略：
+                    #   1) 头条文章卡（type 含 article）→ 用作者起的真标题
+                    #   2) 普通博文 → 用正文第一行（即“取第一句”，最能代表内容）
+                    #   3) 正文为空（纯视频/纯图/超话打卡）→ 才退回卡片标题兜底
                     page_info = mblog.get("page_info", {})
-                    title = page_info.get("page_title")
-                    if not title:
-                        clean_preview = re.sub(r"<[^>]+>", "", raw_text).strip()
-                        # 如果是转发微博，提取更具辨识度的标题（原博作者及原博内容摘要）
-                        if retweeted_status and isinstance(retweeted_status, dict):
-                            retweet_user = retweeted_status.get("user", {}).get("screen_name", "原博主")
-                            retweet_page_title = retweeted_status.get("page_info", {}).get("page_title")
-                            retweet_text = retweeted_status.get("raw_text") or retweeted_status.get("text", "")
-                            retweet_clean = re.sub(r"<[^>]+>", "", retweet_text).strip()
-                            
-                            if retweet_page_title:
-                                title = f"转发@{retweet_user}: {retweet_page_title}"
-                            elif clean_preview and clean_preview != "转发微博":
-                                title = f"{clean_preview} // 转发@{retweet_user}: {retweet_clean[:22]}"
-                            else:
-                                title = f"转发@{retweet_user}: {retweet_clean[:25]}"
+                    page_title = str(page_info.get("page_title") or "")
+                    page_type = str(page_info.get("type") or "")
+
+                    # <br> 先转成真实换行再剥其余标签，否则多行正文会被拼成一行，
+                    # “第一句”就变成了“第一段全文”
+                    clean_preview = re.sub(r"<br\s*/?>", "\n", raw_text)
+                    clean_preview = re.sub(r"<[^>]+>", "", clean_preview).strip()
+                    # 取正文第一个非空行作为“第一句”（微博正文常用换行分段）
+                    first_line = ""
+                    for _ln in clean_preview.splitlines():
+                        if _ln.strip():
+                            first_line = _ln.strip()
+                            break
+
+                    if retweeted_status and isinstance(retweeted_status, dict):
+                        # 转发微博：保留“原博作者+摘要”的高辨识度格式
+                        retweet_user = retweeted_status.get("user", {}).get("screen_name", "原博主")
+                        retweet_page_title = retweeted_status.get("page_info", {}).get("page_title")
+                        retweet_text = retweeted_status.get("raw_text") or retweeted_status.get("text", "")
+                        retweet_clean = re.sub(r"<[^>]+>", "", retweet_text).strip()
+
+                        if retweet_page_title:
+                            title = f"转发@{retweet_user}: {retweet_page_title}"
+                        elif first_line and first_line != "转发微博":
+                            title = f"{first_line} // 转发@{retweet_user}: {retweet_clean[:22]}"
                         else:
-                            title = (clean_preview[:35] + "...") if len(clean_preview) > 35 else (clean_preview or f"微博_{bid}")
-                        
+                            title = f"转发@{retweet_user}: {retweet_clean[:25]}"
+                    elif "article" in page_type and page_title:
+                        # 头条文章：page_title 是作者自己起的标题，优先使用
+                        title = page_title
+                    elif first_line:
+                        # 普通博文：正文第一行（第一句）做标题
+                        title = first_line
+                    elif page_title:
+                        # 无正文的博文（纯视频/纯图/超话签到）：退回卡片标题
+                        title = page_title
+                    else:
+                        title = f"微博_{bid}"
+
                     if len(title) > 40:
                         title = title[:38] + "..."
                         

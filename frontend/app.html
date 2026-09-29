@@ -746,6 +746,27 @@
             opacity: 0.75;
             font-size: 0.88rem;
         }
+        .wechat-mode-tab {
+            height: 32px;
+            padding: 0 14px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            border-radius: 8px;
+            border: 1.5px solid var(--border-main);
+            background: var(--bg-surface);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .wechat-mode-tab:hover {
+            border-color: var(--accent-emerald);
+            color: var(--accent-emerald);
+        }
+        .wechat-mode-tab.active {
+            background: var(--accent-emerald);
+            border-color: var(--accent-emerald);
+            color: #ffffff;
+        }
         .single-input {
             width: 100%;
             height: 46px;
@@ -1264,8 +1285,12 @@
             <a href="/" class="nav-brand">
                 <img src="/assets/logo_icon.svg" alt="Logo" style="width: 28px; height: 28px; border-radius: 8px; vertical-align: middle; box-shadow: 0 2px 8px rgba(14, 165, 233, 0.35);">
                 <span>文章批量导出助手</span>
-                <span class="nav-badge-hide-md" style="font-size: 0.68rem; padding: 2px 6px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-emerald); font-weight: 700; border: 1px solid var(--border-main);">纯净无广告</span>
             </a>
+            <!-- 「纯净无广告」与版本徽标都必须放在 Logo 链接 <a> 外面！
+                 放在里面点击会触发 Logo 的 href="/" 跳转首页（桌面版里会突然离开工作台，体验很怪）。
+                 纯净无广告是纯展示标签；版本徽标由 main.js 注入参数，点击打开「关于作者」弹窗。 -->
+            <span class="nav-badge-hide-md" style="font-size: 0.68rem; padding: 2px 6px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-emerald); font-weight: 700; border: 1px solid var(--border-main); cursor: default;">纯净无广告</span>
+            <span id="appVersionBadge" onclick="openAuthorModal()" style="display:none; cursor: pointer; font-size: 0.66rem; padding: 2px 7px; border-radius: 999px; background: var(--bg-subtle); color: var(--text-secondary); font-weight: 700; border: 1px solid var(--border-main); margin-left: 6px;" title="当前客户端版本号，点击查看更新日志"></span>
         </div>
         <div class="nav-right">
             <!-- 历史记录直达入口 -->
@@ -1319,7 +1344,9 @@
                 </div>
             </div>
             <div class="metric-divider"></div>
-            <div class="metric-item">
+            <!-- 桌面客户端会隐藏本块（见下方 client_mode 判断）：此数字实为「基数200+本机打开次数」的本地计数，
+                 在桌面版标注"官网"字样属于误导，且每次打开都变化观感不佳 -->
+            <div class="metric-item" id="siteVisitsMetric">
                 <div class="metric-content">
                     <span class="metric-label">官网累计服务人次</span>
                     <span class="metric-value"><span id="siteVisitorCount">200</span> 人次</span>
@@ -1378,7 +1405,7 @@
                 <div class="section-title" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-                        <span>2. <span id="targetSectionLabel">输入目标公众号名称 (或指定文章链接)</span></span>
+                        <span>2. <span id="targetSectionLabel">粘贴微信文章链接 (单篇推文 / 合集链接)</span></span>
                     </div>
                     <div style="display: flex; gap: 6px; align-items: center;">
                         <button type="button" class="nav-btn" onclick="pasteClipboardToInput()" style="font-size: 0.76rem; height: 28px; padding: 0 10px; background: var(--bg-subtle); color: var(--text-primary); border-radius: 6px;" title="从系统剪贴板快速粘贴">
@@ -1393,82 +1420,33 @@
                     </div>
                 </div>
 
-                <!-- 微信公众号专属输入与全量客户端下载卡片区域 -->
+                <!-- 微信公众号专属输入区域 -->
                 <div id="wechatInputContainer" style="display: block; margin-bottom: 8px;">
-                    <!-- 模式说明与客户端下载引导 -->
+                    <!-- 模式说明（原"两种导出途径"卡片已精简：全量导出通道与第三方桌面客户端下载均已下线） -->
                     <div id="wechatExtensionGuide" style="margin-bottom: 14px; padding: 16px 18px; background: var(--bg-subtle); border: 1.5px solid var(--accent-emerald); border-radius: 12px; box-shadow: var(--shadow-sm);">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-                            <div style="display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 0.95rem; color: var(--text-primary);">
-                                <svg class="icon icon-sm" viewBox="0 0 24 24" style="color: var(--accent-emerald); flex-shrink: 0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                                <span>微信公众号导出支持方式说明</span>
-                            </div>
-                            <span style="font-size: 0.72rem; padding: 2px 8px; background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); border-radius: 4px; font-weight: 700;">两种导出途径</span>
+                        <div style="display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 0.95rem; color: var(--text-primary); margin-bottom: 8px;">
+                            <svg class="icon icon-sm" viewBox="0 0 24 24" style="color: var(--accent-emerald); flex-shrink: 0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                            <span>微信公众号文章导出说明</span>
                         </div>
                         
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-                            <!-- 方式一：网页端免登录 -->
-                            <div style="background: var(--bg-surface-solid); border: 1px solid var(--border-main); border-radius: 8px; padding: 12px 14px;">
-                                <div style="font-size: 0.84rem; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                                    <span>🌐 方式一：网页端免登录导出</span>
-                                </div>
-                                <div style="font-size: 0.76rem; color: var(--text-secondary); line-height: 1.5;">
-                                    直接在下方输入框粘贴<b>单篇推文链接</b>或<b>专辑/合集专栏链接</b>（支持多行），全自动去噪排版并合并导出为 PDF / Word / MD。
-                                </div>
-                            </div>
-
-                            <!-- 方式二：全量历史文章客户端 -->
-                            <div style="background: var(--bg-surface-solid); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 8px; padding: 12px 14px;">
-                                <div style="font-size: 0.84rem; font-weight: 700; color: var(--accent-gold); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                                    <span>💻 方式二：公众号全量历史文章导出</span>
-                                </div>
-                                <div style="font-size: 0.76rem; color: var(--text-secondary); line-height: 1.5;">
-                                    因全量抓取需突破微信私有通信协议，如需<b>一次性下载该公众号所有历史文章</b>，请使用下方桌面客户端。
-                                </div>
-                            </div>
+                        <!-- 仅保留网页端使用说明：全量导出通道与第三方桌面客户端下载均已下线 -->
+                        <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.55;">
+                            网页端免登录导出：<b>单篇推文</b>逐条粘贴推文链接（回车换行添加多篇），或 <b>合集链接</b>直接粘贴合集/专辑页链接自动获取全部文章，全自动去噪排版并合并导出为 PDF / Word / MD。
                         </div>
 
-                        <!-- 客户端下载卡片 (ZIP 与 EXE) -->
-                        <div style="border-top: 1px dashed var(--border-hover); padding-top: 12px;">
-                            <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
-                                <span>📥 全量导出桌面客户端（Windows 版本下载）：</span>
-                                <a href="https://github.com/yibeigen/wechat-article-exporter/releases" target="_blank" rel="noopener noreferrer" style="font-size: 0.74rem; color: var(--accent-emerald); text-decoration: none; font-weight: 600;">
-                                    🔗 前往 GitHub Releases 仓库发布页 ➔
-                                </a>
-                            </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                                <!-- ZIP 便携版卡片 -->
-                                <a href="https://github.com/yibeigen/wechat-article-exporter/releases" target="_blank" rel="noopener noreferrer" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(6, 182, 212, 0.08)); border: 1.5px solid var(--accent-emerald); border-radius: 8px; text-decoration: none; transition: all 0.2s;" class="download-card">
-                                    <div style="display: flex; align-items: center; gap: 10px;">
-                                        <span style="font-size: 1.6rem;">📦</span>
-                                        <div>
-                                            <div style="font-size: 0.84rem; font-weight: 800; color: var(--text-primary);">Windows 便携免安装版 (.zip)</div>
-                                            <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">解压即用 · 无需配置 · 内置流量嗅探</div>
-                                        </div>
-                                    </div>
-                                    <span style="font-size: 0.76rem; font-weight: 700; color: var(--accent-emerald); background: rgba(16, 185, 129, 0.15); padding: 4px 8px; border-radius: 4px;">GitHub 下载</span>
-                                </a>
-
-                                <!-- EXE 安装版卡片 -->
-                                <a href="https://github.com/yibeigen/wechat-article-exporter/releases" target="_blank" rel="noopener noreferrer" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(99, 102, 241, 0.08)); border: 1.5px solid #3b82f6; border-radius: 8px; text-decoration: none; transition: all 0.2s;" class="download-card">
-                                    <div style="display: flex; align-items: center; gap: 10px;">
-                                        <span style="font-size: 1.6rem;">⚡</span>
-                                        <div>
-                                            <div style="font-size: 0.84rem; font-weight: 800; color: var(--text-primary);">Windows 桌面安装包 (.exe)</div>
-                                            <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">一键安装向导 · 桌面快捷方式</div>
-                                        </div>
-                                    </div>
-                                    <span style="font-size: 0.76rem; font-weight: 700; color: #3b82f6; background: rgba(59, 130, 246, 0.15); padding: 4px 8px; border-radius: 4px;">GitHub 下载</span>
-                                </a>
-                            </div>
-                        </div>
                     </div>
 
                     <!-- 网页端链接输入框行 -->
                     <div id="wechatSearchFormRow" style="position: relative;">
-                        <textarea id="wechatMainInput" class="multi-textarea" style="min-height: 90px;" placeholder="【网页免登录模式】粘贴微信单篇推文链接或专辑/合集链接（支持多条，每行一条）...
+                        <!-- 输入模式切换：单篇推文 / 合集链接 -->
+                        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px;">
+                            <button type="button" id="wechatModeTabSingle" class="wechat-mode-tab active" onclick="switchWechatInputMode('single')">📝 单篇推文链接</button>
+                            <button type="button" id="wechatModeTabAlbum" class="wechat-mode-tab" onclick="switchWechatInputMode('album')">📚 合集链接</button>
+                            <span id="wechatModeHint" style="font-size: 0.74rem; color: var(--text-muted);">粘贴单篇推文链接，每行一条；写一条按回车，可连续添加多篇</span>
+                        </div>
+                        <textarea id="wechatMainInput" class="multi-textarea" style="min-height: 90px;" placeholder="【单篇推文模式】粘贴微信推文链接，每行一条；写一条按回车换行，可连续添加多篇
 示例：
-https://mp.weixin.qq.com/s/xxxxxxxxx
-https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></textarea>
+https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     </div>
                 </div>
 
@@ -1746,6 +1724,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                         <div id="saveDirSettingText" style="margin-top:8px; font-size:0.8rem; color:var(--text-secondary); word-break:break-all;">未设置</div>
                         <div style="display:flex; gap:8px; margin-top:10px;">
                             <button type="button" class="nav-btn" onclick="pickDefaultDirNative()" style="font-size: 0.76rem; height: 28px; padding: 0 12px;">选择文件夹</button>
+                            <button type="button" class="nav-btn openSaveDirBtn" onclick="openDefaultSaveDir()" style="font-size: 0.76rem; height: 28px; padding: 0 12px; display:none;">📂 打开文件夹</button>
                             <button type="button" class="nav-btn" onclick="clearSavedDefaultDirNative()" style="font-size: 0.76rem; height: 28px; padding: 0 12px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);">清除</button>
                         </div>
                     </div>
@@ -1995,6 +1974,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 <span style="font-weight: 700; color: var(--text-primary);">默认保存文件夹：</span>
                 <span id="saveDirBarText" style="word-break: break-all;">未设置</span>
                 <button type="button" class="nav-btn" onclick="pickDefaultDirNative()" style="font-size: 0.76rem; height: 26px; padding: 0 10px; margin-left: 4px;">选择文件夹</button>
+                <button type="button" class="nav-btn openSaveDirBtn" onclick="openDefaultSaveDir()" style="font-size: 0.76rem; height: 26px; padding: 0 10px; display:none;">📂 打开</button>
                 <button type="button" class="nav-btn" onclick="clearSavedDefaultDirNative()" style="font-size: 0.76rem; height: 26px; padding: 0 10px; color: #ef4444; border-color: rgba(239, 68, 68, 0.3);">清除</button>
             </div>
 
@@ -2314,24 +2294,24 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             </div>
             <div class="modal-body" style="padding: 20px 24px;">
                 <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">
-                    公众号名称搜索无需登录后台
+                    网页端免登录导出无需登录公众号后台
                 </div>
                 <p style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.6; margin-bottom: 14px;">
-                    系统现在默认通过<b>搜狗微信搜索 + 微信历史消息翻页接口</b>获取公众号历史文章，不需要你登录微信公众平台，也不需要拥有公众号。
-                    如果你已经登录了公众号后台，系统会把官方接口作为<b>额外兜底</b>，提高成功率。
+                    网页端支持两种免登录导出：<b>单篇推文链接</b>（逐条粘贴）与<b>合集/专辑页链接</b>（自动获取合集中全部文章）。
+                    「公众号名称导出」通道已下线；如需一键导出公众号<b>全部历史文章</b>，请使用桌面客户端。
                 </p>
 
                 <div style="background: var(--bg-subtle); border: 1px solid var(--border-main); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;">
                     <ol style="margin: 0 0 0 18px; padding: 0; font-size: 0.78rem; color: var(--text-secondary); line-height: 1.7;">
-                        <li>直接关闭本弹窗，在输入框输入<b>公众号名称</b>即可搜索。</li>
-                        <li>或粘贴<b>单篇微信文章链接</b> / <b>专辑链接</b>进行导出。</li>
-                        <li>（可选）如需启用官方兜底通道，再安装扩展并登录 <b>mp.weixin.qq.com</b> 后台。</li>
+                        <li>在微信电脑端打开对应推文或合集页，右键复制链接后粘贴到输入框。</li>
+                        <li>选择「单篇推文链接」逐条粘贴（回车换行），或选择「合集链接」直接粘贴合集页地址。</li>
+                        <li>如需导出公众号全部历史文章，请下载下方的 Windows 桌面客户端。</li>
                     </ol>
                 </div>
 
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;">
-                    <a href="https://mp.weixin.qq.com/" target="_blank" rel="noopener noreferrer" class="btn-confirm" style="flex: 1; min-width: 140px; text-align: center; text-decoration: none; height: 42px; display: flex; align-items: center; justify-content: center;" onclick="closeWechatAuthModal()">
-                        去登录公众号后台
+                    <a href="https://github.com/yibeigen/wechat-article-exporter/releases" target="_blank" rel="noopener noreferrer" class="btn-confirm" style="flex: 1; min-width: 140px; text-align: center; text-decoration: none; height: 42px; display: flex; align-items: center; justify-content: center;" onclick="closeWechatAuthModal()">
+                        📥 下载桌面客户端
                     </a>
                     <button type="button" class="btn-confirm" style="flex: 1; min-width: 140px; height: 42px; background: var(--bg-subtle); color: var(--text-primary); border-color: var(--border-main);" onclick="refreshWechatAuthStatus()">
                         🔄 检测后台凭证
@@ -2339,11 +2319,11 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 </div>
 
                 <div id="wechatAuthModalStatus" style="font-size: 0.76rem; color: var(--text-muted); text-align: center; margin-bottom: 8px;">
-                    不登录后台也可正常使用名称搜索。
+                    单篇推文与合集链接导出无需任何登录凭证。
                 </div>
 
                 <div style="font-size: 0.74rem; color: var(--text-muted); background: var(--accent-subtle); padding: 8px 12px; border-radius: 6px; line-height: 1.5;">
-                    💡 <b>提示：</b>微信历史消息接口能拿到的是公众号对外公开的全部群发文章；被作者删除、设为私密或未群发的文章无法获取。
+                    💡 <b>提示：</b>合集链接可获取合集中对外公开的全部群发文章；被作者删除或设为私密的推文无法获取。
                 </div>
             </div>
         </div>
@@ -2929,65 +2909,6 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         </div>
     </div>
 
-    <!-- 5. 微信公众平台直连状态智能诊断弹窗 (开发与用户双模专业诊断) -->
-    <div id="diagnosisModal" class="modal-overlay" style="display: none; z-index: 9999999;">
-        <div class="modal-card" style="max-width: 540px; width: 92vw; text-align: left; padding: 22px 24px; box-shadow: 0 25px 60px rgba(0,0,0,0.5);">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="font-size: 1.6rem; line-height: 1;">⚠️</div>
-                    <div>
-                        <div style="font-size: 1.05rem; font-weight: 800; color: var(--text-primary);" id="diagModalTitle">
-                            微信公众平台直连状态诊断
-                        </div>
-                        <div style="font-size: 0.76rem; color: var(--text-muted); margin-top: 2px;" id="diagModalSub">
-                            检测到微信接口安全响应异常，请按以下步骤快速恢复
-                        </div>
-                    </div>
-                </div>
-                <button type="button" class="modal-close-btn" onclick="closeDiagnosisModal()">&times;</button>
-            </div>
-
-            <!-- 问题概括卡片 -->
-            <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;">
-                <div style="font-size: 0.88rem; font-weight: 800; color: #d97706; margin-bottom: 4px;" id="diagIssueTitle">
-                    触发微信官方频控保护 (Code: 200013)
-                </div>
-                <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5;" id="diagIssueDesc">
-                    由于当前登录会话在短时间内调用接口频次超限，腾讯服务器暂时限制了反查他人文章列表的权限。
-                </div>
-            </div>
-
-            <!-- 解决方案步骤（面向普通用户，极简清晰） -->
-            <div style="font-size: 0.82rem; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">
-                🛠️ 快捷恢复指南（只需 2 步）：
-            </div>
-            <div id="diagStepsContainer" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
-                <!-- 动态注入步骤 -->
-            </div>
-
-            <!-- 开发者技术诊断详情 (可折叠) -->
-            <details style="background: var(--bg-card); border: 1px solid var(--border-main); border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; font-size: 0.76rem;">
-                <summary style="cursor: pointer; font-weight: 700; color: var(--text-muted); user-select: none;">
-                    👨‍💻 开发者 / 调试诊断详情 (点击展开)
-                </summary>
-                <div id="diagDevInfo" style="margin-top: 8px; font-family: monospace; color: var(--text-secondary); line-height: 1.6; word-break: break-all; white-space: pre-wrap; background: var(--bg-base); padding: 8px; border-radius: 6px;">
-                </div>
-            </details>
-
-            <!-- 操作按钮栏 -->
-            <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
-                <a href="https://mp.weixin.qq.com" target="_blank" rel="noopener noreferrer" class="btn-confirm" style="display: inline-flex; align-items: center; gap: 6px; height: 36px; font-size: 0.82rem; padding: 0 14px; background: #07c160; text-decoration: none; color: white;">
-                    <span>🔗 打开公众平台后台</span>
-                </a>
-                <button type="button" class="btn-confirm" onclick="retryWechatFetchFromDiag()" style="height: 36px; font-size: 0.82rem; padding: 0 16px;">
-                    🔄 我已扫码重登，立即重试
-                </button>
-                <button type="button" class="btn-cancel" onclick="closeDiagnosisModal()" style="height: 36px; font-size: 0.82rem; padding: 0 12px;">
-                    我知道了
-                </button>
-            </div>
-        </div>
-    </div>
 
     <!-- 6. 博文链接与目录清单选择弹窗 (两阶段提取架构) -->
     <div id="linksModal" class="modal-overlay" style="display: none;">
@@ -3082,6 +3003,35 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
     </div>
 
     <script>
+        // ===== 客户端版本号显示 =====
+        // 桌面版启动时 main.js 会在工作台 URL 上附带 &v=版本号（取自安装包 package.json）；
+        // 网页版没有该参数，徽标保持隐藏。顺带把窗口标题也带上版本号，
+        // 方便用户反馈问题时一眼自证当前版本。
+        (function initAppVersionBadge() {
+            try {
+                const v = new URLSearchParams(location.search).get('v');
+                if (!v) return;
+                const badge = document.getElementById('appVersionBadge');
+                if (badge) {
+                    badge.textContent = 'v' + v;
+                    badge.style.display = '';
+                }
+                document.title = 'BlogDistiller 博萃 · 文章导出助手 v' + v;
+                // 桌面客户端专属调整：隐藏「官网累计服务人次」块（连同前面的分隔线）。
+                // 该数字是本地计数而非官网真实数据，在桌面版展示属于误导
+                if (new URLSearchParams(location.search).get('client_mode') === '1') {
+                    const metric = document.getElementById('siteVisitsMetric');
+                    if (metric) {
+                        const divider = metric.previousElementSibling;
+                        if (divider && divider.classList.contains('metric-divider')) {
+                            divider.style.display = 'none';
+                        }
+                        metric.style.display = 'none';
+                    }
+                }
+            } catch (e) { /* 版本号显示失败不影响任何功能 */ }
+        })();
+
         let currentPlatform = 'wechat';
         let platformsData = [];
         let activeEventSource = null;
@@ -3206,7 +3156,6 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
 
         function fillDemoLink() {
             const demoMap = {
-                'wechat': '艺杯羹',
                 'csdn': 'https://blog.csdn.net/dog250',
                 'cnblogs': 'https://www.cnblogs.com/vamei/',
                 'juejin': 'https://juejin.cn/user/1556564194374926',
@@ -3218,12 +3167,15 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 'custom_urls': 'https://mp.weixin.qq.com/s/7J-37tqG91Fp630K87J_aA\nhttps://zhuanlan.zhihu.com/p/24185614'
             };
             const demoVal = demoMap[currentPlatform] || 'https://blog.csdn.net/dog250';
-            
+
             if (currentPlatform === 'wechat') {
                 const wechatInput = document.getElementById('wechatMainInput');
                 if (wechatInput) {
-                    wechatInput.value = demoVal;
-                    searchWechatAccount(demoVal);
+                    // 按当前模式填入对应示例：合集模式填专辑页链接，单篇模式填推文链接
+                    wechatInput.value = wechatInputMode === 'album'
+                        ? 'https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=2533757583549441'
+                        : 'https://mp.weixin.qq.com/s/7J-37tqG91Fp630K87J_aA';
+                    handleWechatMainInputChange(wechatInput.value);
                 }
             } else {
                 const targetInput = document.getElementById('targetInput');
@@ -3233,14 +3185,14 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     saveFormState();
                 }
             }
-            showToast(`✨ 已填入【${currentPlatform}】真实可用测试示例！`);
+            showToast(`✨ 已填入【${currentPlatform}】测试示例！`);
         }
 
         const platformMetaConfig = {
             'wechat': {
-                label: '输入微信公众号名称 (或指定文章链接)',
-                placeholder: '输入微信公众号名称（如：艺杯羹、代码随想录、阿里技术），或单篇文章链接...',
-                // 提示文案已按需求移除（置空避免切换平台时再次显示旧说明产生误导）
+                label: '粘贴微信文章链接 (单篇推文 / 合集链接)',
+                placeholder: '',
+                // 微信使用专属输入区（wechatInputContainer），占位文案由输入模式 tab 控制
                 tipHtml: ''
             },
             'zhihu': {
@@ -3381,8 +3333,11 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     if (logoutBtn) logoutBtn.style.display = 'none';
                 }
             } catch (e) {
+                // 走到这里说明 /api/zhihu/status 请求本身失败（本地后端未响应），
+                // 并不代表知乎账号有问题——绝大多数情况是本地服务卡死或应用需要重启
                 dot.style.background = '#ef4444';
-                title.innerText = '知乎服务状态异常';
+                title.innerText = '本地服务未响应（知乎状态无法确认）';
+                desc.innerText = '请完全退出应用（含后台进程）后重新打开；若反复出现，请重启电脑再试';
                 if (logoutBtn) logoutBtn.style.display = 'none';
             }
         }
@@ -3429,16 +3384,21 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     let attempts = 0;
                     const interval = setInterval(async () => {
                         attempts++;
-                        const res = await fetch('/api/zhihu/status');
-                        const data = await res.json();
-                        if (data.is_logged_in || attempts > 60) {
-                            clearInterval(interval);
-                            checkZhihuAuth();
-                            if (btn) {
-                                btn.disabled = false;
-                                btn.innerHTML = orig;
+                        // 扫码窗口由 Electron 主进程直接管理（不依赖 HTTP），
+                        // 但轮询依赖本地后端：后端暂时不可用时要静默跳过本轮，绝不能让
+                        // 未捕获异常中断轮询，否则用户扫码成功后界面永远停在"等待扫码"
+                        try {
+                            const res = await fetch('/api/zhihu/status');
+                            const data = await res.json();
+                            if (data.is_logged_in || attempts > 60) {
+                                clearInterval(interval);
+                                checkZhihuAuth();
+                                if (btn) {
+                                    btn.disabled = false;
+                                    btn.innerHTML = orig;
+                                }
                             }
-                        }
+                        } catch (e) { /* 后端未就绪，下一轮继续探测 */ }
                     }, 1500);
                     return;
                 } else if (window.blogDistiller && typeof window.blogDistiller.openZhihuLogin === 'function') {
@@ -3446,16 +3406,18 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     let attempts = 0;
                     const interval = setInterval(async () => {
                         attempts++;
-                        const res = await fetch('/api/zhihu/status');
-                        const data = await res.json();
-                        if (data.is_logged_in || attempts > 60) {
-                            clearInterval(interval);
-                            checkZhihuAuth();
-                            if (btn) {
-                                btn.disabled = false;
-                                btn.innerHTML = orig;
+                        try {
+                            const res = await fetch('/api/zhihu/status');
+                            const data = await res.json();
+                            if (data.is_logged_in || attempts > 60) {
+                                clearInterval(interval);
+                                checkZhihuAuth();
+                                if (btn) {
+                                    btn.disabled = false;
+                                    btn.innerHTML = orig;
+                                }
                             }
-                        }
+                        } catch (e) { /* 后端未就绪，下一轮继续探测 */ }
                     }, 1500);
                     return;
                 }
@@ -3551,6 +3513,21 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             const desc = document.getElementById('weiboStatusDesc');
             const btn = document.getElementById('btnWeiboSyncBrowser');
             const orig = btn ? btn.innerHTML : '';
+
+            // 防误触保护：当前微博登录态正常时，先明确告知“无需同步”，
+            // 避免用户误点后在浏览器运行期间看到“锁库读取失败”提示，
+            // 误以为软件出了故障（2026-09-29 用户实际踩坑两次）
+            try {
+                const stRes = await fetch('/api/weibo/status');
+                const st = await stRes.json();
+                if (st.authenticated) {
+                    const ok = confirm(`微博当前已连接（${st.username || '已登录'}），登录态完全正常，无需同步！\n\n仅在登录态丢失时才需要同步。仍要从本机浏览器强制重新读取吗？\n\n提示：新版 Edge / Chrome 运行期间会锁死 Cookie 数据库，强制读取需要先完全退出浏览器。`);
+                    if (!ok) return;
+                }
+            } catch (e) {
+                // 状态预检失败不拦截，继续按原流程尝试同步
+            }
+
             if (btn) {
                 btn.disabled = true;
                 btn.innerHTML = `<svg class="icon spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-dasharray="32" stroke-dashoffset="12"></circle></svg> <span>同步中...</span>`;
@@ -3685,164 +3662,90 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 .replace(/'/g, '&#039;');
         }
 
+        // ===== 微信输入模式：单篇推文链接 / 合集链接 =====
+        let wechatInputMode = 'single'; // 'single' | 'album'
+
+        function detectWechatInputType(text) {
+            const t = (text || '').trim();
+            if (!t) return 'empty';
+            if (/appmsgalbum|album_id=/.test(t)) return 'album';
+            if (/^https?:\/\//i.test(t)) return 'single';
+            return 'name';
+        }
+
+        function switchWechatInputMode(mode) {
+            wechatInputMode = mode === 'album' ? 'album' : 'single';
+            const tabSingle = document.getElementById('wechatModeTabSingle');
+            const tabAlbum = document.getElementById('wechatModeTabAlbum');
+            const input = document.getElementById('wechatMainInput');
+            if (tabSingle) tabSingle.classList.toggle('active', wechatInputMode === 'single');
+            if (tabAlbum) tabAlbum.classList.toggle('active', wechatInputMode === 'album');
+            if (input) {
+                input.placeholder = wechatInputMode === 'album'
+                    ? '【合集模式】粘贴微信合集/专辑页链接，自动获取合集中全部文章\n示例：\nhttps://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx'
+                    : '【单篇推文模式】粘贴微信推文链接，每行一条；写一条按回车换行，可连续添加多篇\n示例：\nhttps://mp.weixin.qq.com/s/xxxxxxxxx';
+            }
+            updateWechatModeHint();
+            saveFormState();
+        }
+
+        function updateWechatModeHint(detected) {
+            const hint = document.getElementById('wechatModeHint');
+            if (!hint) return;
+            const input = document.getElementById('wechatMainInput');
+            const val = (input ? input.value : '').trim();
+            const d = detected || detectWechatInputType(val);
+            if (d === 'empty') {
+                hint.textContent = wechatInputMode === 'album'
+                    ? '粘贴合集/专辑页链接，自动获取合集中全部文章'
+                    : '粘贴单篇推文链接，每行一条；写一条按回车，可连续添加多篇';
+                hint.style.color = 'var(--text-muted)';
+            } else if (d === 'name') {
+                hint.textContent = '⚠️ 检测到公众号名称：网页端名称导出已下线，请粘贴单篇推文或合集链接；全量导出请用桌面客户端';
+                hint.style.color = '#ef4444';
+            } else if (d !== wechatInputMode) {
+                hint.textContent = d === 'album'
+                    ? '✓ 已识别为合集链接，已自动切换到「合集链接」模式'
+                    : '✓ 已识别为单篇推文链接，已自动切换到「单篇推文」模式';
+                hint.style.color = 'var(--accent-emerald)';
+            } else {
+                hint.textContent = d === 'album' ? '✓ 合集链接模式' : '✓ 单篇推文链接模式';
+                hint.style.color = 'var(--accent-emerald)';
+            }
+        }
+
         function handleWechatMainInputChange(val) {
             const trimmed = (val || '').trim();
             const targetInput = document.getElementById('targetInput');
             if (targetInput) targetInput.value = trimmed;
+            const detected = detectWechatInputType(trimmed);
+            if ((detected === 'album' || detected === 'single') && detected !== wechatInputMode) {
+                switchWechatInputMode(detected);
+            }
+            updateWechatModeHint(detected);
             saveFormState();
         }
 
-        async function searchWechatAccount(customQuery) {
-            const input = document.getElementById('wechatMainInput');
-            const query = (customQuery || (input ? input.value : '')).trim();
-            if (!query) {
-                showToast('⚠️ 请先输入公众号名称（如：艺杯羹）或文章链接');
-                return;
+        // 微信导出前置校验：名称/纯文本输入直接拦截并给出明确指引
+        function validateWechatTarget(target) {
+            if (currentPlatform !== 'wechat') return true;
+            const t = (target || '').trim();
+            if (!t) return true;
+            if (detectWechatInputType(t) === 'name') {
+                alert('「公众号名称」网页导出通道已下线（微信已封禁公开搜索接口）。\n\n请改为：\n1. 粘贴单篇推文链接（每行一条）；\n2. 粘贴合集/专辑页链接；\n3. 如需导出公众号全部历史文章，请下载桌面客户端。');
+                return false;
             }
-
-            // 名称反查必须先登录微信公众平台，链接模式可直接放行
-            if (!(await ensureWechatAuthForNameSearch(query))) {
-                return;
-            }
-
-            const btn = document.getElementById('wechatSearchBtn');
-            const btnText = document.getElementById('wechatSearchBtnText');
-            const origText = btnText ? btnText.innerText : '🔍 识别公众号';
-            if (btn) btn.disabled = true;
-            if (btnText) btnText.innerText = '⏳ 识别中...';
-            
-            // 查询微信官方真实头像与公众号信息
-            try {
-                const res = await fetch(`/api/wechat/search-biz?query=${encodeURIComponent(query)}`);
-                const data = await res.json();
-                const list = data.list || [];
-                if (list.length > 0) {
-                    const first = list[0];
-                    selectWechatAccount(first.nickname || query, first.avatar || '', first.signature || '', first.alias || '', first.fakeid || '');
-                    showToast(`✓ 成功识别微信公众号「${first.nickname || query}」`);
-                    return;
-                }
-            } catch (e) {
-                console.error("查询公众号真实头像异常:", e);
-            } finally {
-                if (btn) btn.disabled = false;
-                if (btnText) btnText.innerText = origText;
-            }
-
-            // 兜底直接选定
-            selectWechatAccount(query, '', '已选定微信公众号「' + query + '」', '');
-            showToast(`✓ 已选定微信公众号「${query}」`);
-        }
-
-        function generateDefaultAvatar(name) {
-            if (name === '艺杯羹' || (name && name.includes('艺杯羹'))) {
-                return '/assets/avatar.png';
-            }
-            const char = (name || '微').trim().slice(0, 1).toUpperCase();
-            const gradients = [
-                ['#10b981', '#059669'], // 翡翠绿 (微信官方质感)
-                ['#3b82f6', '#2563eb'], // 科技蓝
-                ['#8b5cf6', '#7c3aed'], // 极客紫
-                ['#f59e0b', '#d97706'], // 琥珀金
-                ['#ec4899', '#db2777'], // 珊瑚粉
-                ['#06b6d4', '#0891b2']  // 极光青
-            ];
-            let hash = 0;
-            for (let i = 0; i < (name || '').length; i++) {
-                hash = name.charCodeAt(i) + ((hash << 5) - hash);
-            }
-            const [c1, c2] = gradients[Math.abs(hash) % gradients.length];
-            
-            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="${c1}"/><stop offset="100%" stop-color="${c2}"/></linearGradient></defs><rect width="96" height="96" rx="48" fill="url(#g)"/><text x="50%" y="54%" font-family="-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif" font-size="44" font-weight="800" fill="#ffffff" text-anchor="middle" dominant-baseline="central">${char}</text></svg>`;
-            return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-        }
-
-        function hideWechatSuggestions() {
-            const box = document.getElementById('wechatSearchSuggestBox');
-            if (box) box.style.display = 'none';
+            return true;
         }
 
         let currentWechatFakeId = "";
         let currentWechatAccountName = "";
-
-        function selectWechatAccount(nickname, avatar, signature, alias, fakeid = '') {
-            currentWechatFakeId = fakeid || '';
-            currentWechatAccountName = nickname || '';
-            const targetInput = document.getElementById('targetInput');
-            if (targetInput) targetInput.value = nickname;
-
-            const wechatMainInput = document.getElementById('wechatMainInput');
-            if (wechatMainInput) wechatMainInput.value = nickname;
-
-            hideWechatSuggestions();
-
-            const searchRow = document.getElementById('wechatSearchFormRow');
-            if (searchRow) searchRow.style.display = 'none';
-
-            const card = document.getElementById('wechatProfileCard');
-            const nameEl = document.getElementById('wechatCardName');
-            const descEl = document.getElementById('wechatCardDesc');
-            const avatarEl = document.getElementById('wechatCardAvatar');
-
-            if (card && nameEl) {
-                nameEl.innerText = nickname;
-                if (descEl) descEl.innerText = signature || ('已选定公众号「' + nickname + '」· 粘贴单篇/合集链接可免登录提取；全量检索需连接公众号后台凭证');
-                if (avatarEl) {
-                    if (nickname === '艺杯羹' || (nickname && nickname.includes('艺杯羹'))) {
-                        avatarEl.src = '/assets/avatar.png';
-                    } else if (avatar && avatar.startsWith('data:image')) {
-                        avatarEl.src = avatar;
-                    } else if (avatar && avatar.startsWith('/assets/')) {
-                        avatarEl.src = avatar;
-                    } else if (avatar && avatar.includes('/api/proxy-image')) {
-                        avatarEl.src = avatar;
-                    } else {
-                        avatarEl.src = generateDefaultAvatar(nickname);
-                    }
-                }
-                card.style.display = 'block';
-            }
-            saveFormState();
-        }
-
-        function clearWechatAccountCard() {
-            const card = document.getElementById('wechatProfileCard');
-            if (card) card.style.display = 'none';
-
-            const searchRow = document.getElementById('wechatSearchFormRow');
-            if (searchRow) searchRow.style.display = 'flex';
-
-            const wechatMainInput = document.getElementById('wechatMainInput');
-            if (wechatMainInput) {
-                wechatMainInput.value = '';
-                wechatMainInput.focus();
-            }
-
-            const targetInput = document.getElementById('targetInput');
-            if (targetInput) targetInput.value = '';
-
-            hideWechatSuggestions();
-            saveFormState();
-        }
-
-        // 兼容旧调用名
-        function clearSelectedWechatAccount() {
-            clearWechatAccountCard();
-        }
-
-
-
 
         function triggerWechatExtensionSync() {
             window.dispatchEvent(new CustomEvent("TriggerBlogDistillerExtensionSync", {
                 detail: { platform: "wechat" }
             }));
             toggleExtensionGuideModal();
-        }
-
-        function isWechatUrl(str) {
-            if (!str) return false;
-            return str.includes("mp.weixin.qq.com") || str.startsWith("http://") || str.startsWith("https://");
         }
 
         let extractedArticlesList = [];
@@ -3860,7 +3763,12 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             }
 
             if (!target) {
-                alert('请先输入目标博主链接、文章 URL 或公众号名称，或点击右上角【✨ 填入示例】一键测试！');
+                alert('请先粘贴微信文章链接或其他平台目标链接，或点击右上角【✨ 填入示例】一键测试！');
+                return;
+            }
+
+            // 微信公众号：名称/纯文本输入直接拦截（名称导出通道已下线，只支持链接导出）
+            if (currentPlatform === 'wechat' && !validateWechatTarget(target)) {
                 return;
             }
 
@@ -3879,105 +3787,6 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 // 检索博主/专栏文章清单时，全量获取所有文章（不截断），确保用户可在弹窗中完整预览全部历史篇目并自由勾选
                 let max_articles = null;
 
-                // 微信公众号：优先尝试本地浏览器扩展直连 (0云端IP风控，100%全量，支持2000+篇实时流式跑马灯)
-                if (currentPlatform === 'wechat' && !isWechatUrl(target)) {
-                    // 1. 如果尚未解析过 fakeid，先秒级反查并缓存 fakeid
-                    if (!currentWechatFakeId) {
-                        try {
-                            const sRes = await fetch(`/api/wechat/search-biz?query=${encodeURIComponent(target)}`);
-                            const sData = await sRes.json();
-                            if (sData && sData.list && sData.list.length > 0) {
-                                currentWechatFakeId = sData.list[0].fakeid;
-                                const first = sData.list[0];
-                                selectWechatAccount(first.nickname || target, first.avatar || '', first.signature || '', first.alias || '', first.fakeid || '');
-                            }
-                        } catch (e) {
-                            console.error("预查 fakeid 失败:", e);
-                        }
-                    }
-
-                    openStreamProgressModal(target);
-                    try {
-                        const extResult = await new Promise((resolve) => {
-                            let lastActiveTime = Date.now();
-                            let checker = setInterval(() => {
-                                // 只要超过 45 秒没有任何心跳进展才判定超时
-                                if (Date.now() - lastActiveTime > 45000) {
-                                    clearInterval(checker);
-                                    window.removeEventListener("message", onMsg);
-                                    resolve(null);
-                                }
-                            }, 2000);
-
-                            function onMsg(event) {
-                                if (!event.data) return;
-                                if (event.data.type === "BLOGDISTILLER_WECHAT_FETCH_PROGRESS") {
-                                    lastActiveTime = Date.now();
-                                    if (event.data.detail) {
-                                        updateStreamProgress(event.data.detail);
-                                    }
-                                }
-                                if (event.data.type === "BLOGDISTILLER_WECHAT_ARTICLES_READY") {
-                                    clearInterval(checker);
-                                    window.removeEventListener("message", onMsg);
-                                    resolve(event.data.detail);
-                                }
-                            }
-
-                            window.addEventListener("message", onMsg);
-                            window.postMessage({
-                                type: "BLOGDISTILLER_FETCH_WECHAT_ARTICLES",
-                                target: target,
-                                fakeid: currentWechatFakeId,
-                                maxArticles: 0
-                            }, "*");
-                        });
-
-                        closeStreamProgressModal();
-
-                        if (extResult) {
-                            if (extResult.success && extResult.articles && extResult.articles.length > 0) {
-                                extractedArticlesList = extResult.articles;
-                                if (extResult.partial && extResult.message) {
-                                    showToast(extResult.message);
-                                }
-                                renderLinksModal(extResult.author || target, extractedArticlesList, 'extension');
-                                return;
-                            } else {
-                                showDiagnosisModal(extResult);
-                                return;
-                            }
-                        } else {
-                            showDiagnosisModal({
-                                code: "TIMEOUT",
-                                title: "微信公众平台直连响应超时",
-                                message: "未能接收到已登录微信公众平台的有效数据流，请检查连接状态。",
-                                steps: [
-                                    "请在当前浏览器中新建标签页打开并登录 https://mp.weixin.qq.com 后台",
-                                    "若已打开，请切换到公众平台标签页按一下 F5 刷新页面",
-                                    "确认在 edge://extensions 扩展管理中已启用【文章批量导出助手】插件",
-                                    "回到本页面重新点击【🚀 检索文章】"
-                                ],
-                                devInfo: `Target: ${target} | FakeId: ${currentWechatFakeId} | PostMessage timed out after 45s.`
-                            });
-                            return;
-                        }
-                    } catch (err) {
-                        closeStreamProgressModal();
-                        console.log("本地扩展直连未响应:", err);
-                        showDiagnosisModal({
-                            code: "DISPATCH_ERROR",
-                            title: "扩展通信发生异常",
-                            message: err.message || "本地浏览器扩展未响应",
-                            steps: [
-                                "打开 edge://extensions 页面，点击插件上的【🔄 重新加载】按钮",
-                                "刷新本页面后重新尝试点击检索"
-                            ],
-                            devInfo: "Error stack: " + (err.stack || err.message)
-                        });
-                        return;
-                    }
-                }
 
                 // 全平台通用检索：展示全屏可视化高质感加载看板与计时器
                 const platformNames = {
@@ -4321,6 +4130,17 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             showToast('已停止抓取');
         }
 
+        // 在系统默认浏览器中打开文章原文链接
+        // 桌面客户端里 target=_blank 会被 Electron 弹成带菜单栏的内置窗口，
+        // 体验割裂；因此桌面端统一改走 electronAPI.openExternal → 系统默认浏览器，
+        // 网页版没有 electronAPI，保持新标签页打开的原生行为
+        function openArticleSource(event, url) {
+            if (window.electronAPI && typeof window.electronAPI.openExternal === 'function') {
+                event.preventDefault();
+                window.electronAPI.openExternal(url);
+            }
+        }
+
         function renderLinksModal(author, articles, channel = 'official', meta = {}, checkedUrls = null) {
             const modal = document.getElementById('linksModal');
             // 保存当前调用上下文，便于筛选切换时快速恢复
@@ -4609,14 +4429,14 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     </td>
                     <td style="padding: 8px 10px; color: var(--text-muted);">${displayIdx + 1}</td>
                     <td style="padding: 8px 10px; font-weight: 500;">
-                        ${typeTag}<a href="${a.url}" target="_blank" style="color: var(--text-primary); text-decoration: none;" onmouseover="this.style.color='var(--accent-primary)'" onmouseout="this.style.color='var(--text-primary)'">${a.title || '无标题'}</a>
+                        ${typeTag}<a href="${a.url}" target="_blank" onclick="openArticleSource(event, '${a.url}')" style="color: var(--text-primary); text-decoration: none;" onmouseover="this.style.color='var(--accent-primary)'" onmouseout="this.style.color='var(--text-primary)'">${a.title || '无标题'}</a>
                     </td>
                     <td style="padding: 8px 10px; color: var(--accent-emerald); font-weight: 600; font-size: 0.8rem;">
                         ${a.author || author || platformLabel}
                     </td>
                     <td style="padding: 8px 10px; color: var(--text-muted); font-size: 0.78rem;">${a.create_time || a.publish_time || '-'}</td>
                     <td style="padding: 8px 10px; text-align: center;">
-                        <a href="${a.url}" target="_blank" style="color: var(--accent-emerald); font-size: 0.75rem; text-decoration: underline;">查看</a>
+                        <a href="${a.url}" target="_blank" onclick="openArticleSource(event, '${a.url}')" style="color: var(--accent-emerald); font-size: 0.75rem; text-decoration: underline;">查看</a>
                     </td>
                 </tr>
             `;
@@ -4687,6 +4507,28 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             document.getElementById('linksModal').style.display = 'none';
         }
 
+        // 获取当前平台的短名称，用于拼接导出文件名（如「艺杯羹_微博_65篇.txt」）
+        // 优先用短名映射让文件名更清爽；未知平台再退回平台列表里的名称，
+        // 并清理文件名非法字符（比如知乎列表页名称里的「/」）
+        function getPlatformFileTag() {
+            const shortNames = {
+                'wechat': '微信',
+                'weibo': '微博',
+                'zhihu': '知乎',
+                'csdn': 'CSDN',
+                '51cto': '51CTO',
+                'sina_blog': '新浪博客',
+                'jianshu': '简书',
+                'juejin': '掘金',
+                'cnblogs': '博客园',
+                'custom_urls': '自定义链接'
+            };
+            if (shortNames[currentPlatform]) return shortNames[currentPlatform];
+            const pObj = (platformsData || []).find(p => p.id === currentPlatform);
+            const name = (pObj && pObj.name) ? pObj.name : currentPlatform;
+            return name.replace(/[\\/:*?"<>|]/g, '_');
+        }
+
         async function exportOnlyUrls() {
             const checkedBoxes = document.querySelectorAll('.link-item-checkbox:checked');
             if (checkedBoxes.length === 0) {
@@ -4696,7 +4538,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             const urls = Array.from(checkedBoxes).map(b => b.getAttribute('data-url')).filter(Boolean);
             const author = (window._lastRenderedLinks?.author || '博主').replace(/[\\/:*?"<>|]/g, '_');
             const content = urls.join('\n');
-            const filename = `${author}_文章纯链接_${checkedBoxes.length}篇_${Date.now()}.txt`;
+            // 文件名格式：作者_平台_纯链接_篇数，简短清晰，不带时间戳（重名时浏览器会自动加序号）
+            const filename = `${author}_${getPlatformFileTag()}_纯链接_${checkedBoxes.length}篇.txt`;
 
             if (window.blogDistiller && window.blogDistiller.saveTextFile) {
                 try {
@@ -4735,7 +4578,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             });
             const author = (window._lastRenderedLinks?.author || '博主').replace(/[\\/:*?"<>|]/g, '_');
             const content = lines.join('\n\n');
-            const filename = `${author}_文章名称与链接清单_${checkedBoxes.length}篇_${Date.now()}.txt`;
+            // 文件名格式：作者_平台_篇数（如「艺杯羹_微博_65篇.txt」），比原来带时间戳的长名清晰
+            const filename = `${author}_${getPlatformFileTag()}_${checkedBoxes.length}篇.txt`;
 
             if (window.blogDistiller && window.blogDistiller.saveTextFile) {
                 try {
@@ -4852,20 +4696,6 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             }
         }
 
-        // 判断输入内容是否为微信文章/专辑链接（该模式免登录）
-        function isWechatUrl(target) {
-            if (!target) return false;
-            const t = target.trim().toLowerCase();
-            return t.startsWith('http') && t.includes('mp.weixin.qq.com');
-        }
-
-        // 判断是否已在高级选项中手动填写微信 Token / Cookie
-        function hasWechatManualAuth() {
-            const token = document.getElementById('wechatTokenInput')?.value?.trim() || '';
-            const cookie = document.getElementById('wechatCookieInput')?.value?.trim() || '';
-            return token.length > 0 && cookie.length > 10;
-        }
-
         // 获取服务器端保存的微信公众号凭证状态
         async function getWechatAuthStatus() {
             try {
@@ -4874,17 +4704,6 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             } catch (e) {
                 return { authenticated: false, message: '检测失败，请检查网络或刷新页面' };
             }
-        }
-
-        // 微信公众号名称反查前的前置校验
-        // 现在默认使用搜狗微信搜索公开通道，输入公众号名称无需登录后台；
-        // 若用户已安装扩展并登录 mp.weixin.qq.com，后端会额外把后台接口作为兜底。
-        async function ensureWechatAuthForNameSearch(target) {
-            if (currentPlatform !== 'wechat') return true;
-            if (isWechatUrl(target)) return true;          // 粘贴链接模式无需登录
-            if (hasWechatManualAuth()) return true;        // 手动填写凭证视为已授权
-            // 名称搜索不再强制要求登录，直接放行由后端走搜狗公开通道
-            return true;
         }
 
         function openWechatAuthModal(status) {
@@ -4971,8 +4790,15 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     selectPlatform(detected);
                 }
                 checkZhihuSmartHint();
-                handleWechatSearchInput(val);
                 saveFormState();
+            });
+        }
+
+        // 微信输入框：手动输入/粘贴实时同步目标并自动识别模式（此前无监听，输入不会同步）
+        const wechatMainInputElem = document.getElementById('wechatMainInput');
+        if (wechatMainInputElem) {
+            wechatMainInputElem.addEventListener('input', (e) => {
+                handleWechatMainInputChange(e.target.value);
             });
         }
 
@@ -5042,6 +4868,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     platform: currentPlatform,
                     target: document.getElementById('targetInput')?.value || '',
                     wechatTarget: document.getElementById('wechatMainInput')?.value || '',
+                    wechatInputMode: wechatInputMode,
                     formats: getSelectedFormats(),
                     rangeMode: currentRangeMode,
                     recentCount: document.getElementById('recentCountInput')?.value || '',
@@ -5056,6 +4883,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     wechatCookie: document.getElementById('wechatCookieInput')?.value || ''
                 };
                 localStorage.setItem('blogdistiller_form_config', JSON.stringify(state));
+                queueClientSettingsSync(); // 同步一份到后端设置文件，防浏览器存储丢失
             } catch (e) {}
         }
 
@@ -5079,7 +4907,12 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     document.getElementById('targetInput').value = state.target;
                 }
                 if (state.wechatTarget && document.getElementById('wechatMainInput')) {
-                    document.getElementById('wechatMainInput').value = state.wechatTarget;
+                    const wechatVal = state.wechatTarget;
+                    document.getElementById('wechatMainInput').value = wechatVal;
+                    // 按内容重新识别模式（自动切 tab + 同步 targetInput + 更新提示）
+                    handleWechatMainInputChange(wechatVal);
+                } else if (state.wechatInputMode) {
+                    switchWechatInputMode(state.wechatInputMode);
                 }
                 if (Array.isArray(state.formats) && state.formats.length > 0) {
                     document.querySelectorAll('.format-chips .format-badge').forEach(badge => {
@@ -5105,6 +4938,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 if (userTouched !== 'true' || !state.imageMode) {
                     state.imageMode = 'compressed';
                     localStorage.setItem('blogdistiller_form_config', JSON.stringify(state));
+                    queueClientSettingsSync(); // 同步一份到后端设置文件，防浏览器存储丢失
                 }
 
                 if (state.authorOverride && document.getElementById('authorNameOverrideInput')) document.getElementById('authorNameOverrideInput').value = state.authorOverride;
@@ -5201,8 +5035,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 return;
             }
 
-            // 微信公众号按名称反查时，必须先完成公众平台登录授权
-            if (currentPlatform === 'wechat' && !(await ensureWechatAuthForNameSearch(target))) {
+            // 微信公众号：名称/纯文本输入直接拦截（名称导出通道已下线，只支持链接导出）
+            if (currentPlatform === 'wechat' && !validateWechatTarget(target)) {
                 return;
             }
 
@@ -6102,6 +5936,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             }
             if (val === VALID_ACTIVATION_CODE) {
                 localStorage.setItem('ybg_license_code', VALID_ACTIVATION_CODE);
+                queueClientSettingsSync(); // 授权码同步一份到后端设置文件，防浏览器存储丢失
                 if (err) err.style.display = 'none';
                 closeActivationModal();
                 updateActivationStatusUI();
@@ -6127,8 +5962,58 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         let _folderDrives = null;  // 当前机器全部磁盘（后端返回，用于快速切换）
 
         function getSavedSaveDir() { try { return localStorage.getItem(SAVE_DIR_KEY) || ''; } catch (e) { return ''; } }
-        function setSavedSaveDir(p) { try { localStorage.setItem(SAVE_DIR_KEY, p); } catch (e) {} }
-        function clearSavedSaveDir() { try { localStorage.removeItem(SAVE_DIR_KEY); } catch (e) {} }
+        function setSavedSaveDir(p) { try { localStorage.setItem(SAVE_DIR_KEY, p); } catch (e) {} queueClientSettingsSync(); }
+        function clearSavedSaveDir() { try { localStorage.removeItem(SAVE_DIR_KEY); } catch (e) {} queueClientSettingsSync(); }
+
+        // ===== 客户端设置文件级持久化（桌面版防丢保险） =====
+        // localStorage 在桌面版存在两类丢失风险：后端端口漂移导致 origin 隔离、
+        // Chromium leveldb 在快速关闭-重启竞争下触发重建清空。因此把关键设置
+        // 同步一份到后端文件 (data/client_settings.json)，启动时回填缺失项。
+        const CLIENT_SETTING_SYNC_KEYS = ['blogdistiller_default_save_dir', 'blogdistiller_form_config', 'ybg_license_code'];
+        let _settingsSyncTimer = null;
+
+        // 收集白名单键并写入后端文件（防抖 800ms，连续设置只发一次）
+        function queueClientSettingsSync() {
+            if (!IS_LOCAL_MODE) return;
+            if (_settingsSyncTimer) clearTimeout(_settingsSyncTimer);
+            _settingsSyncTimer = setTimeout(syncClientSettingsToBackend, 800);
+        }
+        async function syncClientSettingsToBackend() {
+            if (!IS_LOCAL_MODE) return;
+            try {
+                const payload = {};
+                for (const k of CLIENT_SETTING_SYNC_KEYS) {
+                    const v = localStorage.getItem(k);
+                    if (v !== null && v !== '') payload[k] = v;
+                }
+                if (!Object.keys(payload).length) return;
+                await fetch('/api/client/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } catch (e) { /* 静默失败：localStorage 仍为主存储，后端只是备份 */ }
+        }
+        // 启动时从后端文件回填：只补 localStorage 缺失/为空的键，绝不覆盖本地新值
+        async function restoreClientSettingsFromBackend() {
+            if (!IS_LOCAL_MODE) return;
+            try {
+                const res = await fetch('/api/client/settings');
+                const data = await res.json();
+                if (!data || typeof data !== 'object') return;
+                let restored = false;
+                for (const k of CLIENT_SETTING_SYNC_KEYS) {
+                    const v = data[k];
+                    if (typeof v !== 'string' || !v) continue;
+                    const cur = localStorage.getItem(k);
+                    if (cur === null || cur === '') {
+                        localStorage.setItem(k, v);
+                        restored = true;
+                    }
+                }
+                if (restored) console.log('[BlogDistiller] 已从本地设置文件回填缺失的界面设置');
+            } catch (e) { /* 后端未就绪则跳过，不影响启动 */ }
+        }
 
         function openFolderModal(onPick, startPath) {
             _folderCb = onPick;
@@ -6335,6 +6220,33 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             try { _dbDel(await _openDirDB(), DEFAULT_DIR_HANDLE_KEY); } catch (e) {}
         }
 
+        // 确保句柄写权限可用：重启后 Chromium 会把权限打回 prompt 态，
+        // 需在用户手势链（点击下载）里调 requestPermission 续权；Electron 无拦截器默认放行
+        async function ensureDirHandleReady(dir) {
+            try {
+                const st = await dir.queryPermission({ mode: 'readwrite' });
+                if (st === 'granted') return true;
+                const req = await dir.requestPermission({ mode: 'readwrite' });
+                return req === 'granted';
+            } catch (e) { return false; }
+        }
+
+        // 启动时从 IndexedDB 恢复默认保存文件夹，让设置面板重启后不再显示"未设置"
+        async function restoreDefaultDirOnBoot() {
+            if (!supportsNativeDirPicker()) return;
+            const h = await getDefaultDirHandle();
+            if (!h) return;
+            try {
+                const st = await h.queryPermission({ mode: 'readwrite' });
+                if (st !== 'granted') {
+                    // 权限待续期：不阻塞启动，首次下载点击时 ensureDirHandleReady 会静默续权
+                    showToast('📁 已恢复默认保存文件夹「' + (h.name || '') + '」，下载时确认一次即可');
+                }
+            } catch (e) {}
+            updateSaveDirBar();
+            updateSaveDirSetting();
+        }
+
         // ========== 防卡死下载器：进度 + 取消 + 无响应超时 + 自动重试 ==========
         // 目的：大文件下载若后端卡住，不再"无限转圈只能刷新页面"。
         //  1) 实时显示下载百分比进度条（右上角小卡片）
@@ -6445,14 +6357,36 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             return await window.showDirectoryPicker({ mode: 'readwrite' });
         }
 
-        // 下载产物入口：优先系统原生选文件夹；带防卡死下载器；失败→浏览器下载兜底
+        // 下载产物入口：优先完整路径（桌面端 Electron 对话框设置）→ 后端直接复制；
+        // 其次原生句柄流式写入；失败→浏览器下载兜底
         async function saveArtifactToFolder(url, label) {
             const filename = filenameFromUrl(url);
             if (!filename) { fallbackNativeDownload(url); return; }
 
+            // 优先级 1：已记住完整路径（桌面客户端设置的）→ 无感直接保存，零弹窗
+            const savedDir = getSavedSaveDir();
+            if (savedDir) {
+                doSaveFile(filename, savedDir, label).then(ok => { if (!ok) fallbackNativeDownload(url); });
+                return;
+            }
+
             if (supportsNativeDirPicker()) {
                 let dir = await getDefaultDirHandle();
-                if (!dir) { dir = await pickDirHandleNative(); if (!dir) return; await rememberDefaultDirHandle(dir); }
+                if (dir && !(await ensureDirHandleReady(dir))) dir = null; // 重启后续权失败则让用户重选
+                if (!dir) {
+                    // 桌面客户端弹 Electron 对话框（记录完整路径），纯网页弹系统对话框（句柄）
+                    if (window.blogDistiller && window.blogDistiller.selectOutputDir) {
+                        const p = await window.blogDistiller.selectOutputDir();
+                        if (!p) return; // 用户取消
+                        setSavedSaveDir(p);
+                        updateSaveDirBar(); updateSaveDirSetting();
+                        doSaveFile(filename, p, label).then(ok => { if (!ok) fallbackNativeDownload(url); });
+                        return;
+                    }
+                    dir = await pickDirHandleNative();
+                    if (!dir) return;
+                    await rememberDefaultDirHandle(dir);
+                }
                 const ok = await downloadAndSave(url, filename, dir, label);
                 if (ok === null) return;                       // 用户取消
                 if (ok === false) fallbackNativeDownload(url); // 最终失败 → 浏览器下载兜底
@@ -6460,22 +6394,52 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 return;
             }
 
-            // 非 Chromium 兜底：有默认文件夹→后端复制；没有→自建弹窗；失败→浏览器下载
-            const savedDir = getSavedSaveDir();
-            if (savedDir) {
-                doSaveFile(filename, savedDir, label).then(ok => { if (!ok) fallbackNativeDownload(url); });
-                return;
-            }
+            // 非 Chromium 兜底：自建弹窗；失败→浏览器下载
             openFolderModal((destDir) => {
                 doSaveFile(filename, destDir, label).then(ok => { if (!ok) fallbackNativeDownload(url); });
             });
         }
 
-        // 一键下载全部批次 ZIP：原生选一次目录，逐个走防卡死下载器；任一取消即停整批
+        // 一键下载全部批次 ZIP：完整路径直存 → 原生句柄流式 → 自建弹窗；任一取消即停整批
         async function downloadZipBundle(urls, label) {
+            // 优先级 1：已记住完整路径（桌面客户端设置的）→ 逐个后端复制，零弹窗
+            const savedDir = getSavedSaveDir();
+            if (savedDir) {
+                (async () => {
+                    let anyFail = false;
+                    for (const u of urls) {
+                        const fn = filenameFromUrl(u);
+                        if (!fn) continue;
+                        const ok = await doSaveFile(fn, savedDir, label);
+                        if (!ok) anyFail = true;
+                    }
+                    showToast(anyFail ? '⚠️ 部分归档包保存失败' : '✓ ' + (label || '') + '：' + urls.length + ' 个归档包已保存到 ' + savedDir);
+                })();
+                return;
+            }
+
             if (supportsNativeDirPicker()) {
                 let dir = await getDefaultDirHandle();
-                if (!dir) { dir = await pickDirHandleNative(); if (!dir) return; await rememberDefaultDirHandle(dir); }
+                if (dir && !(await ensureDirHandleReady(dir))) dir = null; // 重启后续权失败则让用户重选
+                if (!dir) {
+                    if (window.blogDistiller && window.blogDistiller.selectOutputDir) {
+                        const p = await window.blogDistiller.selectOutputDir();
+                        if (!p) return; // 用户取消
+                        setSavedSaveDir(p);
+                        updateSaveDirBar(); updateSaveDirSetting();
+                        (async () => {
+                            for (const u of urls) {
+                                const fn = filenameFromUrl(u);
+                                if (fn) await doSaveFile(fn, p, label);
+                            }
+                            showToast('✓ ' + (label || '') + '：' + urls.length + ' 个归档包已保存到 ' + p);
+                        })();
+                        return;
+                    }
+                    dir = await pickDirHandleNative();
+                    if (!dir) return;
+                    await rememberDefaultDirHandle(dir);
+                }
                 let anyFail = false;
                 for (let i = 0; i < urls.length; i++) {
                     const fn = filenameFromUrl(urls[i]);
@@ -6489,7 +6453,7 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 return;
             }
 
-            const savedDir = getSavedSaveDir();
+            // 非 Chromium 兜底：自建弹窗选目录后逐个复制（完整路径分支已在函数开头处理）
             const run = (destDir) => {
                 (async () => {
                     for (const u of urls) {
@@ -6498,13 +6462,28 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                     }
                 })();
             };
-            if (savedDir) { run(savedDir); return; }
             openFolderModal((destDir) => { run(destDir); });
         }
 
         // 设置面板/工具条"选择默认文件夹"（原生版本）：用系统原生对话框选一次并记住
         async function pickDefaultDirNative() {
             if (!supportsNativeDirPicker()) { openFolderModal(function(){ updateSaveDirBar(); updateSaveDirSetting(); }); return; }
+            // 桌面客户端：优先用 Electron 原生对话框——它能拿到【完整路径】并持久化到 localStorage，
+            // 这样"打开文件夹"按钮（shell.openPath 需要完整路径）才能直接生效
+            if (window.blogDistiller && window.blogDistiller.selectOutputDir) {
+                try {
+                    const p = await window.blogDistiller.selectOutputDir();
+                    if (p) {
+                        setSavedSaveDir(p);
+                        await clearDefaultDirHandle(); // 统一以完整路径为准，避免双数据源打架
+                        showToast('✓ 已设为默认保存文件夹：' + p);
+                    }
+                } catch (e) {}
+                updateSaveDirBar();
+                updateSaveDirSetting();
+                return;
+            }
+            // 纯网页（本地模式浏览器打开）：showDirectoryPicker 句柄机制
             try {
                 const dir = await pickDirHandleNative();
                 if (dir) { await rememberDefaultDirHandle(dir); showToast('✓ 已设为默认保存文件夹'); }
@@ -6512,6 +6491,23 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             updateSaveDirBar();
             updateSaveDirSetting();
         }
+
+        // 一键在 Windows 资源管理器中打开默认保存文件夹（桌面客户端专属能力）
+        async function openDefaultSaveDir() {
+            const p = getSavedSaveDir();
+            if (p && window.blogDistiller && window.blogDistiller.openOutputDir) {
+                window.blogDistiller.openOutputDir(p);
+                return;
+            }
+            showToast('⚠️ 当前保存方式没有记录完整路径，请重新点一次「选择文件夹」后再打开');
+        }
+
+        // "打开文件夹"按钮仅桌面客户端显示（网页端没有打开本机资源管理器的能力）
+        (function initOpenSaveDirBtns() {
+            if (window.blogDistiller && window.blogDistiller.openOutputDir) {
+                document.querySelectorAll('.openSaveDirBtn').forEach(b => { b.style.display = ''; });
+            }
+        })();
         // 清除默认保存文件夹（原生版本）：同时清内存句柄与 IndexedDB
         async function clearSavedDefaultDirNative() {
             await clearDefaultDirHandle();
@@ -6679,6 +6675,15 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             }
         }
 
+        // 桌面端热更新完成提示：主进程静默同步完服务器差异文件后经
+        // "update-available" 通道通知这里弹 toast（网页端无 electronAPI 通道自动跳过）
+        if (window.electronAPI && typeof window.electronAPI.onUpdateAvailable === 'function') {
+            window.electronAPI.onUpdateAvailable((data) => {
+                const n = data && data.count ? data.count : '';
+                showToast(`✅ 已自动同步 ${n} 个更新，当前已是最新版本`);
+            });
+        }
+
         // 一键复制文本到剪贴板
         function copyText(str, label) {
             if (!str) return;
@@ -6727,7 +6732,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 const wechatInput = document.getElementById('wechatMainInput');
                 if (wechatInput) {
                     wechatInput.value = '';
-                    clearWechatAccountCard();
+                    handleWechatMainInputChange('');
+                    wechatInput.focus();
                 }
             } else {
                 const targetInput = document.getElementById('targetInput');
@@ -6907,87 +6913,6 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
             if (modal) modal.style.display = 'none';
         }
 
-        // 微信公众平台智能诊断与排查引导弹窗
-        function showDiagnosisModal(data) {
-            const modal = document.getElementById('diagnosisModal');
-            if (!modal) {
-                alert((data && data.message) ? data.message : '微信公众平台直连异常');
-                return;
-            }
-
-            const titleEl = document.getElementById('diagModalTitle');
-            const subEl = document.getElementById('diagModalSub');
-            const issueTitleEl = document.getElementById('diagIssueTitle');
-            const issueDescEl = document.getElementById('diagIssueDesc');
-            const stepsEl = document.getElementById('diagStepsContainer');
-            const devInfoEl = document.getElementById('diagDevInfo');
-
-            data = data || {};
-            const code = data.err_code || data.code || "";
-            const title = data.title || "微信公众平台直连状态诊断";
-            const dev = data.devInfo || JSON.stringify(data, null, 2);
-
-            let defaultSteps = [
-                "打开已登录的 mp.weixin.qq.com 微信公众平台标签页，点击右上角【退出登录】",
-                "使用手机微信重新扫码登录后台（立即换取全新活跃 Token，频控配额瞬间重置为零）",
-                "返回本页面，重新点击【🚀 检索文章列表目录并挑选导出】"
-            ];
-
-            if (data.code === "SESSION_EXPIRED" || code === 200003) {
-                if (issueTitleEl) issueTitleEl.innerText = "微信公众平台登录态已失效 (Code: 200003)";
-                if (issueDescEl) issueDescEl.innerText = "当前微信公众平台的登录会话已超时或被微信服务器强制断开，需要重新扫码登录。";
-                defaultSteps = [
-                    "切换到已打开的 mp.weixin.qq.com 微信公众平台标签页，按 F5 刷新",
-                    "使用手机微信扫码重新登录后台",
-                    "回到本页面重新点击【🚀 检索文章】"
-                ];
-            } else if (data.code === "BIZ_NOT_FOUND" || code === 404) {
-                if (issueTitleEl) issueTitleEl.innerText = `未匹配到目标公众号【${data.target || ''}】`;
-                if (issueDescEl) issueDescEl.innerText = "在微信公众平台官方索引中未找到该公众号，请确认公众号名称完全准确。";
-                defaultSteps = [
-                    "核对公众号名称是否准确（请勿包含多余空格或错别字）",
-                    "可尝试输入该公众号的微信号 (ID) 或公众号历史文章链接进行检索",
-                    "确认该公众号是否设置了全网防检索隐私限制"
-                ];
-            } else if (data.code === "TOKEN_MISSING") {
-                if (issueTitleEl) issueTitleEl.innerText = "未检测到微信公众平台活跃 Token";
-                if (issueDescEl) issueDescEl.innerText = "本功能需要借助您浏览器中已登录的微信公众平台建立安全直连。";
-                defaultSteps = [
-                    "在浏览器中新建标签页打开并登录 https://mp.weixin.qq.com 后台",
-                    "登录成功后保持该公众平台标签页处于开启状态",
-                    "回到本工作台页面，再次点击【🚀 检索文章】"
-                ];
-            } else {
-                if (issueTitleEl) issueTitleEl.innerText = `触发微信官方频控保护 (Code: 200013)`;
-                if (issueDescEl) issueDescEl.innerText = "当前微信会话在短时间内调用接口频次达到腾讯服务器限制。微信官方以 Session Token 为单位实施配额管控。只需退出重新扫码即可重置。";
-            }
-
-            if (titleEl) titleEl.innerText = title;
-            if (stepsEl) {
-                stepsEl.innerHTML = (data.steps || defaultSteps).map((s, idx) => `
-                    <div style="display: flex; align-items: flex-start; gap: 10px; background: var(--bg-surface); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-main); font-size: 0.8rem;">
-                        <span style="background: var(--accent-primary); color: white; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 800; flex-shrink: 0; margin-top: 1px;">${idx + 1}</span>
-                        <span style="color: var(--text-primary); line-height: 1.5;">${s}</span>
-                    </div>
-                `).join('');
-            }
-
-            if (devInfoEl) {
-                devInfoEl.innerText = `[Diagnostic Info]\nError Code : ${code || 'UNKNOWN'}\nTarget     : ${data.target || currentWechatAccountName || 'N/A'}\nFakeId     : ${data.fakeid || currentWechatFakeId || 'N/A'}\nSession    : ${data.token ? ('Token ' + data.token) : 'Unchecked'}\nLocal Time : ${new Date().toLocaleString()}\nTechnical  : ${dev}`;
-            }
-
-            modal.style.display = 'flex';
-        }
-
-        function closeDiagnosisModal() {
-            const modal = document.getElementById('diagnosisModal');
-            if (modal) modal.style.display = 'none';
-        }
-
-        function retryWechatFetchFromDiag() {
-            closeDiagnosisModal();
-            extractLinksTwoStage();
-        }
 
         // 图片大图放大预览
         function openImageLightbox(src, caption) {
@@ -7019,7 +6944,6 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
                 closeChangelogModal();
                 closeConfirmModal();
                 closeWechatAuthModal();
-                closeDiagnosisModal();
                 closeLinksModal();
             }
         });
@@ -7061,6 +6985,8 @@ https://mp.weixin.qq.com/mp/appmsgalbum?action=getalbum&album_id=xxxxxxxxx"></te
         updateActivationStatusUI();
         loadPlatforms();
         loadHistory();
+        restoreClientSettingsFromBackend(); // 启动时从后端设置文件回填缺失设置（防浏览器存储丢失）
+        restoreDefaultDirOnBoot(); // 启动时恢复默认保存文件夹设置（重启后不再显示"未设置"）
         checkDailyCommunityModal();
         checkWeChatAuth();
         setTimeout(checkWeChatAuth, 1200);

@@ -76,9 +76,9 @@ class ZipExporter(BaseExporter):
             for img_url in (art.images or []):
                 if img_url and img_url.startswith("http"):
                     all_img_urls.add(img_url)
-            # 从 markdown 中正则提取额外图片链接
+            # 从 markdown 中正则提取额外图片链接 (兼容带 "title" 的图片语法，如微信残留的 ![](url "null"))
             if art.content_markdown:
-                found = re.findall(r'!\[.*?\]\((https?://[^\s\)]+)\)', art.content_markdown)
+                found = re.findall(r'!\[[^\]]*\]\(\s*(https?://[^\s\)"]+)', art.content_markdown)
                 for f_url in found:
                     all_img_urls.add(f_url)
 
@@ -159,7 +159,8 @@ class ZipExporter(BaseExporter):
         safe_title = html.escape(art.title)
         safe_author = html.escape(art.author or self.author_name)
         safe_platform = html.escape(art.platform or self.platform)
-        safe_time = html.escape(art.publish_time or "未知")
+        # 时间检测不到就留空（模板里条件拼接），不写"未知"占位符
+        safe_time = html.escape(art.publish_time or "")
         safe_url = html.escape(art.url)
 
         # 标签横向展示
@@ -326,7 +327,7 @@ class ZipExporter(BaseExporter):
         <h1 class="title">{safe_title}</h1>
         {tags_html}
         <div class="meta-bar">
-            <span>📰 <strong>原文：</strong>{safe_platform} · {safe_author} · {safe_time}</span>
+            <span>📰 <strong>原文：</strong>{safe_platform} · {safe_author}{' · ' + safe_time if safe_time else ''}</span>
             {f'<span>🔗 <strong>原文链接：</strong><a href="{safe_url}" target="_blank" rel="noopener">{safe_url}</a></span>' if safe_url else ''}
         </div>
         <div class="markdown-body">
@@ -395,7 +396,8 @@ class ZipExporter(BaseExporter):
         safe_title = html.escape(art.title)
         safe_author = html.escape(art.author or self.author_name)
         safe_platform = html.escape(art.platform or self.platform)
-        safe_time = html.escape(art.publish_time or "未知")
+        # 时间检测不到就留空（模板里条件拼接），不写"未知"占位符
+        safe_time = html.escape(art.publish_time or "")
         safe_url = html.escape(art.url)
 
         # 标签横向展示
@@ -526,7 +528,7 @@ class ZipExporter(BaseExporter):
         <h1>{safe_title}</h1>
         {tags_html}
         <div class="meta">
-            <span>📰 <strong>原文：</strong>{safe_platform} · {safe_author} · {safe_time}</span>
+            <span>📰 <strong>原文：</strong>{safe_platform} · {safe_author}{' · ' + safe_time if safe_time else ''}</span>
             {f'<span>🔗 <strong>原文链接：</strong><a href="{safe_url}" style="color:#0284c7;">{safe_url}</a></span>' if safe_url else ''}
         </div>
     </div>
@@ -684,10 +686,14 @@ class ZipExporter(BaseExporter):
                 tags_str = "   ".join([f"#{t.strip().lstrip('#')}" for t in art.tags if t.strip()]) if art.tags else ""
                 tag_line = f"**标签**：{tags_str}\n\n" if tags_str else ""
                 url_line = f"**原文链接**：{art.url}\n\n" if art.url else ""
+                # 原文信息栏：时间检测不到就不写时间段，避免"未知时间"占位符
+                orig_parts = [art.platform or self.platform, art.author or self.author_name]
+                if art.publish_time and str(art.publish_time).strip():
+                    orig_parts.append(str(art.publish_time).strip())
                 clean_header = (
                     f"# {art.title}\n\n"
                     f"{tag_line}"
-                    f"**原文**：{art.platform or self.platform}  ·  {art.author or self.author_name}  ·  {art.publish_time or '未知时间'}\n\n"
+                    f"**原文**：{'  ·  '.join(orig_parts)}\n\n"
                     f"{url_line}"
                     f"---\n\n"
                 )
@@ -882,7 +888,9 @@ class ZipExporter(BaseExporter):
                     art = articles[idx - 1]
                     clean_title = re.sub(r'[\\/:*?"<>|]', '_', art.title).strip() or f"文章_{idx}"
                     single_txt_filename = f"单篇独立文章_TXT/{idx:02d}_{clean_title[:45]}.txt"
-                    txt_body = f"标题：{art.title}\n作者：{art.author or self.author_name}\n发布时间：{art.publish_time}\n原文链接：{art.url}\n\n" + (art.content_markdown or "") + f"\n\n[{BRAND_FOOTER_NOTE}]\n"
+                    # 时间检测不到就不写"发布时间"这一行，避免空值/占位符
+                    time_line = f"发布时间：{art.publish_time}\n" if art.publish_time and str(art.publish_time).strip() else ""
+                    txt_body = f"标题：{art.title}\n作者：{art.author or self.author_name}\n{time_line}原文链接：{art.url}\n\n" + (art.content_markdown or "") + f"\n\n[{BRAND_FOOTER_NOTE}]\n"
                     return (single_txt_filename, txt_body.encode("utf-8"))
 
                 await _build_single_articles(len(articles), _txt_single_worker, "单篇独立 TXT")

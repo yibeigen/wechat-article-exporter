@@ -44,13 +44,15 @@ class MarkdownExporter(BaseExporter):
             md_lines.append(f'<a id="{anchor}"></a>\n')
             md_lines.append(f"## {idx}. {art.title}\n")
             
-            # 标准元数据栏 (横向标签 + 原文信息 + 原文链接)
+            # 标准元数据栏 (横向标签 + 原文信息 + 原文链接) —— 时间检测不到就不写时间段
             if art.tags:
                 tags_str = "   ".join([f"#{t.strip().lstrip('#')}" for t in art.tags if t.strip()])
                 md_lines.append(f"**🏷️ 标签**：{tags_str}\n")
-            
-            orig_info = f"{art.platform or self.platform}  ·  {art.author or self.author_name}  ·  {art.publish_time or '未知时间'}"
-            md_lines.append(f"**📰 原文**：{orig_info}\n")
+
+            orig_parts = [art.platform or self.platform, art.author or self.author_name]
+            if art.publish_time and str(art.publish_time).strip():
+                orig_parts.append(str(art.publish_time).strip())
+            md_lines.append(f"**📰 原文**：{'  ·  '.join(orig_parts)}\n")
             
             if art.url:
                 md_lines.append(f"**🔗 原文链接**：{art.url}\n")

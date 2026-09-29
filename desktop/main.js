@@ -3435,6 +3435,46 @@ class LocalPythonManager {
         return r.ok;
     }
 
+    // ===== 依赖体检结果缓存（暖启动提速）=====
+    // checkDeps 每次都要冷启动一个 Python 进程并 import 全部核心库（Windows 上约 2~6 秒），
+    // 是二次启动初始化页偏慢的主因之一。这里把体检结果落盘缓存：
+    // 只要解释器路径没变、requirements.txt 没改过，就跳过重复体检，下次启动直接拉起服务。
+    getKernelBaseDir() {
+        return path.join(process.env.LOCALAPPDATA || app.getPath("userData"), "BlogDistillerKernel");
+    }
+
+    getDepsCacheFile() {
+        return path.join(this.getKernelBaseDir(), "deps_ok.json");
+    }
+
+    // 校验体检缓存是否仍然有效（解释器路径或依赖清单任一变化都视为失效）
+    isDepsCacheValid(pythonCmd, projectRoot) {
+        try {
+            const cache = JSON.parse(fs.readFileSync(this.getDepsCacheFile(), "utf8"));
+            if (cache.cmd !== pythonCmd) return false;  // 解释器变了（如 venv 重建/内核更换）必须重新体检
+            const reqFile = path.join(projectRoot, "requirements.txt");
+            const reqMtime = fs.existsSync(reqFile) ? String(fs.statSync(reqFile).mtimeMs) : "";
+            return cache.reqMtime === reqMtime;         // 依赖清单变了必须重新体检
+        } catch (_) {
+            return false;
+        }
+    }
+
+    // 体检通过后落盘缓存，供下次启动复用
+    writeDepsCache(pythonCmd, projectRoot) {
+        try {
+            const reqFile = path.join(projectRoot, "requirements.txt");
+            const reqMtime = fs.existsSync(reqFile) ? String(fs.statSync(reqFile).mtimeMs) : "";
+            fs.mkdirSync(this.getKernelBaseDir(), { recursive: true });
+            fs.writeFileSync(this.getDepsCacheFile(), JSON.stringify({ cmd: pythonCmd, reqMtime }));
+        } catch (_) {}
+    }
+
+    // 服务迟迟未就绪时清掉缓存：下次启动强制重新体检，实现依赖损坏后的自愈
+    clearDepsCache() {
+        try { fs.rmSync(this.getDepsCacheFile(), { force: true }); } catch (_) {}
+    }
+
     // 首次运行内核自动部署：在用户目录创建独立 venv 并安装后端依赖（与 start.bat 本地包逻辑一致）
     // 成功返回可用的解释器 { cmd, prefix }，失败返回 null
     async ensureKernel(cmd, prefix, projectRoot) {
@@ -3488,7 +3528,17 @@ class LocalPythonManager {
     }
 
     // 带进度地下载文件，返回 Buffer；失败抛异常由调用方兜底
+    // 兼容性：全局 fetch 需要 Node 18+（Electron 24+）。Win7 版用 Electron 22（Node 16.17，
+    // 无全局 fetch），必须走 https 模块兜底，否则裸机下载内核与热更新在 Win7 上会静默失效。
     async downloadFile(url) {
+        if (typeof fetch === "function") {
+            return await this._downloadViaFetch(url);
+        }
+        return await this._downloadViaHttps(url);
+    }
+
+    // Electron 24+ / Node 18+ 主路径：fetch 流式读取
+    async _downloadViaFetch(url) {
         const resp = await fetch(url, { redirect: "follow" });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const total = Number(resp.headers.get("content-length") || 0);
@@ -3510,6 +3560,46 @@ class LocalPythonManager {
             }
         }
         return Buffer.concat(chunks);
+    }
+
+    // Electron 22 / Node 16 兜底：https 模块手动跟随重定向（最多 5 跳），进度上报与 fetch 版一致
+    _downloadViaHttps(url, redirectsLeft = 5) {
+        return new Promise((resolve, reject) => {
+            const mod = url.startsWith("https:") ? require("https") : require("http");
+            const req = mod.get(url, { timeout: 30000 }, (res) => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    res.resume();
+                    if (redirectsLeft <= 0) { reject(new Error("重定向次数过多")); return; }
+                    const next = new URL(res.headers.location, url).toString();
+                    resolve(this._downloadViaHttps(next, redirectsLeft - 1));
+                    return;
+                }
+                if (res.statusCode !== 200) {
+                    res.resume();
+                    reject(new Error(`HTTP ${res.statusCode}`));
+                    return;
+                }
+                const total = Number(res.headers["content-length"] || 0);
+                const chunks = [];
+                let got = 0;
+                let lastPct = -1;
+                res.on("data", (c) => {
+                    chunks.push(c);
+                    got += c.length;
+                    if (total) {
+                        const pct = Math.floor((got / total) * 100);
+                        if (pct >= lastPct + 10) {
+                            lastPct = pct;
+                            setBootStatus(`下载进度 ${pct}%（${(got / 1024 / 1024).toFixed(1)} MB）…`);
+                        }
+                    }
+                });
+                res.on("end", () => resolve(Buffer.concat(chunks)));
+                res.on("error", reject);
+            });
+            req.on("timeout", () => { req.destroy(new Error("请求超时")); });
+            req.on("error", reject);
+        });
     }
 
     // 裸机兜底：电脑上完全没有 Python 时，自动下载官方便携内嵌版 Python 并启用 pip
@@ -3654,13 +3744,50 @@ class LocalPythonManager {
         return false;
     }
 
-    async start() {
+    killOrphanPythonServers() {
+        // 按命令行特征识别本项目的后端进程（run.py --port + 本项目路径特征），
+        // 配合单实例锁使用：新实例启动时旧的孤儿后端必属残留，可安全强杀。
+        try {
+            const psCmd =
+                "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | " +
+                "Where-Object { $_.CommandLine -match 'run\\.py --port' -and " +
+                "$_.CommandLine -match 'BlogDistillerKernel|blogdistiller-desktop|下载各个平台' } | " +
+                "Select-Object -ExpandProperty ProcessId";
+            const out = execSync(
+                `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCmd.replace(/"/g, '\\"')}"`,
+                { encoding: "utf8", windowsHide: true, timeout: 15000 }
+            );
+            const pids = String(out || "")
+                .split(/\r?\n/)
+                .map(s => parseInt(s.trim(), 10))
+                .filter(n => Number.isFinite(n) && n > 0);
+            if (!pids.length) return;
+            for (const pid of pids) {
+                try {
+                    execSync(`taskkill /pid ${pid} /T /F`, { stdio: "ignore", timeout: 8000 });
+                } catch (_) { /* 进程可能已自行退出 */ }
+            }
+            console.log(`[LocalPython] 已清理 ${pids.length} 个残留 Python 服务进程 (PID: ${pids.join(", ")})`);
+        } catch (e) {
+            // 清理失败不阻塞启动流程
+            console.warn("[LocalPython] 孤儿进程扫描跳过:", e.message);
+        }
+    }
+
+    async start({ retryOnFail = false } = {}) {
         if (this.running && this.child) {
             const ok = await this.checkHealth(this.port);
             if (ok) {
                 return this.getStatus();
             }
         }
+
+        // ===== 启动前清理上一代残留 Python 服务（孤儿进程防御） =====
+        // 场景：上次应用被强杀/崩溃退出时，before-quit 的 taskkill 没来得及执行，
+        // 会留下"进程活着但不再监听端口"的孤儿后端。它们轻则占住端口让新服务
+        // bind 到幽灵位（Windows SO_REUSEADDR 双绑定时新 socket 收不到任何连接），
+        // 重则文件锁/内存白耗。这里按命令行特征精准识别本项目后端并强杀，不误伤无关 Python。
+        this.killOrphanPythonServers();
 
         const port = await this.findFreePort(8000, 8050);
         this.port = port;
@@ -3704,10 +3831,22 @@ class LocalPythonManager {
                 pyPrefix = emb.prefix;
             }
 
-            // 依赖体检不通过 → 自动安装依赖：
+            // 依赖体检（带缓存）：暖启动时上次体检结论仍有效就跳过重复探测，
+            // 省掉 2~6 秒的 Python 冷启动 import；缓存失效才真正体检，
+            // 体检不通过则自动安装依赖：
             // - 内嵌内核：pip --target 直接装进其 site-packages（内嵌版不支持 venv）
             // - 系统 Python：创建独立 venv 内核安装（与源码包 start.bat 行为对齐）
-            if (!(await this.checkDeps(pythonCmd, pyPrefix))) {
+            let depsOk = this.isDepsCacheValid(pythonCmd, projectRoot);
+            if (depsOk) {
+                console.log("[LocalPython] 依赖体检缓存有效，跳过重复探测（暖启动提速）");
+            } else {
+                setBootStatus("正在检测本地 Python 运行环境…");
+                depsOk = await this.checkDeps(pythonCmd, pyPrefix);
+            }
+            if (depsOk) {
+                // 体检通过（或缓存命中）立刻落盘结论，供下次启动复用
+                this.writeDepsCache(pythonCmd, projectRoot);
+            } else {
                 setBootStatus("首次运行：正在自动部署本地 Python 内核，请保持网络畅通…");
                 let kernel = null;
                 if (this.isEmbeddedKernel(pythonCmd)) {
@@ -3724,6 +3863,8 @@ class LocalPythonManager {
                 }
                 pythonCmd = kernel.cmd;
                 pyPrefix = kernel.prefix;
+                // 内核（重新）部署完成后，用新的解释器路径落盘体检缓存
+                this.writeDepsCache(pythonCmd, projectRoot);
             }
             // ===== 内核部署逻辑结束 =====
 
@@ -3787,8 +3928,24 @@ class LocalPythonManager {
                     }
                 }
             } else {
-                console.warn(`[LocalPython] 服务未在预期时间内响应健康检查，但进程已创建 (PID: ${this.child ? this.child.pid : '未知'})`);
-                this.running = true;
+                console.warn(`[LocalPython] 服务未在预期时间内响应健康检查，正在清理卡死进程并重试一次...`);
+                // 服务 9 秒内没起来，有可能是依赖损坏（此时缓存不可信），清掉体检缓存强制下次重新体检
+                this.clearDepsCache();
+                // 关键防御：健康检查失败的子进程大概率已卡死（如 stdout 管道阻塞、文件锁等待）。
+                // 若不杀掉，它会永久残留：占端口、耗内存，且下次启动时误导复用判定。
+                try {
+                    if (this.child && this.child.pid) {
+                        execSync(`taskkill /pid ${this.child.pid} /T /F`, { stdio: "ignore", timeout: 8000 });
+                    }
+                } catch (_) { /* 进程可能已自行退出 */ }
+                this.child = null;
+                this.running = false;
+
+                // 一次性重试：清场后重新拉起（依赖缓存已清，会自动重新体检）
+                if (!retryOnFail) {
+                    this.stop();
+                    return await this.start({ retryOnFail: true });
+                }
             }
         } catch (err) {
             console.error(`[LocalPython] 启动失败:`, err);
@@ -3855,6 +4012,129 @@ function setBootStatus(text) {
     ).catch(() => {});
 }
 
+// =========================================================================
+// 7.5 客户端热更新：启动前静默同步服务器上的 backend/frontend 差异文件
+// =========================================================================
+// 原理：服务器 hotfix/manifest.json 记录每个可热更文件的 sha256 指纹；
+// 客户端启动时（Python 服务启动之前）逐文件比对本地哈希，只下载差异文件
+// 原子覆盖。覆盖完成后的首次 start() 天然加载新代码，"重启后端"零成本实现。
+//
+// 三方白名单一致性约束（新增可热更目录时同步改三处）：
+//   1) 本文件 hotfixAllowed()   2) 后端 _safe_hotfix_path()   3) scratch/hotfix_manifest.py
+//
+// 设计底线：断网/超时/任何异常一律静默跳过，绝不阻塞、绝不弹窗报错；
+// 开发态（npm start 跑源码）完全不启用，防止服务器版本覆盖本地源码。
+const HOTFIX_MANIFEST_URL = "https://doc.305758.xyz/api/client/hotfix/manifest";
+const HOTFIX_FILE_URL = "https://doc.305758.xyz/api/client/hotfix/file?path=";
+const HOTFIX_DEADLINE_MS = 8000;   // 总时间预算：超时即停，剩余差异下次启动续齐
+let pendingHotfixNotice = null;    // 更新结果暂存，工作台加载成功后通知前端弹 toast
+
+function hotfixAllowed(relPath) {
+    if (relPath === "run.py") return true;
+    if (!relPath.startsWith("frontend/") && !relPath.startsWith("backend/")) return false;
+    if (relPath.includes("__pycache__") || relPath.endsWith(".pyc")) return false;
+    return true;
+}
+
+function sha256Buffer(buf) {
+    return require("crypto").createHash("sha256").update(buf).digest("hex");
+}
+
+// 检查并应用热更新；返回 { count, backendChanged, files }
+async function checkAndApplyHotfix(manager, projectRoot) {
+    const result = { count: 0, backendChanged: false, files: [] };
+    if (!app.isPackaged) return result;  // 开发态保护
+
+    const startedAt = Date.now();
+
+    // 1. 拉取清单（失败 = 离线 / 服务器不可达，静默跳过）
+    let manifest;
+    try {
+        const buf = await manager.downloadFile(HOTFIX_MANIFEST_URL);
+        manifest = JSON.parse(buf.toString("utf8"));
+    } catch (e) {
+        console.log("[Hotfix] 清单拉取失败，跳过热更新:", e.message);
+        return result;
+    }
+    const remoteFiles = manifest.files || {};
+
+    // 2. 逐文件比对本地 sha256，找出差异（本地读不到的也当差异处理）
+    const changed = [];
+    for (const [rel, meta] of Object.entries(remoteFiles)) {
+        if (!hotfixAllowed(rel)) continue;
+        const localPath = path.join(projectRoot, ...rel.split("/"));
+        try {
+            if (fs.existsSync(localPath) && sha256Buffer(fs.readFileSync(localPath)) === meta.sha256) continue;
+        } catch (_) {}
+        changed.push(rel);
+    }
+    if (!changed.length) return result;
+    console.log(`[Hotfix] 发现 ${changed.length} 个差异文件，开始同步…`);
+
+    // 3. 逐个下载：写入临时文件 → 校验哈希 → 备份上一代 → 原子覆盖
+    const tmpDir = path.join(projectRoot, "_hotfix_tmp");
+    const backupDir = path.join(projectRoot, "_hotfix_backup");
+    for (let i = 0; i < changed.length; i++) {
+        if (Date.now() - startedAt > HOTFIX_DEADLINE_MS) {
+            console.log("[Hotfix] 达到时间预算，剩余差异下次启动继续");
+            break;
+        }
+        const rel = changed[i];
+        setBootStatus(`发现 ${changed.length} 个更新，正在同步（${i + 1}/${changed.length}）…`);
+        try {
+            const buf = await manager.downloadFile(HOTFIX_FILE_URL + encodeURIComponent(rel));
+            if (sha256Buffer(buf) !== remoteFiles[rel].sha256) throw new Error("sha256 校验不符");
+            const target = path.join(projectRoot, ...rel.split("/"));
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.mkdirSync(tmpDir, { recursive: true });
+            const tmpFile = path.join(tmpDir, rel.replace(/\//g, "_"));
+            fs.writeFileSync(tmpFile, buf);
+            if (fs.existsSync(target)) {
+                const bakFile = path.join(backupDir, ...rel.split("/"));
+                fs.mkdirSync(path.dirname(bakFile), { recursive: true });
+                fs.copyFileSync(target, bakFile);  // 保留一代备份，供自愈回滚
+            }
+            try {
+                fs.renameSync(tmpFile, target);   // 同分区 rename，原子生效
+            } catch (_) {
+                await new Promise(r => setTimeout(r, 300));  // 可能被杀毒/占用，稍等重试一次
+                fs.renameSync(tmpFile, target);
+            }
+            result.count++;
+            result.files.push(rel);
+            if (rel.startsWith("backend/") || rel === "run.py") result.backendChanged = true;
+        } catch (e) {
+            console.error(`[Hotfix] ${rel} 同步失败，跳过:`, e.message);
+        }
+    }
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    if (result.count) pendingHotfixNotice = { count: result.count };
+    console.log(`[Hotfix] 同步完成 ${result.count}/${changed.length}，backendChanged=${result.backendChanged}`);
+    return result;
+}
+
+// 自愈回滚：把 _hotfix_backup 里的上一代文件拷回原位（失败只记日志，不阻塞启动）
+function rollbackHotfix(projectRoot) {
+    const backupDir = path.join(projectRoot, "_hotfix_backup");
+    if (!fs.existsSync(backupDir)) return;
+    let restored = 0;
+    const walk = (dir) => {
+        for (const name of fs.readdirSync(dir)) {
+            const src = path.join(dir, name);
+            if (fs.statSync(src).isDirectory()) { walk(src); continue; }
+            const rel = path.relative(backupDir, src);
+            const dst = path.join(projectRoot, rel);
+            try {
+                fs.mkdirSync(path.dirname(dst), { recursive: true });
+                fs.copyFileSync(src, dst);
+                restored++;
+            } catch (e) { console.error(`[Hotfix] 回滚 ${rel} 失败:`, e.message); }
+        }
+    };
+    walk(backupDir);
+    console.log(`[Hotfix] 已回滚 ${restored} 个文件`);
+}
+
 // 内核就绪后切入新版多平台工作台。
 // 旧逻辑：8 秒内连不上就静默回退内置旧版渲染模版——本地服务可能稍后才就绪，
 // 用户却被永久留在 v1.2.0 旧界面上，且毫无提示。
@@ -3863,7 +4143,9 @@ function setBootStatus(text) {
 // 绝不再静默回退旧版假工作台。
 function navigateMainWindowToWorkbench(port) {
     if (!mainWindow) return;
-    const localUrl = `http://127.0.0.1:${port}/app?client_mode=1&port=${port}`;
+    // URL 附带 v=当前客户端版本号：前端顶栏据此显示版本徽标并更新窗口标题；
+    // 版本号取自安装包内 package.json（跟随每次发版自动变化）
+    const localUrl = `http://127.0.0.1:${port}/app?client_mode=1&port=${port}&v=${encodeURIComponent(app.getVersion())}`;
     const healthUrl = `http://127.0.0.1:${port}/api/health`;
     console.log(`[BlogDistiller] 准备加载本地桌面界面: ${localUrl}`);
 
@@ -3900,6 +4182,14 @@ function navigateMainWindowToWorkbench(port) {
         try {
             await mainWindow.loadURL(localUrl);
             console.log("[BlogDistiller] 新版工作台加载成功");
+            // 热更新完成后通知前端弹 toast（延迟 1.2s，等页面 JS 初始化完毕再弹）
+            if (pendingHotfixNotice) {
+                const notice = pendingHotfixNotice;
+                pendingHotfixNotice = null;
+                setTimeout(() => {
+                    try { mainWindow.webContents.send("update-available", notice); } catch (_) {}
+                }, 1200);
+            }
         } catch (err) {
             console.warn(`[BlogDistiller] 工作台首次加载失败，1 秒后重试: ${err.message}`);
             setTimeout(() => {
@@ -3935,7 +4225,7 @@ function createMainWindow(port = null) {
     // 未传 port：先展示初始化进度页，等内核部署完成后由 navigateMainWindowToWorkbench 切入工作台
     if (!port) {
         bootPageActive = true;
-        const bootHtml = `<!doctype html><html><head><meta charset="utf-8"><title>BlogDistiller 初始化中</title><style>body{font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif;background:#f7f6f2;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{text-align:center;max-width:560px;padding:40px}.spin{width:44px;height:44px;border:4px solid #d1d5db;border-top-color:#059669;border-radius:50%;margin:0 auto 22px;animation:s 1s linear infinite}@keyframes s{to{transform:rotate(360deg)}}h1{font-size:1.25rem;color:#111827;margin:0 0 10px}p{color:#6b7280;font-size:.92rem;line-height:1.7;margin:0}#st{margin-top:18px;color:#059669;font-weight:600;min-height:1.4em}</style></head><body><div class="card"><div class="spin"></div><h1>BlogDistiller · 博萃 正在初始化</h1><p>首次启动需要部署本地 Python 运行内核，请保持网络畅通并耐心等待，完成后将自动进入工作台。</p><div id="st">正在启动…</div></div></body></html>`;
+        const bootHtml = `<!doctype html><html><head><meta charset="utf-8"><title>BlogDistiller 初始化中</title><style>body{font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif;background:#f7f6f2;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{text-align:center;max-width:560px;padding:40px}.spin{width:44px;height:44px;border:4px solid #d1d5db;border-top-color:#059669;border-radius:50%;margin:0 auto 22px;animation:s 1s linear infinite}@keyframes s{to{transform:rotate(360deg)}}h1{font-size:1.25rem;color:#111827;margin:0 0 10px}p{color:#6b7280;font-size:.92rem;line-height:1.7;margin:0}#st{margin-top:18px;color:#059669;font-weight:600;min-height:1.4em}</style></head><body><div class="card"><div class="spin"></div><h1>BlogDistiller · 博萃 正在初始化</h1><p>正在启动本地服务引擎并同步最新更新（每次打开软件都需重新拉起后台引擎）；首次启动需额外部署运行环境，耗时较长，完成后将自动进入工作台。</p><div id="st">正在启动…</div></div></body></html>`;
         mainWindow.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(bootHtml)).catch(() => {});
         return;
     }
@@ -3971,17 +4261,53 @@ app.on("second-instance", () => {
     }
 });
 
+// ===== 单实例锁 =====
+// 若不加锁，用户双击两次图标会拉起两个 GUI 实例，各自 spawn 一套 Python 后端，
+// 互相抢端口/抢文件，产生"进程活着但服务不可用"的僵尸态。
+// 拿不到锁说明已有实例在跑：通知其窗口置前，然后本实例立即退出。
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+    console.log("[BlogDistiller] 检测到应用已在运行，本实例将退出并唤起已运行的窗口。");
+    app.quit();
+}
+
 app.whenReady().then(async () => {
     localPythonManager = new LocalPythonManager(app);
     let pythonStatus = { port: 8000 };
 
     // 先把窗口立起来显示初始化进度页，再启动本地内核（首次启动会自动部署 Python 环境，耗时数分钟）
     createMainWindow(null);
+
+    // 热更新：启动 Python 之前静默同步服务器上的 backend/frontend 差异文件。
+    // 放在 start() 之前的用意：覆盖完成后首次 start() 天然加载新代码，省一次重启；
+    // 断网/超时/任何异常都会静默跳过，绝不阻塞启动。
+    let hotfixResult = { count: 0, backendChanged: false, files: [] };
+    try {
+        hotfixResult = await checkAndApplyHotfix(localPythonManager, localPythonManager.getProjectRoot());
+    } catch (err) {
+        console.error("[Hotfix] 热更新检查失败（不影响启动）:", err);
+    }
+
     try {
         pythonStatus = await localPythonManager.start();
     } catch (err) {
         console.error("[BlogDistiller] 本地 Python 引擎启动异常:", err);
     }
+
+    // 自愈：热更了后端代码但服务起不来 → 回滚上一代备份文件并重启
+    if (hotfixResult.backendChanged) {
+        const healthy = await localPythonManager.checkHealth(pythonStatus.port || 8000);
+        if (!healthy) {
+            console.error("[Hotfix] 后端更新后健康检查失败，回滚上一代文件并重启服务");
+            rollbackHotfix(localPythonManager.getProjectRoot());
+            try {
+                pythonStatus = await localPythonManager.restart();
+            } catch (err) {
+                console.error("[Hotfix] 回滚后重启仍异常:", err);
+            }
+        }
+    }
+
     navigateMainWindowToWorkbench(pythonStatus.port || 8000);
 
     let proxyPort = 8899;

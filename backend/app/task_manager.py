@@ -11,6 +11,7 @@ from app.models import (
     TaskCreateRequest, TaskProgress, TaskStatusEnum, PlatformEnum, ExportFormatEnum, ArticleItem
 )
 from app.scrapers.base import BaseScraper
+from app.scrapers.custom_urls import dedupe_wechat_title
 from app.scrapers.cnblogs import CNBlogsScraper
 from app.scrapers.juejin import JuejinScraper
 from app.scrapers.csdn import CSDNScraper
@@ -593,6 +594,11 @@ class TaskManager:
                     asyncio.create_task(self._broadcast(task_id))
 
                 article_list = await scraper.get_article_list(list_progress_cb)
+                # 统一出口清洗：微信个别通道（合集页 DOM 等）会输出「标题 标题」双份文本，
+                # 在进入抓取/导出流程前统一去重（判定规则保守，正常标题零误伤）
+                for _meta in article_list:
+                    if _meta.get("title"):
+                        _meta["title"] = dedupe_wechat_title(_meta["title"])
             
             if hasattr(scraper, "declared_count") and scraper.declared_count is not None:
                 task.declared_count = scraper.declared_count
@@ -775,7 +781,29 @@ class TaskManager:
                 else:
                     task.message = f"正在抓取 ({idx}/{len(article_list)}): {task.current_article_title[:22]}..."
                     await self._broadcast(task_id)
-                    article_item = await scraper.scrape_article_detail(meta)
+                    try:
+                        article_item = await scraper.scrape_article_detail(meta)
+                    except Exception as art_err:
+                        # 单篇异常安全网：任何一篇抓取抛出意外异常（如底层超时、解析崩溃），
+                        # 都只把这一篇归档为失败并继续下一篇，绝不能让整批任务陪葬。
+                        # 注意 asyncio.CancelledError 继承自 BaseException，不会被这里吞掉，取消/暂停仍正常工作。
+                        print(f"[单篇异常] ({idx}/{len(article_list)}) {article_url} "
+                              f"抓取异常已归档为失败并继续: {type(art_err).__name__}: {art_err}")
+                        article_item = ArticleItem(
+                            id=meta.get("id") or article_url,
+                            title=meta.get("title", task.current_article_title),
+                            author=meta.get("author", task.author_name),
+                            publish_time=meta.get("publish_time", ""),
+                            url=article_url,
+                            platform=task.platform,
+                            summary="",
+                            content_html="",
+                            content_markdown="",
+                            images=[],
+                            category=meta.get("column_title") or meta.get("category") or task.category_name,
+                            content_type=meta.get("content_type", "article"),
+                            is_failed=True
+                        )
                     if (
                         request.use_cache
                         and article_item.content_html
@@ -1119,8 +1147,14 @@ class TaskManager:
 
         except Exception as e:
             task.status = TaskStatusEnum.FAILED
-            task.error_message = str(e)
-            task.message = f"❌ 执行过程中发生错误: {str(e)}"
+            # 关键修复：超时/内存不足这类异常的 str(e) 是空字符串，
+            # 之前只显示 str(e) 会变成"执行过程中发生错误: "（前端兜底显示"未知错误"），
+            # 完全无法定位原因。现在把异常类型名也带上，并在控制台打印完整堆栈供排查。
+            task.error_message = f"{type(e).__name__}: {e}".strip()
+            task.message = f"❌ 执行过程中发生错误: {task.error_message}"
+            print(f"[任务失败] task={task_id} 异常类型={type(e).__name__} 详情={e}")
+            import traceback
+            traceback.print_exc()
             await self._broadcast(task_id)
             try:
                 await scraper.close()

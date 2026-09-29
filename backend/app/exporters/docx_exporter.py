@@ -109,8 +109,8 @@ def sanitize_markdown_text(text: str) -> str:
     t = html.unescape(text)
     # 2. 移除 javascript: 伪链接
     t = re.sub(r'\(javascript:[^\)]*\)', '', t, flags=re.IGNORECASE)
-    # 3. 移除泄露在普通文本里的未闭合图片 Markdown
-    t = re.sub(r'!\[(?P<alt>.*?)\]\((?P<src>https?://[^\s\)]+)\)', '', t)
+    # 3. 移除泄露在普通文本里的未闭合图片 Markdown (兼容带 "title" 的图片语法，如微信残留的 ![](url "null"))
+    t = re.sub(r'!\[(?P<alt>.*?)\]\(\s*(?P<src>https?://[^\s\)"]+)(?:\s+(?:"[^"]*"|\'[^\']*\'))?\s*\)', '', t)
     # 4. 替换常见残留 HTML 标签
     t = re.sub(r'<br\s*/?>', '\n', t, flags=re.IGNORECASE)
     t = re.sub(r'</?(?:b|strong)>', '**', t, flags=re.IGNORECASE)
@@ -347,14 +347,16 @@ def append_article_content_to_docx(
         tag_val = tag_p.add_run(tags_formatted)
         format_run(tag_val, font_size=Pt(9.5), color=RGBColor(2, 132, 199))
 
-    # 3. 原文说明栏 (平台/作者/时间)
+    # 3. 原文说明栏 (平台/作者/时间) —— 时间检测不到就整段不写，避免出现"未知时间"这种low占位符
+    orig_parts = [art.platform or platform, art.author or author_name]
+    if art.publish_time and str(art.publish_time).strip():
+        orig_parts.append(str(art.publish_time).strip())
     orig_p = doc.add_paragraph()
     orig_p.paragraph_format.space_before = Pt(0)
     orig_p.paragraph_format.space_after = Pt(2)
     orig_prefix = orig_p.add_run("📰 原文：")
     format_run(orig_prefix, font_size=Pt(9), color=RGBColor(100, 116, 139), bold=True)
-    orig_info = f"{art.platform or platform}  ·  {art.author or author_name}  ·  {art.publish_time or '未知时间'}"
-    orig_val = orig_p.add_run(orig_info)
+    orig_val = orig_p.add_run("  ·  ".join(orig_parts))
     format_run(orig_val, font_size=Pt(9), color=RGBColor(71, 85, 105))
 
     # 4. 原文链接
@@ -495,8 +497,12 @@ def append_article_content_to_docx(
 
         # ==========================================================
         # 4. 图片识别与高质量内嵌 (所见即所得，彻底消除原始 Markdown 语法泄露)
+        # 兼容两种图片语法：![alt](url) 与带 title 的 ![alt](url "标题")
+        # （微信编辑器历史数据经 markdownify 转换后会带 title="null" 残留，
+        #   旧正则要求右括号紧跟 URL，遇到 (url "null") 会匹配失败，
+        #   导致整行图片退化为纯文本链接显示在 Word 里）
         # ==========================================================
-        img_match = re.search(r'!\[(?P<alt>.*?)\]\((?P<src>https?://[^\s\)]+)\)', stripped)
+        img_match = re.search(r'!\[(?P<alt>.*?)\]\(\s*(?P<src>https?://[^\s\)"]+)(?:\s+(?:"[^"]*"|\'[^\']*\'))?\s*\)', stripped)
         if not img_match:
             img_match = re.search(r'<img[^>]+src=["\'](?P<src>https?://[^"\']+)["\'](?:[^>]*alt=["\'](?P<alt>[^"\']*)["\'])?', stripped, re.I)
 

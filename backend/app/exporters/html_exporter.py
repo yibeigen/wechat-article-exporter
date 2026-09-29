@@ -43,7 +43,7 @@ class HTMLExporter(BaseExporter):
         for idx, art in enumerate(articles, 1):
             safe_title = html.escape(art.title)
             safe_author = html.escape(art.author or self.author_name)
-            safe_time = html.escape(art.publish_time)
+            safe_time = html.escape(art.publish_time or '')
             safe_url = html.escape(art.url)
             safe_art_platform = html.escape(self.get_platform_display_name(art.platform or self.platform))
             art_id = f"art-{idx}"
@@ -77,7 +77,7 @@ class HTMLExporter(BaseExporter):
                         <h2 class="article-title">{safe_title}</h2>
                         {tags_html}
                         <div class="article-meta">
-                            <span>📰 <strong>原文：</strong>{safe_art_platform} · {safe_author} · {safe_time or '未知时间'}</span>
+                            <span>📰 <strong>原文：</strong>{safe_art_platform} · {safe_author}{' · ' + safe_time if safe_time else ''}</span>
                             {f'<span>🔗 <strong>原文链接：</strong><a href="{safe_url}" target="_blank" rel="noopener">{safe_url}</a></span>' if safe_url else ''}
                         </div>
                     </header>

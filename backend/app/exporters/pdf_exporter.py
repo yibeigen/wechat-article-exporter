@@ -94,7 +94,7 @@ class PDFExporter(BaseExporter):
         for idx, art in enumerate(articles, 1):
             safe_title = html.escape(art.title)
             safe_author = html.escape(art.author or self.author_name)
-            safe_time = html.escape(art.publish_time)
+            safe_time = html.escape(art.publish_time or '')
             safe_url = html.escape(art.url or "")
 
             # 标签横向展示
@@ -130,7 +130,7 @@ class PDFExporter(BaseExporter):
                         <h1 class="chapter-title">{safe_title}</h1>
                         {tags_html}
                         <div class="chapter-meta">
-                            <span>📰 <strong>原文：</strong>{html.escape(art.platform or self.platform)} · {safe_author} · {safe_time or '未知时间'}</span>
+                            <span>📰 <strong>原文：</strong>{html.escape(art.platform or self.platform)} · {safe_author}{' · ' + safe_time if safe_time else ''}</span>
                         </div>
                         {url_row}
                     </div>

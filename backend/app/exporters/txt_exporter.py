@@ -30,7 +30,11 @@ class TxtExporter(BaseExporter):
         # 目录
         txt_lines.append("【目录】")
         for idx, art in enumerate(articles, 1):
-            txt_lines.append(f"{idx}. {art.title} ({art.publish_time})")
+            # 目录行：时间检测不到就不带括号，避免"标题 ()"
+            if art.publish_time and str(art.publish_time).strip():
+                txt_lines.append(f"{idx}. {art.title} ({str(art.publish_time).strip()})")
+            else:
+                txt_lines.append(f"{idx}. {art.title}")
         txt_lines.append("\n" + "=" * 50 + "\n")
 
         # 正文
@@ -39,7 +43,11 @@ class TxtExporter(BaseExporter):
             if art.tags:
                 tags_str = "   ".join([f"#{t.strip().lstrip('#')}" for t in art.tags if t.strip()])
                 txt_lines.append(f"标签：{tags_str}")
-            txt_lines.append(f"原文：{art.platform or self.platform}  ·  {art.author or self.author_name}  ·  {art.publish_time or '未知时间'}")
+            # 原文信息栏：时间检测不到就不写时间段
+            orig_parts = [art.platform or self.platform, art.author or self.author_name]
+            if art.publish_time and str(art.publish_time).strip():
+                orig_parts.append(str(art.publish_time).strip())
+            txt_lines.append(f"原文：{'  ·  '.join(orig_parts)}")
             if art.url:
                 txt_lines.append(f"原文链接：{art.url}")
             txt_lines.append("-" * 40)

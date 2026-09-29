@@ -14,6 +14,7 @@ import httpx
 from app.scrapers.base import BaseScraper
 from app.models import ArticleItem
 from app.cleaners.html_cleaner import clean_html_content
+from app.scrapers.custom_urls import dedupe_wechat_title
 from app.scrapers.base import BaseScraper
 from app.models import ArticleItem
 from app.cleaners.html_cleaner import clean_html_content
@@ -127,11 +128,7 @@ class WeChatScraper(BaseScraper):
         articles = []
         lines = [line.strip() for line in self.target.split("\n") if line.strip()]
         urls = [line for line in lines if line.startswith("http")]
-        
-        # 【诊断日志】帮助定位为什么合集链接会走到搜狗通道
-        print(f"[WeChatScraper] get_article_list target preview: {self.target[:300]!r}")
-        print(f"[WeChatScraper] detected {len(lines)} non-empty lines, {len(urls)} http urls")
-        
+
         # 场景 A: 检查是否输入了微信「专辑/合集」链接 (appmsgalbum 或 album_id)
         album_urls = [u for u in urls if ("appmsgalbum" in u or "album_id" in u)]
         print(f"[WeChatScraper] album_urls detected: {len(album_urls)}, 'album_id' in target: {'album_id' in self.target}")
@@ -149,29 +146,69 @@ class WeChatScraper(BaseScraper):
         # 免凭证直接导出单篇；如需该号全部历史，可点「获取公众号链接」在微信打开
         if len(urls) == 1 and ("mp.weixin.qq.com/s" in urls[0] or "mp.weixin.qq.com/s?" in urls[0]):
             url = urls[0]
-            # 尝试从 URL 尝试提取 __biz
-            biz_m = re.search(r'[\?&]__biz=([^&#]+)', url)
             if progress_callback:
-                progress_callback("已识别单篇微信文章链接，直接提取正文...", 1, 0)
-            author_info = await self.get_author_info()
-            account_name = author_info.get("name") or "微信公众号"
-            return [{"id": url, "url": url, "title": account_name}]
+                progress_callback("已识别单篇微信文章链接，正在提取标题与正文...", 1, 0)
+
+            # 先轻量 GET 一次页面，同时提取 真实文章标题 / 公众号名 / 发布时间
+            # （列表阶段弹窗与「导出文章名+链接」都依赖这里的元数据，不能拿公众号名冒充标题）
+            page_meta: Dict[str, str] = {}
+            try:
+                resp = await self.client.get(url, timeout=12.0)
+                if resp.status_code == 200:
+                    from app.scrapers.custom_urls import parse_wechat_page_meta
+                    page_meta = parse_wechat_page_meta(resp.text)
+            except Exception:
+                page_meta = {}
+
+            account_name = page_meta.get("author")
+            if not account_name:
+                author_info = await self.get_author_info()
+                account_name = author_info.get("name") or "微信公众号"
+
+            return [{
+                "id": url,
+                "url": url,
+                # 解析成功用真实标题；失败退回公众号名（至少不会是占位符）
+                "title": page_meta.get("title") or account_name,
+                **({"author": page_meta["author"]} if page_meta.get("author") else {}),
+                **({"publish_time": page_meta["publish_time"]} if page_meta.get("publish_time") else {}),
+            }]
 
         # 场景 C: 用户直接输入了多条微信文章链接（按行分隔）
         if urls and len(urls) > 1 and not any("profile_ext" in u for u in urls):
-            for idx, url in enumerate(urls, 1):
+            # 并发限流逐条轻量 GET，提取每篇的真实标题/公众号名/发布时间
+            # （与批量聚合通道保持一致：列表阶段必须展示真实文章名，而不是占位编号）
+            from app.scrapers.custom_urls import parse_wechat_page_meta
+            sem = asyncio.Semaphore(4)
+
+            async def fetch_meta(u: str) -> Dict[str, str]:
+                async with sem:
+                    try:
+                        resp = await self.client.get(u, timeout=12.0)
+                        if resp.status_code == 200:
+                            return parse_wechat_page_meta(resp.text)
+                    except Exception:
+                        pass
+                    return {}
+
+            metas = await asyncio.gather(*(fetch_meta(u) for u in urls))
+
+            for idx, (url, meta) in enumerate(zip(urls, metas), 1):
                 articles.append({
                     "id": f"wechat_{idx}",
                     "url": url,
-                    "title": f"微信文章_{idx}"
+                    "title": meta.get("title") or f"微信文章_{idx}",
+                    **({"author": meta["author"]} if meta.get("author") else {}),
+                    **({"publish_time": meta["publish_time"]} if meta.get("publish_time") else {}),
                 })
                 if self.max_articles and len(articles) >= self.max_articles:
                     break
             if progress_callback:
-                progress_callback(f"已识别 {len(articles)} 篇微信文章链接，准备抓取...", len(articles), 0)
+                ok_count = sum(1 for m in metas if m.get("title"))
+                progress_callback(f"已识别 {len(articles)} 篇微信文章，成功提取 {ok_count} 条真实标题，准备抓取...", len(articles), 0)
             return articles
             
-        # 场景 D: 输入的是公众号名称、__biz 或 profile_ext 专属链接
+        # 场景 D: 输入的是 __biz 或 profile_ext 专属链接
         # 优先通过微信客户端协议通道 (profile_ext) 拉取全量历史
         biz = ""
         biz_m = re.search(r'[\?&]__biz=([^&#]+)', self.target)
@@ -179,95 +216,32 @@ class WeChatScraper(BaseScraper):
             biz = biz_m.group(1)
         elif len(self.target.strip()) > 10 and self.target.strip().endswith("==") and not self.target.strip().startswith("http"):
             biz = self.target.strip()
-        else:
-            saved_auth = get_saved_wechat_auth()
-            biz = saved_auth.get("client_biz", "")
 
-        if biz:
-            if progress_callback:
-                progress_callback(f"正在通过微信客户端通道 (profile_ext) 分页拉取公众号历史消息...", 0, 0)
-            client_articles = await self._fetch_via_profile_ext(biz, progress_callback)
-            if client_articles:
-                return client_articles
+        if not biz:
+            if self.target.strip().startswith("http"):
+                # 是链接但未能识别出微信通道参数（或合集/文章拉取失败），给出中性指引
+                raise ValueError(
+                    "未能通过该链接获取到文章列表：请确认粘贴的是微信单篇推文链接或合集/专辑链接，"
+                    "且文章/合集未被作者删除或设为私密。"
+                )
+            # 公众号名称/纯文本输入：网页端名称导出通道已下线。
+            # 旧搜狗公开检索接口已被微信封禁，且旧兜底会用上次同步的 client_biz 误抓其他账号，故直接给出明确指引。
+            raise ValueError(
+                "「公众号名称导出」网页端通道已下线（微信已封禁公开搜索接口）。"
+                "请粘贴单篇推文链接或合集/专辑链接免登录导出；"
+                "如需一键导出公众号全部历史文章，请使用桌面客户端。"
+            )
 
-        # 2. 如果已配置/同步了微信公众平台官方后台通道 (Cookie + Token)
-        if self.cookie and self.token:
-            clean_target = self.target.strip()
-            # 如果目标是当前登录的公众号自己（例如「艺杯羹」），直接调用 appmsgpublish，100% 零风控秒级全量导出
-            if self.account_name and (clean_target == self.account_name or clean_target in self.account_name or self.account_name in clean_target or clean_target == "艺杯羹"):
-                if progress_callback:
-                    progress_callback(f"正在读取当前登录公众号【{self.account_name or clean_target}】全量发表记录...", 0, 0)
-                return await self._fetch_via_appmsgpublish(progress_callback)
-
-            if progress_callback:
-                progress_callback(f"正在通过微信公众平台官方通道直连检索【{self.target}】全部历史文章...", 0, 0)
-            return await self._fetch_via_mp_backend(progress_callback)
-
-        # 3. 仅在未配置任何公众号凭证（纯游客免登录模式）时，才使用公开搜索通道
         if progress_callback:
-            progress_callback(f"（未连接公众号后台）正在通过公开检索通道获取【{self.target}】最新公开文章...", 0, 0)
-        return await self._fetch_via_sogou(progress_callback)
+            progress_callback("正在通过微信客户端通道 (profile_ext) 分页拉取公众号历史消息...", 0, 0)
+        client_articles = await self._fetch_via_profile_ext(biz, progress_callback)
+        if client_articles:
+            return client_articles
 
-        # 4. 兜底方案：知名公众号范例库或动态智能清单
-        PRESET_ACCOUNT_ARTICLES = {
-            "艺杯羹": [
-                {"id": "ybg_1", "url": "https://mp.weixin.qq.com/s/preset_ybg_1", "title": "【艺杯羹】独立开发与高效知识管理全景指南", "create_time": "2026-08-20"},
-                {"id": "ybg_2", "url": "https://mp.weixin.qq.com/s/preset_ybg_2", "title": "【艺杯羹】从零打造自动化博文采集与归档引擎", "create_time": "2026-08-18"},
-                {"id": "ybg_3", "url": "https://mp.weixin.qq.com/s/preset_ybg_3", "title": "【艺杯羹】程序员如何打造属于自己的数字化第二大脑", "create_time": "2026-08-15"}
-            ],
-            "罗辑思维": [
-                {"id": "ljsw_1", "url": "https://mp.weixin.qq.com/s/preset_ljsw_1", "title": "【罗辑思维】第920期 | 什么是真正的战略定力", "create_time": "2026-08-24"},
-                {"id": "ljsw_2", "url": "https://mp.weixin.qq.com/s/preset_ljsw_2", "title": "【罗辑思维】第919期 | 认知升级的三道关键门槛", "create_time": "2026-08-23"},
-                {"id": "ljsw_3", "url": "https://mp.weixin.qq.com/s/preset_ljsw_3", "title": "【罗辑思维】第918期 | 为什么我们需要长线思考", "create_time": "2026-08-22"}
-            ],
-            "代码随想录": [
-                {"id": "dmsxl_1", "url": "https://mp.weixin.qq.com/s/preset_dmsxl_1", "title": "【代码随想录】动态规划全解指南：从背包问题到股票买卖", "create_time": "2026-08-22"},
-                {"id": "dmsxl_2", "url": "https://mp.weixin.qq.com/s/preset_dmsxl_2", "title": "【代码随想录】二叉树遍历与递归回溯的本质思维", "create_time": "2026-08-20"}
-            ],
-            "阿里技术": [
-                {"id": "alitech_1", "url": "https://mp.weixin.qq.com/s/preset_alitech_1", "title": "【阿里技术】高并发分布式架构演进之路与核心实战", "create_time": "2026-08-21"},
-                {"id": "alitech_2", "url": "https://mp.weixin.qq.com/s/preset_alitech_2", "title": "【阿里技术】大模型时代的基础设施工程优化实践", "create_time": "2026-08-19"}
-            ],
-            "36氪": [
-                {"id": "36kr_1", "url": "https://mp.weixin.qq.com/s/preset_36kr_1", "title": "【36氪】深度洞察：AI 原生应用爆发前夜的商业变革", "create_time": "2026-08-24"},
-                {"id": "36kr_2", "url": "https://mp.weixin.qq.com/s/preset_36kr_2", "title": "【36氪】创投新风向：硬科技与出海赛道的破局者们", "create_time": "2026-08-23"}
-            ],
-            "机器之心": [
-                {"id": "jqzx_1", "url": "https://mp.weixin.qq.com/s/preset_jqzx_1", "title": "【机器之心】前沿 AI 观察：下一代推理模型架构与演进", "create_time": "2026-08-24"},
-                {"id": "jqzx_2", "url": "https://mp.weixin.qq.com/s/preset_jqzx_2", "title": "【机器之心】多模态大模型前沿落地与实战分析", "create_time": "2026-08-22"}
-            ],
-            "差评": [
-                {"id": "cp_1", "url": "https://mp.weixin.qq.com/s/preset_cp_1", "title": "【差评】硬核拆解：今年最火的智能硬件到底值不值得买", "create_time": "2026-08-24"},
-                {"id": "cp_2", "url": "https://mp.weixin.qq.com/s/preset_cp_2", "title": "【差评】聊聊最近互联网大厂都在搞的黑科技", "create_time": "2026-08-21"}
-            ],
-            "半佛仙人": [
-                {"id": "bfxr_1", "url": "https://mp.weixin.qq.com/s/preset_bfxr_1", "title": "【半佛仙人】风控老司机眼中的商业奇幻现实", "create_time": "2026-08-23"},
-                {"id": "bfxr_2", "url": "https://mp.weixin.qq.com/s/preset_bfxr_2", "title": "【半佛仙人】别让你的智商被消费主义按在地上摩擦", "create_time": "2026-08-20"}
-            ]
-        }
-
-        matched_name = next((k for k in PRESET_ACCOUNT_ARTICLES.keys() if k in self.target), None)
-        if matched_name:
-            if progress_callback:
-                progress_callback(f"正在加载【{matched_name}】示范精选文章列表...", len(PRESET_ACCOUNT_ARTICLES[matched_name]), 0)
-            sample_list = PRESET_ACCOUNT_ARTICLES[matched_name]
-            return sample_list[:self.max_articles] if self.max_articles else sample_list
-
-        # 对其他任意自定义公众号，根据用户选择的数量动态生成唯一结构清单
-        clean_name = self.target.strip()
-        count_to_gen = max(1, self.max_articles or 5)
-        if progress_callback:
-            progress_callback(f"正在为公众号【{clean_name}】检索文章清单...", count_to_gen, 0)
-        custom_list = [
-            {
-                "id": f"art_{i}",
-                "url": f"https://mp.weixin.qq.com/s/demo_{clean_name}_{i}",
-                "title": f"【{clean_name}】深度专栏精华文章 {i:02d}",
-                "create_time": f"2026-08-{max(1, 26 - i):02d}"
-            }
-            for i in range(1, count_to_gen + 1)
-        ]
-        return custom_list
+        raise ValueError(
+            "未能通过该链接获取到文章列表：请确认粘贴的是微信单篇推文链接或合集/专辑链接。"
+            "如需导出公众号全部历史文章，请使用桌面客户端。"
+        )
 
     async def _fetch_via_profile_ext(self, biz: str, progress_callback: Optional[Callable[[str, int, int], None]] = None) -> List[Dict[str, str]]:
         """
@@ -745,6 +719,7 @@ class WeChatScraper(BaseScraper):
             # ========== 第 4 层：微信 H5 专辑页滚动翻页 AJAX 加载 ==========
             # 如果静态解析只拿到 10 篇且能提取到 msgid，则尝试模拟微信的翻页接口继续加载。
             print(f"[WeChatScraper._fetch_album_articles] 当前文章数: {len(articles)}，最后一页元素带 msgid 的数量: {len(page_items)}")
+            paged_articles = []
             if page_items:
                 last = page_items[-1]
                 print(f"[WeChatScraper._fetch_album_articles] 尝试以 msg_id={last.get('_msg_id')} item_idx={last.get('_item_idx')} 为起点翻页...")
@@ -1182,265 +1157,6 @@ class WeChatScraper(BaseScraper):
         except Exception:
             return str(create_time)
 
-    async def _fetch_via_appmsgpublish(self, progress_callback: Optional[Callable[[str, int, int], None]] = None) -> List[Dict[str, str]]:
-        """利用公众号后台的 appmsgpublish 接口获取当前登录公众号自己的全部发表记录（含群发 + 仅发表）"""
-        if not self.token or not self.cookie:
-            raise RuntimeError("缺少 appmsgpublish 接口所需的 token / cookie")
-
-        articles = []
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/javascript, */*; q=0.01",
-            "X-Requested-With": "XMLHttpRequest",
-            "Referer": f"https://mp.weixin.qq.com/cgi-bin/appmsgpublish?sub=list&token={self.token}&lang=zh_CN",
-            "Cookie": self.cookie
-        }
-
-        begin = 0
-        page_size = 5
-        total_count = None
-        empty_streak = 0
-
-        while True:
-            if self.max_articles and len(articles) >= self.max_articles:
-                break
-
-            params = {
-                "sub": "list",
-                "search_field": None,
-                "begin": begin,
-                "count": page_size,
-                "query": "",
-                "fakeid": self.fakeid,
-                "type": 101,
-                "free_publish_type": 1,
-                "sub_action": "list_ex",
-                "token": self.token,
-                "lang": "zh_CN",
-                "f": "json",
-                "ajax": 1,
-            }
-
-            if progress_callback:
-                progress_callback(f"正在读取公众号发表记录（第 {begin + 1} 条起），已获取 {len(articles)} 篇...", len(articles), total_count or 0)
-
-            resp = await self.client.get("https://mp.weixin.qq.com/cgi-bin/appmsgpublish", params=params, headers=headers, timeout=15.0)
-            data = resp.json()
-            base_resp = data.get("base_resp", {})
-            if base_resp.get("ret") not in (0, "0"):
-                err_msg = base_resp.get("err_msg", "未知错误")
-                print(f"appmsgpublish 接口返回错误: {err_msg}")
-                raise RuntimeError(f"公众号发表记录接口返回错误: {err_msg}")
-
-            raw_page = data.get("publish_page", {})
-            publish_page = json.loads(raw_page) if isinstance(raw_page, str) else (raw_page or {})
-            if total_count is None:
-                total_count = publish_page.get("total_count") or publish_page.get("total") or 0
-
-            items = publish_page.get("publish_list", []) or publish_page.get("list", [])
-            if not items:
-                empty_streak += 1
-                if empty_streak >= 2:
-                    break
-                begin += page_size
-                await asyncio.sleep(0.5)
-                continue
-            empty_streak = 0
-
-            for item in items:
-                raw_info = item.get("publish_info", item)
-                info = json.loads(raw_info) if isinstance(raw_info, str) else (raw_info or {})
-                
-                # 微信新版将文章放在 appmsgex 列表中
-                appmsgex = info.get("appmsgex", [])
-                if appmsgex:
-                    for sub in appmsgex:
-                        title = sub.get("title") or ""
-                        link = sub.get("link") or ""
-                        c_time = sub.get("create_time") or sub.get("update_time")
-                        if not title or not link:
-                            continue
-                        link = html_module.unescape(link)
-                        if not link.startswith("http"):
-                            link = "https://mp.weixin.qq.com" + link
-                        articles.append({
-                            "id": link,
-                            "url": link,
-                            "title": title,
-                            "create_time": self._format_wechat_create_time(c_time)
-                        })
-                        if self.max_articles and len(articles) >= self.max_articles:
-                            break
-                else:
-                    title = info.get("title") or item.get("title")
-                    link = info.get("link") or item.get("link") or item.get("url") or info.get("url")
-                    publish_time = info.get("publish_time") or item.get("publish_time") or item.get("create_time") or info.get("create_time")
-                    if title and link:
-                        link = html_module.unescape(link)
-                        if not link.startswith("http"):
-                            link = "https://mp.weixin.qq.com" + link
-                        articles.append({
-                            "id": link,
-                            "url": link,
-                            "title": title,
-                            "create_time": self._format_wechat_create_time(publish_time)
-                        })
-                
-                if self.max_articles and len(articles) >= self.max_articles:
-                    break
-
-            if total_count and begin + page_size >= total_count:
-                break
-            # 如果一页没有填满，也视为已到末尾
-            if len(items) < page_size:
-                break
-            begin += page_size
-            await asyncio.sleep(0.8)
-
-        if progress_callback:
-            progress_callback(f"已通过公众号发表记录获取 {len(articles)} 篇文章", len(articles), total_count or 0)
-
-        return articles
-
-    async def _fetch_via_mp_backend(self, progress_callback: Optional[Callable[[str, int, int], None]] = None) -> List[Dict[str, str]]:
-        """利用微信公众平台后台 search_biz + appmsg 检索公众号全部历史文章"""
-        articles = []
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Cookie": self.cookie,
-            "Referer": f"https://mp.weixin.qq.com/cgi-bin/appmsg?t=media/appmsg_edit_v2&action=edit&isNew=1&type=77&createType=0&token={self.token}&lang=zh_CN"
-        }
-
-        # 1. 先通过 search_biz 搜索用户输入的目标公众号，获取其 fakeid
-        quoted_target = urllib.parse.quote(self.target)
-        search_biz_url = f"https://mp.weixin.qq.com/cgi-bin/searchbiz?action=search_biz&begin=0&count=5&query={quoted_target}&token={self.token}&lang=zh_CN&f=json&ajax=1"
-        try:
-            resp = await self.client.get(search_biz_url, headers=headers, timeout=12.0)
-            data = resp.json()
-            biz_list = data.get("list", [])
-
-            # 如果触发频控，等待 2 秒后重试一次
-            if not biz_list and data.get("base_resp", {}).get("ret") == 200013:
-                await asyncio.sleep(2.0)
-                resp = await self.client.get(search_biz_url, headers=headers, timeout=12.0)
-                data = resp.json()
-                biz_list = data.get("list", [])
-
-            if biz_list:
-                fakeid = biz_list[0].get("fakeid")
-                nickname = biz_list[0].get("nickname") or self.target
-
-                # 2. 用目标公众号 fakeid 分页遍历其历史文章
-                begin = 0
-                count = 5
-                while True:
-                    list_url = f"https://mp.weixin.qq.com/cgi-bin/appmsg?action=list_ex&begin={begin}&count={count}&fakeid={fakeid}&type=9&query=&token={self.token}&lang=zh_CN&f=json&ajax=1"
-                    r = await self.client.get(list_url, headers=headers, timeout=12.0)
-                    list_data = r.json()
-
-                    # 频控容错
-                    if list_data.get("base_resp", {}).get("ret") == 200013:
-                        if progress_callback:
-                            progress_callback("检测到微信接口频控保护，正在安全等待 3 秒后重试...", 0, 0)
-                        await asyncio.sleep(3.0)
-                        r = await self.client.get(list_url, headers=headers, timeout=12.0)
-                        list_data = r.json()
-
-                    if list_data.get("base_resp", {}).get("ret") == 200013 and not articles:
-                        raise RuntimeError("微信公众平台接口触发了官方临时频控保护 (freq control)。建议稍后重试，或直接使用【模式二：粘贴文章/专辑链接】（无需后台凭证，0风控秒级批量下载）！")
-
-                    app_msg_list = list_data.get("app_msg_list", [])
-                    if not app_msg_list:
-                        break
-
-                    for msg in app_msg_list:
-                        link = msg.get("link")
-                        title = msg.get("title")
-                        aid = str(msg.get("aid", ""))
-                        create_time = self._format_wechat_create_time(msg.get("create_time"))
-
-                        articles.append({
-                            "id": aid or link,
-                            "url": link,
-                            "title": title,
-                            "create_time": create_time
-                        })
-
-                        if self.max_articles and len(articles) >= self.max_articles:
-                            return articles
-
-                    if progress_callback:
-                        progress_callback(f"已检索到公众号 [{nickname}] 历史文章 {len(articles)} 篇...", len(articles), 0)
-
-                    total_count = list_data.get("app_msg_cnt", 0)
-                    begin += count
-                    if begin >= total_count:
-                        break
-
-                    await asyncio.sleep(0.8)
-
-                if articles:
-                    return articles
-            else:
-                ret = data.get("base_resp", {}).get("ret")
-                err_msg = data.get("base_resp", {}).get("err_msg", "")
-                if ret == 200013:
-                    raise RuntimeError("【微信公众号官方通道】触发了腾讯官方临时频控保护 (freq control)。这是因为微信公众平台限制了机房云端 IP 连续查询；请通过浏览器插件在本地直连拉取，或稍后重试。")
-                elif ret != 0:
-                    raise RuntimeError(f"【微信公众号官方通道】请求异常 (ret: {ret}, msg: {err_msg})，请确认公众平台登录会话是否有效。")
-                else:
-                    raise RuntimeError(f"在微信公众平台官方后台未搜索到名为【{self.target}】的公众号，请确认公众号名称是否准确。")
-        except RuntimeError:
-            raise
-        except Exception as e:
-            raise RuntimeError(f"【微信公众平台官方通道】检索失败: {e}")
-
-        # 4. 如果按名称搜索目标号失败或无文章，再 fallback 拉取当前登录公众号自己的文章
-        try:
-            if progress_callback:
-                progress_callback(f"未检索到【{self.target}】，尝试获取当前登录公众号自身文章...", 0, 0)
-            begin = 0
-            count = 10
-            while True:
-                list_url = f"https://mp.weixin.qq.com/cgi-bin/appmsg?action=list_ex&begin={begin}&count={count}&type=9&token={self.token}&lang=zh_CN&f=json&ajax=1"
-                r = await self.client.get(list_url, headers=headers, timeout=12.0)
-                list_data = r.json()
-                app_msg_list = list_data.get("app_msg_list", [])
-                if not app_msg_list:
-                    break
-
-                for msg in app_msg_list:
-                    link = msg.get("link")
-                    title = msg.get("title")
-                    aid = str(msg.get("aid", ""))
-                    create_time = self._format_wechat_create_time(msg.get("create_time"))
-                    articles.append({
-                        "id": aid or link,
-                        "url": link,
-                        "title": title,
-                        "create_time": create_time
-                    })
-                    if self.max_articles and len(articles) >= self.max_articles:
-                        return articles
-
-                total_count = list_data.get("app_msg_cnt", 0)
-                if progress_callback:
-                    progress_callback(f"已检索到当前公众号已发布文章 {len(articles)} 篇...", len(articles), 0)
-                begin += count
-                if begin >= total_count:
-                    break
-
-            if articles:
-                return articles
-        except Exception as e:
-            print(f"提取当前账号已发图文异常: {e}")
-
-        # 4. 如果最终什么都没拿到，给出明确错误
-        if not articles:
-            raise RuntimeError(f"未在微信公众平台检索到名为【{self.target}】的公众号，请确认公众号全称是否准确，或直接粘贴其文章/专辑链接进行抓取。")
-
-        return articles
-
     def _parse_profile_msg_list(self, msg_list_data: Dict[str, Any]) -> List[Dict[str, str]]:
         """解析微信公众号主页返回的 msgList / general_msg_list 数据结构，提取文章列表"""
         articles = []
@@ -1476,120 +1192,6 @@ class WeChatScraper(BaseScraper):
 
         return articles
 
-    async def _fetch_via_sogou(self, progress_callback: Optional[Callable[[str, int, int], None]] = None) -> List[Dict[str, str]]:
-        """通过搜狗微信全网文章检索接口，多页翻页并精准过滤获取该公众号全部公开文章与永久链接"""
-        articles = []
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            "Referer": "https://weixin.sogou.com/"
-        }
-
-        clean_target = self.target.strip()
-        query = urllib.parse.quote(clean_target)
-        
-        # 支持多页翻页，默认最多检索 10 页以获取该公众号全部历史已收录文章
-        max_pages = 10
-        total_found = 0
-
-        if progress_callback:
-            progress_callback(f"正在全网深度检索【{clean_target}】全部历史文章...", 0, 0)
-
-        for page in range(1, max_pages + 1):
-            if self.max_articles and len(articles) >= self.max_articles:
-                break
-
-            search_url = f"https://weixin.sogou.com/weixin?type=2&query={query}&page={page}&ie=utf8"
-            try:
-                r = await self.client.get(search_url, headers=headers, timeout=12.0)
-                if r.status_code != 200:
-                    break
-
-                soup = BeautifulSoup(r.text, "lxml")
-                items = soup.select(".news-box .txt-box")
-                if not items:
-                    break
-
-                for it in items:
-                    if self.max_articles and len(articles) >= self.max_articles:
-                        break
-
-                    h3 = it.select_one("h3")
-                    if not h3:
-                        continue
-
-                    title = h3.text.strip()
-                    sogou_link = h3.find("a")["href"] if h3.find("a") else ""
-                    if not sogou_link:
-                        continue
-                    if sogou_link.startswith("/"):
-                        sogou_link = "https://weixin.sogou.com" + sogou_link
-
-                    # 提取作者与发布时间
-                    sp = it.select_one(".s-p")
-                    author = ""
-                    pub_date = ""
-                    if sp:
-                        author_elem = sp.select_one("span.all-time-y2") or sp.select_one("span") or sp.select_one("a")
-                        author = author_elem.text.strip() if author_elem else ""
-
-                        # 优先从时间戳脚本提取真实年月日
-                        ts_m = re.search(r"timeConvert\(['\"](\d+)['\"]\)", str(sp))
-                        if not ts_m:
-                            ts_m = re.search(r"t=['\"](\d+)['\"]", str(sp))
-                        if ts_m:
-                            try:
-                                pub_date = datetime.datetime.fromtimestamp(int(ts_m.group(1))).strftime("%Y-%m-%d")
-                            except Exception:
-                                pub_date = ""
-                        if not pub_date:
-                            pub_date = datetime.date.today().strftime("%Y-%m-%d")
-
-                    # 1. 严格作者归属校验：只保留真正属于该公众号的文章
-                    if clean_target not in author and author not in clean_target:
-                        continue
-
-                    # 解析搜狗中转页获取真实 mp.weixin.qq.com 文章永久链接
-                    real_wechat_url = sogou_link
-                    try:
-                        link_resp = await self.client.get(
-                            sogou_link,
-                            headers={"Referer": search_url, "User-Agent": headers["User-Agent"]},
-                            timeout=8.0,
-                            follow_redirects=True
-                        )
-                        body = link_resp.text
-                        parts = re.findall(r"url\s*\+=\s*['\"]([^'\"]+)['\"]", body)
-                        if parts:
-                            real_wechat_url = "".join(parts).replace("@", "")
-                        elif "mp.weixin.qq.com" in str(link_resp.url):
-                            real_wechat_url = str(link_resp.url)
-                    except Exception as e:
-                        print(f"解析搜狗重定向链接异常 [{sogou_link}]: {e}")
-
-                    articles.append({
-                        "id": real_wechat_url,
-                        "url": real_wechat_url,
-                        "title": title,
-                        "author": author or clean_target,
-                        "create_time": pub_date
-                    })
-
-                    if progress_callback:
-                        progress_callback(f"已精准获取【{author or clean_target}】第 {len(articles)} 篇文章: {title[:18]}...", len(articles), 0)
-
-                await asyncio.sleep(0.4)
-
-            except Exception as e:
-                print(f"搜狗文章分页检索异常 (page={page}): {e}")
-                break
-
-        # 按发布时间倒序排序（最新发布的文章排在最前面 1, 2, 3...）
-        articles.sort(key=lambda x: x.get("create_time", ""), reverse=True)
-
-        return articles
-
     async def scrape_article_detail(self, article_meta: Dict[str, str]) -> ArticleItem:
         url = article_meta["url"]
         title = article_meta.get("title", "无标题")
@@ -1617,6 +1219,8 @@ class WeChatScraper(BaseScraper):
                     elif soup.title and soup.title.string:
                         title = unescape_wechat_text(soup.title.string)
                 title = re.sub(r"\s+", " ", title).strip()
+                # 个别微信页面的标题元数据带双份（"标题 标题"），导出文档同样要还原为单份
+                title = dedupe_wechat_title(title)
                     
                 # 2. 提取作者 / 公众号昵称 (优先精准选择器，避免容器内的重复拼接)
                 for selector in ["#js_name", "#js_author_name", ".profile_nickname"]:
