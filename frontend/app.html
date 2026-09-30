@@ -3324,12 +3324,12 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 } else if (data.has_cookie) {
                     dot.style.background = '#f59e0b'; // 黄色
                     title.innerText = '知乎基础凭证有效 (游客/临时会话)';
-                    desc.innerText = '可抓取公开内容，建议点击【🌐 一键同步本机浏览器】或【📱 官方扫码登录】激活全量权限';
+                    desc.innerText = '可抓取公开内容，建议点击' + loginTipsBrackets() + '激活全量权限';
                     if (logoutBtn) logoutBtn.style.display = 'inline-flex';
                 } else {
                     dot.style.background = '#9ca3af'; // 灰色
                     title.innerText = '知乎未连接登录态 (仅可抓取前少量公开内容)';
-                    desc.innerText = '知乎限制未登录访问。推荐点击【🌐 一键同步本机浏览器】或【📱 官方扫码登录】一键解锁全量内容';
+                    desc.innerText = '知乎限制未登录访问。推荐点击' + loginTipsBrackets() + '一键解锁全量内容';
                     if (logoutBtn) logoutBtn.style.display = 'none';
                 }
             } catch (e) {
@@ -3467,7 +3467,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
         }
 
         async function logoutZhihu() {
-            if (!confirm('确定要清除本地保存的知乎登录态并退出当前账号吗？\n退出后可随时点击「🌐 一键同步本机浏览器」或「📱 官方扫码登录」重新连接。')) return;
+            if (!confirm('确定要清除本地保存的知乎登录态并退出当前账号吗？\n退出后可随时点击' + syncTipQuoted() + '重新连接。')) return;
             try {
                 await fetch('/api/zhihu/logout', { method: 'POST' });
                 await checkZhihuAuth();
@@ -3499,7 +3499,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 } else {
                     dot.style.background = '#9ca3af'; // 灰色
                     title.innerText = '新浪微博未登录 (公开模式受限)';
-                    desc.innerText = '微博强制要求登录 (SUB凭证)。推荐点击【🌐 一键同步本机浏览器】或【📱 官方扫码登录】快速连接';
+                    desc.innerText = '微博强制要求登录 (SUB凭证)。推荐点击' + loginTipsBrackets() + '快速连接';
                     if (logoutBtn) logoutBtn.style.display = 'none';
                 }
             } catch (e) {
@@ -3642,7 +3642,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
         }
 
         async function logoutWeibo() {
-            if (!confirm('确定要清除本地保存的微博登录态并退出当前账号吗？\n退出后可随时点击「🌐 一键同步本机浏览器」或「📱 官方扫码登录」重新连接。')) return;
+            if (!confirm('确定要清除本地保存的微博登录态并退出当前账号吗？\n退出后可随时点击' + syncTipQuoted() + '重新连接。')) return;
             try {
                 await fetch('/api/weibo/logout', { method: 'POST' });
                 await checkWeiboAuth();
@@ -5953,7 +5953,33 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
         // 浏览器网页无法指定"下载保存路径"（安全限制），这里通过后端文件系统接口把产物复制到用户选择的目录。
         // 仅在 127.0.0.1/localhost 访问时生效；公网服务器版自动退回普通浏览器下载。
         const SAVE_DIR_KEY = 'blogdistiller_default_save_dir';
+        // ===== mac 平台识别与登录提示口径 =====
+        // mac 版暂不支持「一键同步本机浏览器」：macOS 上 Edge/Chrome 的 Cookie 由系统
+        // Keychain 加密，Windows 的 DPAPI 解密链路完全失效，登录一律走扫码/手动 Cookie。
+        // 所有提及登录方式的文案都从这里取值，避免引导用户去点不存在的按钮。
+        const IS_MAC_PLATFORM = /Macintosh|Mac OS X/i.test(navigator.userAgent);
+        function loginTipsBrackets() {
+            return IS_MAC_PLATFORM ? '【📱 官方扫码登录】' : '【🌐 一键同步本机浏览器】或【📱 官方扫码登录】';
+        }
+        function syncTipQuoted() {
+            return IS_MAC_PLATFORM ? '「📱 官方扫码登录」' : '「🌐 一键同步本机浏览器」或「📱 官方扫码登录」';
+        }
         const IS_LOCAL_MODE = ['127.0.0.1', 'localhost', '::1'].includes(window.location.hostname);
+
+        // mac 客户端界面调整：隐藏两处「一键同步本机浏览器」入口，并把状态卡说明改为
+        // mac 可用的登录方式（按钮的 JS 逻辑只改 disabled/innerHTML，不会覆盖 display）
+        if (IS_MAC_PLATFORM) {
+            try {
+                ['btnZhihuSyncBrowser', 'btnWeiboSyncBrowser'].forEach(function (id) {
+                    const el = document.getElementById(id);
+                    if (el) el.style.display = 'none';
+                });
+                const zhDesc = document.getElementById('zhihuStatusDesc');
+                if (zhDesc) zhDesc.textContent = '支持官方弹窗扫码登录或手动填写 Cookie';
+                const wbDesc = document.getElementById('weiboStatusDesc');
+                if (wbDesc) wbDesc.textContent = '支持官方弹窗扫码登录或手动填写 Cookie';
+            } catch (e) { /* mac 界面调整失败不影响主流程 */ }
+        }
 
         // 文件夹弹窗的全局状态
         let _folderCb = null;      // 用户确认目录后的回调

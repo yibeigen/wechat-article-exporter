@@ -1,4 +1,5 @@
 import json
+import sys
 import httpx
 from pathlib import Path
 from typing import Dict, Any
@@ -119,6 +120,12 @@ async def check_weibo_auth_status() -> Dict[str, Any]:
 
 async def sync_local_weibo_cookies() -> Dict[str, Any]:
     """尝试从本机 Microsoft Edge 或 Google Chrome 中一键读取已登录的微博 Cookie"""
+    # 仅 Windows 支持：Cookie 解密依赖 Windows 独有的 DPAPI（与知乎同步同理）
+    if sys.platform != "win32":
+        return {
+            "success": False,
+            "message": "Mac 版暂不支持「一键同步本机浏览器」（Cookie 由 macOS Keychain 加密，无法直接读取）。\n\n请改用【📱 官方扫码登录】或【📋 手动 Cookie】连接微博。"
+        }
     import os
     import shutil
     import sqlite3

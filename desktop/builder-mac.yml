@@ -1,0 +1,62 @@
+# ============================================================
+# BlogDistiller · macOS 桌面版 electron-builder 独立构建配置
+# 用法（仅在 macOS 上，通常为 GitHub Actions 云电脑）：
+#   cd desktop && npx electron-builder --mac --config builder-mac.yml --arm64
+#   cd desktop && npx electron-builder --mac --config builder-mac.yml --x64
+# 产物输出到 ../dist/mac/（与 Windows 版的 ../dist 完全隔离）
+#
+# 为什么需要单独一份配置（与 builder-win7.yml 同理）：
+# - 需要随包内置 python-build-standalone 内核（extraResources 的 python-mac 目录），
+#   该目录由 CI 在构建前下载解压，Windows 构建没有它，不能放进 package.json
+# - 未签名分发：identity 置 null 跳过 codesign，避免 CI 无证书报错；
+#   用户首次打开需右键打开或在「系统设置 → 隐私与安全性」放行（v1 暂不购买开发者证书）
+# 本文件不触碰现有 Windows 构建配置（desktop/package.json 内的 build 段）。
+# ============================================================
+
+appId: com.yibeigen.blogdistiller
+productName: "BlogDistiller 文章导出助手"
+copyright: "Copyright © 2026 艺杯羹"
+npmRebuild: false
+directories:
+  output: "../dist/mac"
+
+files:
+  - "main.js"
+  - "preload.js"
+  - "renderer/**/*"
+  - "package.json"
+  - "node_modules/**/*"
+
+mac:
+  icon: "renderer/assets/logo_icon.png"
+  category: "public.app-category.productivity"
+  identity: null            # 关键：跳过代码签名（未签名分发，v1 暂不购买 Apple 开发者证书）
+  target:
+    - target: dmg
+    - target: zip
+
+# 未签名包无法生成自动更新信息，显式关闭避免 dmg 阶段报错
+dmg:
+  writeUpdateInfo: false
+
+# 随客户端附带后端 + 前端工作台 + 启动脚本 + Python 内核
+# 注意：start.bat 是 Windows 批处理脚本，mac 包内无意义，不随包
+extraResources:
+  - from: "../backend"
+    to: "backend"
+    filter:
+      - "**/*"
+      - "!**/__pycache__"
+      - "!**/*.pyc"
+  - from: "../frontend"
+    to: "frontend"
+    filter:
+      - "**/*"
+      - "!**/__pycache__"
+      - "!**/*.pyc"
+  - from: "../run.py"
+    to: "run.py"
+  - from: "../requirements.txt"
+    to: "requirements.txt"
+  - from: "python-mac"      # CI 预先解压好的 python-build-standalone（bin/python3 布局，main.js 已识别）
+    to: "python"

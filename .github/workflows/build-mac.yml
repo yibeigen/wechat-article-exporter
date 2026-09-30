@@ -1,0 +1,90 @@
+# ============================================================
+# BlogDistiller · macOS 版构建流水线
+# 作用：在没有 Mac 的情况下，用 GitHub 提供的 macOS 云电脑完成：
+#       ① 下载 python-build-standalone 内核 ② electron-builder 出 dmg/zip
+#       ③ 用「与客户端完全相同的内核链路」跑一次真实冒烟测试
+# 触发：手动 (workflow_dispatch) 或推送 v* 标签时
+# 费用：公开仓库的 macOS runner 完全免费；私有仓库按 10 倍时长计费
+# 产物：构建结束后在本 run 页面 Artifacts 区下载 mac-arm64 / mac-x64
+# ============================================================
+
+name: Build Mac
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: 构建 (${{ matrix.arch }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64      # Apple Silicon（M1/M2/M3/M4，当下 Mac 主流）
+            ps_arch: aarch64
+          - arch: x64        # Intel 老款 Mac
+            ps_arch: x86_64
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装桌面端依赖
+        working-directory: desktop
+        run: npm install
+
+      # 内置 Python 内核：python-build-standalone 是 uv 同款的独立 CPython 发行版，
+      # 解压后 bin/python3 布局正好被 main.js 的 resolvePython 识别，用户零等待零依赖
+      - name: 下载 Python 内核 (python-build-standalone / CPython 3.12.7)
+        run: |
+          curl -L --fail -o pysa.tar.gz \
+            "https://github.com/astral-sh/python-build-standalone/releases/download/20241016/cpython-3.12.7%2B20241016-${{ matrix.ps_arch }}-apple-darwin-install_only.tar.gz"
+          mkdir -p pysa_extract desktop/python-mac
+          tar -xzf pysa.tar.gz -C pysa_extract
+          mv pysa_extract/python/* desktop/python-mac/
+          chmod +x desktop/python-mac/bin/*
+          ./desktop/python-mac/bin/python3 --version
+
+      # 冒烟测试：把「内置内核 → venv → 装依赖 → 起服务 → 健康检查」完整链路真跑一遍，
+      # 这是 mac 版最核心的自部署链路，等价于用户新机首启发生的事
+      - name: 冒烟测试（与客户端相同的 venv 内核链路）
+        run: |
+          set -e
+          desktop/python-mac/bin/python3 -m venv /tmp/bd_smoke_venv
+          /tmp/bd_smoke_venv/bin/pip install -q -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+          nohup /tmp/bd_smoke_venv/bin/python run.py --port 8060 --host 127.0.0.1 --no-reload > smoke.log 2>&1 &
+          SMOKE_PID=$!
+          OK=0
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8060/api/health > /dev/null; then OK=1; break; fi
+            sleep 2
+          done
+          if [ "$OK" != "1" ]; then
+            echo "---- smoke.log ----"; cat smoke.log
+            kill $SMOKE_PID 2>/dev/null || true
+            exit 1
+          fi
+          echo "健康检查通过: $(curl -sf http://127.0.0.1:8060/api/health)"
+          echo "平台列表: $(curl -sf http://127.0.0.1:8060/api/platforms | head -c 400)"
+          kill $SMOKE_PID 2>/dev/null || true
+
+      - name: 构建 dmg / zip（未签名）
+        working-directory: desktop
+        run: npx electron-builder --mac --config builder-mac.yml --${{ matrix.arch }} --publish never
+
+      - name: 收集构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-${{ matrix.arch }}
+          path: |
+            dist/mac/*.dmg
+            dist/mac/*.zip
+          if-no-files-found: error

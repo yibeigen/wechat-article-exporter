@@ -4,8 +4,12 @@ import base64
 import sqlite3
 import shutil
 import asyncio
+import sys
 import ctypes
-import ctypes.wintypes
+if sys.platform == "win32":
+    # ctypes.wintypes 只在 Windows 上可用：mac/Linux 上导入会直接抛错，
+    # 导致整个后端启动即崩。因此仅在 win32 平台导入。
+    import ctypes.wintypes
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import httpx
@@ -223,6 +227,14 @@ def _decrypt_v10(master_key: bytes, encrypted_value: bytes) -> str:
 
 async def sync_local_browser_cookies() -> Dict[str, Any]:
     """尝试从本机 Microsoft Edge 或 Google Chrome 中一键读取已登录的知乎 Cookie"""
+    # 仅 Windows 支持：Cookie 解密依赖 Windows 独有的 DPAPI。macOS 的浏览器 Cookie
+    # 由系统 Keychain 加密，本功能结构性不可用，这里如实告知而非假装尝试
+    # （铁律：功能不可用绝不允许兜底返回成功，界面提示必须与真实能力一致）
+    if sys.platform != "win32":
+        return {
+            "success": False,
+            "message": "Mac 版暂不支持「一键同步本机浏览器」（Cookie 由 macOS Keychain 加密，无法直接读取）。\n\n请改用【📱 官方扫码登录】或【📋 手动 Cookie】连接知乎。"
+        }
     local_app_data = os.environ.get("LOCALAPPDATA", "")
     browser_dirs = [
         ("Edge", Path(local_app_data) / "Microsoft" / "Edge" / "User Data"),

@@ -3391,6 +3391,8 @@ class LocalPythonManager {
         const candidates = [
             path.join(process.resourcesPath, "python", "python.exe"),
             path.join(process.resourcesPath, "python", "bin", "python"),
+            // mac 版内置内核（python-build-standalone 解压后 bin 下是 python3/python3.x），必须显式识别
+            path.join(process.resourcesPath, "python", "bin", "python3"),
             path.join(root, ".venv", "Scripts", "python.exe"),
             path.join(root, "venv", "Scripts", "python.exe"),
             path.join(root, ".venv", "bin", "python"),
@@ -3744,9 +3746,55 @@ class LocalPythonManager {
         return false;
     }
 
+    // 跨平台强杀进程：Windows 用 taskkill /T /F 连带整棵子进程树；
+    // mac/Linux 后端是单进程（uvicorn --no-reload 无子进程），SIGKILL 直杀即可
+    killProcessTree(pid, timeoutMs = 8000) {
+        try {
+            if (process.platform === "win32") {
+                execSync(`taskkill /pid ${pid} /T /F`, { stdio: "ignore", timeout: timeoutMs });
+            } else {
+                process.kill(pid, "SIGKILL");
+            }
+        } catch (_) { /* 进程可能已自行退出 */ }
+    }
+
+    // macOS/Linux 孤儿后端清理：pgrep 按命令行特征找候选 PID，再用 ps 回读完整命令行
+    // 二次确认必须含 BlogDistiller 特征（venv 内核目录或 .app 内资源路径均满足），
+    // 确保绝不误伤机器上无关的 Python 进程
+    killOrphanPythonServersUnix() {
+        try {
+            const out = execSync('pgrep -f "run\\.py --port"', { encoding: "utf8", timeout: 10000 });
+            const pids = String(out || "")
+                .split(/\r?\n/)
+                .map(s => parseInt(s.trim(), 10))
+                .filter(n => Number.isFinite(n) && n > 0);
+            if (!pids.length) return;
+            const killed = [];
+            for (const pid of pids) {
+                try {
+                    const cmdOut = execSync(`ps -p ${pid} -o command=`, { encoding: "utf8", timeout: 5000 });
+                    if (!/blogdistiller/i.test(String(cmdOut || ""))) continue;
+                    this.killProcessTree(pid);
+                    killed.push(pid);
+                } catch (_) { /* 进程可能已自行退出 */ }
+            }
+            if (killed.length) {
+                console.log(`[LocalPython] 已清理 ${killed.length} 个残留 Python 服务进程 (PID: ${killed.join(", ")})`);
+            }
+        } catch (e) {
+            // pgrep 无匹配时以非零退出码结束属正常情况，不视为错误
+            console.warn("[LocalPython] 孤儿进程扫描跳过:", e.message);
+        }
+    }
+
     killOrphanPythonServers() {
         // 按命令行特征识别本项目的后端进程（run.py --port + 本项目路径特征），
         // 配合单实例锁使用：新实例启动时旧的孤儿后端必属残留，可安全强杀。
+        // 非 Windows 平台走 Unix 版实现（PowerShell/taskkill 在 mac 上不存在）
+        if (process.platform !== "win32") {
+            this.killOrphanPythonServersUnix();
+            return;
+        }
         try {
             const psCmd =
                 "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | " +
@@ -3933,11 +3981,9 @@ class LocalPythonManager {
                 this.clearDepsCache();
                 // 关键防御：健康检查失败的子进程大概率已卡死（如 stdout 管道阻塞、文件锁等待）。
                 // 若不杀掉，它会永久残留：占端口、耗内存，且下次启动时误导复用判定。
-                try {
-                    if (this.child && this.child.pid) {
-                        execSync(`taskkill /pid ${this.child.pid} /T /F`, { stdio: "ignore", timeout: 8000 });
-                    }
-                } catch (_) { /* 进程可能已自行退出 */ }
+                if (this.child && this.child.pid) {
+                    this.killProcessTree(this.child.pid);
+                }
                 this.child = null;
                 this.running = false;
 

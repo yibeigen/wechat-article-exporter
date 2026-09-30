@@ -21,6 +21,9 @@ from app.core.image_helper import embed_articles_images_as_base64
 def find_system_browser() -> Optional[str]:
     """智能查找系统中可用的 Chromium 内核浏览器 (优先 Edge, 其次 Chrome)"""
     candidates = [
+        # macOS：Edge/Chrome 的 .app 内部可执行文件路径（Mac 版 PDF 渲染兜底用）
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
         r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
         r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
         os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
