@@ -955,8 +955,13 @@ class WeChatScraper(BaseScraper):
             return results
 
         last_art = first_page_items[-1]
-        begin_msgid = last_art.get("_msg_id")
-        begin_itemidx = last_art.get("_item_idx") or "1"
+        # 翻页锚点改用【第一条】而不是最后一条（2026-09-30 实测）：
+        # 手动排序的合集里，以"DOM 最后一条"为起点翻页会返回空；
+        # 以第一条为起点 + 大 count 单次请求能稳定拿回其后全部文章，
+        # 与首页已抓条目的重叠部分由调用方的 URL 去重兜底
+        first_art = first_page_items[0]
+        begin_msgid = first_art.get("_msg_id")
+        begin_itemidx = first_art.get("_item_idx") or "1"
 
         # 解析原始 URL 里的 query 参数，保留 __biz、album_id、key、pass_ticket 等
         parsed = urllib.parse.urlparse(album_url)
@@ -965,7 +970,9 @@ class WeChatScraper(BaseScraper):
         params = {k: (v[-1] if isinstance(v, list) else v) for k, v in base_params.items()}
         params["action"] = "getalbum"
         params["f"] = "json"          # 请求 JSON 格式返回
-        params["count"] = "10"        # 每页 10 篇，和微信页面保持一致
+        # 每页请求 100 篇：实测 count 参数生效（要 3 篇就回 3 篇），
+        # 一次大请求拿全合集尾部，避免多页翻页反复锚定带来的不确定性
+        params["count"] = "100"
         params["begin_msgid"] = begin_msgid
         params["begin_itemidx"] = begin_itemidx
 
@@ -974,7 +981,26 @@ class WeChatScraper(BaseScraper):
         headers["X-Requested-With"] = "XMLHttpRequest"
         headers["Referer"] = album_url
 
-        max_pages = 20  # 最多再翻 20 页，防止死循环
+        def normalize_article_items(val):
+            """把微信 article_list 的多种形态统一成"文章 dict 列表"。
+
+            ⚠️ 微信大坑（2026-09-30 实测）：当翻页结果只剩 1 篇文章时，
+            article_list 直接返回单个文章对象而不是数组！旧代码把它当包装容器
+            取 val.get("list") 拿到空列表 → 永远丢掉合集的最后一篇。
+            """
+            if isinstance(val, list):
+                return [it for it in val if isinstance(it, dict)]
+            if isinstance(val, dict):
+                # 含 list 子字段 → 是包装容器；含 title/url/msgid → 本身就是一篇文章
+                if isinstance(val.get("list"), list):
+                    return [it for it in val["list"] if isinstance(it, dict)]
+                if any(k in val for k in ("title", "url", "msgid", "msg_id")):
+                    return [val]
+            return []
+
+        # 最多再翻 50 页防死循环（实测微信每页封顶 20 篇，50 页可覆盖约 1000 篇的巨型合集；
+        # 循环本身有 continue_flag=0 与"本页无新增"双重终止条件，正常合集翻完即停）
+        max_pages = 50
         for page in range(1, max_pages + 1):
             # 达到用户设置的最大篇数就停
             if self.max_articles and len(first_page_items) + len(results) >= self.max_articles:
@@ -1021,24 +1047,16 @@ class WeChatScraper(BaseScraper):
                 if isinstance(getalbum_resp, dict):
                     print(f"[fetch_album_pages] 第 {page} 页 getalbum_resp keys: {list(getalbum_resp.keys())[:20]}")
                     for key in ["article_list", "appmsg_list", "app_msg_list", "list", "msgList", "articles"]:
-                        val = getalbum_resp.get(key)
-                        if isinstance(val, list):
-                            raw_items = val
-                            break
-                        elif isinstance(val, dict):
-                            raw_items = val.get("list", [])
+                        if getalbum_resp.get(key) is not None:
+                            raw_items = normalize_article_items(getalbum_resp.get(key))
                             if raw_items:
                                 break
 
                 # 如果 getalbum_resp 里没有，再到顶层找
                 if not raw_items:
                     for key in ["article_list", "appmsg_list", "app_msg_list", "list", "msgList", "articles"]:
-                        val = data.get(key)
-                        if isinstance(val, list):
-                            raw_items = val
-                            break
-                        elif isinstance(val, dict):
-                            raw_items = val.get("list", [])
+                        if data.get(key) is not None:
+                            raw_items = normalize_article_items(data.get(key))
                             if raw_items:
                                 break
 

@@ -12,29 +12,27 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 REPO = "yibeigen/wechat-article-exporter"
-TAG = "v1.2.5"
-TITLE = "BlogDistiller (博萃) 文章导出助手 v1.2.5 官方正式版"
+TAG = "v1.2.6"
+TITLE = "BlogDistiller (博萃) 文章导出助手 v1.2.6 官方正式版"
 DIST_DIR = Path(r"E:\Tools\Web\下载各个平台\dist")
 API_BASE = f"https://api.github.com/repos/{REPO}"
 
 # 发布说明（全中文）。注意：GitHub 附件名只保留英文/数字/点/横线，
 # 中文名会被自动改写，所以这里写的文件名必须与下方 ASSETS 的英文附件名一致
-BODY = """# 🎉 BlogDistiller (博萃) 文章导出助手 v1.2.5 正式发布！
+BODY = """# 🎉 BlogDistiller (博萃) 文章导出助手 v1.2.6 正式发布！
 
 BlogDistiller 是一款多平台博主文章批量抓取、去广告清洗与多格式合并导出工具，
 支持 **微信公众号 · 知乎 · 微博 · 新浪博客 · 简书 · CSDN · 掘金 · 博客园 · 51CTO** 等 9 大主流平台。
 
-### 🆕 本版本更新（相对 v1.2.4 的累积变化）：
-1. **🛡️ 启动稳定性加固**：新增单实例锁（双击两次图标不会再拉起两个实例抢端口）、孤儿后端进程自动清理、健康检查失败自动重试；
-2. **📄 Word 导出修复**：修复部分微信文章导出 Word 时图片显示为链接而非内嵌的问题；
-3. **🏷️ 标题质量优化**：修复导出标题重复拼接的问题；微博标题策略优化（头条文章保留原标题、普通博文取正文首行）；
-4. **📥 文件命名规范**：导出文件统一命名为「作者_平台_篇数」格式，简洁清晰；
-5. **🦅 微博连接状态真实探测**：状态卡显示真实昵称，不再出现假绿灯。
+### 🆕 本版本更新（相对 v1.2.5 的变化）：
+1. **🧹 移除内置嗅探代理引擎**：软件不再在启动时修改系统代理，彻底解决部分电脑（尤其公司电脑）"软件一启动网络就被代理/断网"的问题；
+2. **🩹 旧版残留自愈**：升级安装后首次启动会自动检测并清理旧版本遗留的系统代理设置（仅清理指向本工具旧端口的残留，绝不碰您自己配置的代理）；
+3. **📦 安装包更干净**：移除已下线功能的残留页面文件。
 
 ---
 
 ### 📥 下载与使用指引（按您的系统版本二选一，见下方 Assets 附件）：
-- **Windows 10 / 11 用户**：下载附件 `BlogDistiller-Setup-1.2.5.exe` 双击安装；
+- **Windows 10 / 11 用户**：下载附件 `BlogDistiller-Setup-1.2.6.exe` 双击安装；
 - **Windows 7 / 8.1 用户**：下载附件 `BlogDistiller-Win7-Setup-x64.exe` 双击安装。
 
 > 💡 首次启动会显示初始化进度页（下载/部署本地内核，约 3~10 分钟，视网速而定），请保持网络畅通耐心等待；完成后自动进入工作台，以后启动无需再等。
@@ -42,8 +40,8 @@ BlogDistiller 是一款多平台博主文章批量抓取、去广告清洗与多
 
 # 附件清单：(本地文件路径, GitHub 附件名)。附件名必须全英文，否则会被 GitHub 改写
 ASSETS = [
-    (DIST_DIR / "BlogDistiller 文章导出助手 Setup 1.2.5.exe", "BlogDistiller-Setup-1.2.5.exe"),
-    (DIST_DIR / "win7" / "BlogDistiller 文章导出助手 Setup 1.2.5.exe", "BlogDistiller-Win7-Setup-x64.exe"),
+    (DIST_DIR / "BlogDistiller 文章导出助手 Setup 1.2.6.exe", "BlogDistiller-Setup-1.2.6.exe"),
+    (DIST_DIR / "win7" / "BlogDistiller 文章导出助手 Setup 1.2.6.exe", "BlogDistiller-Win7-Setup-x64.exe"),
 ]
 
 

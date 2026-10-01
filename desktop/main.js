@@ -10,7 +10,6 @@ const tls = require("tls");
 const url = require("url");
 const os = require("os");
 const { exec, execFile, spawn, execSync, spawnSync } = require("child_process");
-const forge = require("node-forge");
 const docx = require("docx");
 const writeXlsxFile = require("write-excel-file/node");
 const { imageSize } = require("image-size");
@@ -23,12 +22,9 @@ const turndownService = new TurndownService({
     emDelimiter: "*"
 });
 const zlib = require("zlib");
-const DEFAULT_TARGET = "mp.weixin.qq.com";
 const DATA_DIR = path.join(os.homedir(), ".blogdistiller_data");
-const CERTS_DIR = path.join(DATA_DIR, "certs");
 const CACHE_DIR = path.join(DATA_DIR, "cache");
 const DEFAULT_EXPORT_DIR = path.join(os.homedir(), "Downloads", "BlogDistiller文章导出");
-const AUTH_FILE = path.join(DATA_DIR, "auth.json");
 const HISTORY_FILE = path.join(DATA_DIR, "accounts_history.json");
 
 function decodeResponseBody(buffer, encoding) {
@@ -52,12 +48,10 @@ process.on("uncaughtException", (err) => console.error("[UncaughtException]", er
 process.on("unhandledRejection", (err) => console.error("[UnhandledRejection]", err));
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-if (!fs.existsSync(CERTS_DIR)) fs.mkdirSync(CERTS_DIR, { recursive: true });
 if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
 if (!fs.existsSync(DEFAULT_EXPORT_DIR)) fs.mkdirSync(DEFAULT_EXPORT_DIR, { recursive: true });
 
 let mainWindow = null;
-let proxyInstance = null;
 let mpLoginWindow = null;
 let localPythonManager = null;
 
@@ -265,386 +259,31 @@ function fetchHtmlDirect(targetUrl) {
 }
 
 // =========================================================================
-// 2. 证书管理 CertStore (100% 对齐原版三刀)
-// =========================================================================
-class CertStore {
-    constructor(baseDir) {
-        this.baseDir = baseDir;
-        this.caKeyFile = path.join(baseDir, "ca.key.pem");
-        this.caCertFile = path.join(baseDir, "ca.cert.pem");
-        this.cache = new Map();
-        this.initCA();
-        this.leafKeys = forge.pki.rsa.generateKeyPair(2048);
-    }
-
-    randomSerial() {
-        const bytes = forge.random.getBytesSync(16);
-        let hex = forge.util.bytesToHex(bytes);
-        const first = parseInt(hex.slice(0, 2), 16) & 0x7f;
-        return first.toString(16).padStart(2, "0") + hex.slice(2);
-    }
-
-    initCA() {
-        if (fs.existsSync(this.caKeyFile) && fs.existsSync(this.caCertFile)) {
-            try {
-                this.caKey = forge.pki.privateKeyFromPem(fs.readFileSync(this.caKeyFile, "utf8"));
-                this.caCert = forge.pki.certificateFromPem(fs.readFileSync(this.caCertFile, "utf8"));
-                return;
-            } catch (e) {}
-        }
-
-        const keys = forge.pki.rsa.generateKeyPair(2048);
-        this.caKey = keys.privateKey;
-        this.caCert = forge.pki.createCertificate();
-        this.caCert.publicKey = keys.publicKey;
-        this.caCert.serialNumber = this.randomSerial();
-        this.caCert.validity.notBefore = new Date(Date.now() - 24 * 3600 * 1000);
-        this.caCert.validity.notAfter = new Date(Date.now() + 10 * 365 * 24 * 3600 * 1000);
-
-        const attrs = [
-            { name: "commonName", value: "BlogDistiller Local Credential Helper CA" },
-            { name: "organizationName", value: "BlogDistiller" }
-        ];
-        this.caCert.setSubject(attrs);
-        this.caCert.setIssuer(attrs);
-        this.caCert.setExtensions([
-            { name: "basicConstraints", cA: true, critical: true },
-            { name: "keyUsage", critical: true, keyCertSign: true, cRLSign: true }
-        ]);
-        this.caCert.sign(this.caKey, forge.md.sha256.create());
-
-        fs.writeFileSync(this.caKeyFile, forge.pki.privateKeyToPem(this.caKey));
-        fs.writeFileSync(this.caCertFile, forge.pki.certificateToPem(this.caCert));
-    }
-
-    leafFor(hostname) {
-        if (this.cache.has(hostname)) return this.cache.get(hostname);
-
-        const cert = forge.pki.createCertificate();
-        cert.publicKey = this.leafKeys.publicKey;
-        cert.serialNumber = this.randomSerial();
-        cert.validity.notBefore = new Date(Date.now() - 24 * 3600 * 1000);
-        cert.validity.notAfter = new Date(Date.now() + 365 * 24 * 3600 * 1000);
-
-        cert.setSubject([{ name: "commonName", value: hostname }]);
-        cert.setIssuer(this.caCert.subject.attributes);
-        cert.setExtensions([
-            { name: "basicConstraints", cA: false, critical: true },
-            { name: "keyUsage", critical: true, digitalSignature: true, keyEncipherment: true },
-            { name: "extKeyUsage", serverAuth: true },
-            { name: "subjectAltName", altNames: [{ type: 2, value: hostname }] }
-        ]);
-        cert.sign(this.caKey, forge.md.sha256.create());
-
-        const pair = {
-            keyPem: forge.pki.privateKeyToPem(this.leafKeys.privateKey),
-            certPem: forge.pki.certificateToPem(cert)
-        };
-        this.cache.set(hostname, pair);
-        return pair;
-    }
-}
-
-// =========================================================================
-// 3. 原版三刀 InterceptProxy 中间人代理引擎
-// =========================================================================
-class InterceptProxy {
-    constructor(certStore, onCaptured) {
-        this.certStore = certStore;
-        this.onCaptured = onCaptured;
-        this.target = DEFAULT_TARGET;
-        this.sockets = new Set();
-
-        this.intercept = http.createServer((req, res) => {
-            this.onDecryptedRequest(req, res);
-        });
-
-        this.tls = tls.createServer({
-            SNICallback: (serverName, cb) => {
-                try {
-                    const host = serverName || this.target;
-                    const pair = this.certStore.leafFor(host);
-                    const ctx = tls.createSecureContext({
-                        key: pair.keyPem,
-                        cert: pair.certPem,
-                        ca: fs.readFileSync(this.certStore.caCertFile, "utf8")
-                    });
-                    cb(null, ctx);
-                } catch (err) {
-                    cb(err);
-                }
-            }
-        });
-
-        this.tls.on("secureConnection", (secureSocket) => {
-            this.sockets.add(secureSocket);
-            secureSocket.on("close", () => this.sockets.delete(secureSocket));
-            this.intercept.emit("connection", secureSocket);
-        });
-
-        this.outer = http.createServer((req, res) => {
-            if (req.url === "/proxy.pac" || req.url === "/") {
-                const pac = `function FindProxyForURL(url, host) {\n  if (host === '${this.target}') return 'PROXY 127.0.0.1:${this.port}; DIRECT';\n  return 'DIRECT';\n}`;
-                res.writeHead(200, { "Content-Type": "application/x-ns-proxy-autoconfig" });
-                res.end(pac);
-                return;
-            }
-            res.writeHead(404);
-            res.end();
-        });
-
-        this.outer.on("connect", (req, socket, head) => {
-            this.sockets.add(socket);
-            socket.on("close", () => this.sockets.delete(socket));
-
-            const parts = (req.url || "").split(":");
-            const host = parts[0];
-            const port = parseInt(parts[1] || "443", 10);
-
-            if (host === this.target || host.endsWith("weixin.qq.com") || host.endsWith("qq.com")) {
-                // 记录最近一次微信流量时间，并打限频心跳日志（5 秒最多 1 条）
-                wechatAuth.lastTrafficAt = Date.now();
-                const now = Date.now();
-                if (!this._lastConnectLog || now - this._lastConnectLog > 5000) {
-                    this._lastConnectLog = now;
-                    sendDebugLog(`[代理链路] 已截获微信 HTTPS 连接: ${host} (微信流量正经过工具代理 ✓)`, "info");
-                }
-                socket.write("HTTP/1.1 200 Connection Established\r\n\r\n", () => {
-                    this.tls.emit("connection", socket);
-                    if (head && head.length) socket.unshift(head);
-                });
-                return;
-            }
-
-            this.tunnelPassthrough(socket, host, port, head);
-        });
-    }
-
-    tunnelPassthrough(socket, host, port, head) {
-        const remote = net.connect(port, host, () => {
-            socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
-            if (head && head.length) remote.write(head);
-            remote.pipe(socket);
-            socket.pipe(remote);
-        });
-        remote.on("error", () => socket.destroy());
-    }
-
-    onDecryptedRequest(req, res) {
-        const rawCookie = req.headers["cookie"] || "";
-        const reqUrl = req.url || "";
-        const referer = req.headers["referer"] || "";
-
-        // 诊断增强：记录所有"首次出现"的请求路径（按路径去重，不再 5 秒限频）。
-        // 目的：当用户在电脑微信里滚动公众号主页时，看清微信客户端到底用哪个接口拉文章列表，
-        // 从而区分"服务器返回空列表"还是"客户端改用了工具未解析的新接口"这两种截然不同的根因。
-        const reqPath = reqUrl.split("?")[0];
-        if (!this._seenReqPaths) this._seenReqPaths = new Set();
-        if (!this._seenReqPaths.has(reqPath)) {
-            this._seenReqPaths.add(reqPath);
-            sendDebugLog(`[代理链路] 新请求路径: ${reqPath}`, "info");
-        }
-
-        let bodyChunks = [];
-        req.on("data", chunk => bodyChunks.push(chunk));
-        req.on("end", () => {
-            const bodyBuffer = Buffer.concat(bodyChunks);
-            const bodyStr = bodyBuffer.toString("utf8");
-
-            this.parseAndFire(reqUrl, rawCookie, [], bodyStr, referer);
-
-            const targetHost = req.headers["host"] || this.target;
-            const forwardHeaders = { ...req.headers };
-            delete forwardHeaders["proxy-connection"];
-            forwardHeaders["host"] = targetHost;
-            if (req.method === "POST" || req.method === "PUT") {
-                forwardHeaders["content-length"] = bodyBuffer.length;
-            }
-
-            const forwardReq = https.request(`https://${targetHost}${reqUrl}`, {
-                method: req.method,
-                headers: forwardHeaders,
-                rejectUnauthorized: false
-            }, (forwardRes) => {
-                const setCookies = forwardRes.headers["set-cookie"] || [];
-                this.parseAndFire(reqUrl, rawCookie, setCookies, "", referer);
-
-                // 微信主页/文章经常通过 302/307 跳转附带全新 key/pass_ticket，
-                // 但跳转目标可能不会再被客户端重新发起，因此在这里主动嗅探 Location。
-                const location = forwardRes.headers["location"];
-                if (location && typeof location === "string" && location.includes("mp.weixin.qq.com")) {
-                    this.parseAndFire(location, "", setCookies, "", referer);
-                }
-                
-                res.writeHead(forwardRes.statusCode, forwardRes.headers);
-
-                let resChunks = [];
-                forwardRes.on("data", (chunk) => {
-                    resChunks.push(chunk);
-                    try { res.write(chunk); } catch(e) {}
-                });
-                forwardRes.on("end", () => {
-                    try { res.end(); } catch(e) {}
-                    try {
-                        const encoding = (forwardRes.headers["content-encoding"] || "").toLowerCase();
-                        const resBodyStr = decodeResponseBody(Buffer.concat(resChunks), encoding);
-                        parseResponseArticles(reqUrl, resBodyStr);
-                    } catch(e) {}
-                });
-                forwardRes.on("error", () => {
-                    try { res.end(); } catch(e) {}
-                });
-            });
-
-            forwardReq.on("error", () => {
-                try { res.end(); } catch(e) {}
-            });
-
-            if (bodyBuffer.length > 0) {
-                forwardReq.write(bodyBuffer);
-            }
-            forwardReq.end();
-        });
-    }
-
-    parseAndFire(reqUrl, cookieHeader, setCookies = [], bodyStr = "", refererHeader = "") {
-        try {
-            const u = new URL(reqUrl, `https://${this.target}`);
-            let uin = u.searchParams.get("uin") || "";
-            let key = u.searchParams.get("key") || "";
-            let pass_ticket = u.searchParams.get("pass_ticket") || "";
-            let appmsg_token = u.searchParams.get("appmsg_token") || "";
-            let biz = u.searchParams.get("__biz") || "";
-
-            if (bodyStr) {
-                try {
-                    if (bodyStr.startsWith("{") && bodyStr.endsWith("}")) {
-                        const jsonBody = JSON.parse(bodyStr);
-                        if (!uin && jsonBody.uin) uin = String(jsonBody.uin);
-                        if (!key && jsonBody.key) key = String(jsonBody.key);
-                        if (!pass_ticket && jsonBody.pass_ticket) pass_ticket = String(jsonBody.pass_ticket);
-                        if (!appmsg_token && jsonBody.appmsg_token) appmsg_token = String(jsonBody.appmsg_token);
-                        if (!biz && jsonBody.__biz) biz = String(jsonBody.__biz);
-                    } else {
-                        const bodyParams = new URLSearchParams(bodyStr);
-                        if (!uin) uin = bodyParams.get("uin") || "";
-                        if (!key) key = bodyParams.get("key") || "";
-                        if (!pass_ticket) pass_ticket = bodyParams.get("pass_ticket") || "";
-                        if (!appmsg_token) appmsg_token = bodyParams.get("appmsg_token") || "";
-                        if (!biz) biz = bodyParams.get("__biz") || "";
-                    }
-                } catch(e) {}
-            }
-
-            if (refererHeader) {
-                try {
-                    const refUrl = new URL(refererHeader.startsWith("http") ? refererHeader : `https://${this.target}${refererHeader}`);
-                    if (!key) key = refUrl.searchParams.get("key") || "";
-                    if (!uin) uin = refUrl.searchParams.get("uin") || "";
-                    if (!pass_ticket) pass_ticket = refUrl.searchParams.get("pass_ticket") || "";
-                    if (!appmsg_token) appmsg_token = refUrl.searchParams.get("appmsg_token") || "";
-                    if (!biz) {
-                        const refBiz = refUrl.searchParams.get("__biz");
-                        if (refBiz && isValidBiz(refBiz)) biz = refBiz;
-                    }
-                } catch(e) {
-                    const refMatch = refererHeader.match(/__biz=([^&#]+)/);
-                    if (refMatch && isValidBiz(decodeURIComponent(refMatch[1]))) {
-                        biz = decodeURIComponent(refMatch[1]);
-                    }
-                }
-            }
-
-            let wap_sid2 = "";
-            const cookieStr = [cookieHeader, ...setCookies].join("; ");
-            const sidMatch = cookieStr.match(/(?:^|;\s*)wap_sid2=([^;]+)/);
-            if (sidMatch) wap_sid2 = sidMatch[1];
-            const ptMatch = cookieStr.match(/(?:^|;\s*)pass_ticket=([^;]+)/);
-            if (ptMatch && !pass_ticket) pass_ticket = ptMatch[1];
-            const uinMatch = cookieStr.match(/(?:^|;\s*)(?:wxuin|uin)=([^;]+)/);
-            if (uinMatch && !uin) uin = uinMatch[1];
-            const keyMatch = cookieStr.match(/(?:^|;\s*)key=([^;]+)/);
-            if (keyMatch && !key) key = keyMatch[1];
-            const tokenMatch = cookieStr.match(/(?:^|;\s*)appmsg_token=([^;]+)/);
-            if (tokenMatch && !appmsg_token) appmsg_token = tokenMatch[1];
-
-            const isProfileRequest = reqUrl.includes("profile_ext") || (refererHeader && refererHeader.includes("profile_ext"));
-
-            if (key || pass_ticket || wap_sid2 || appmsg_token || biz) {
-                this.onCaptured({ uin, key, pass_ticket, appmsg_token, wap_sid2, biz, isProfileRequest });
-            }
-        } catch(e) {}
-    }
-
-    listen(port = 8899) {
-        return new Promise((resolve) => {
-            const onError = (err) => {
-                if (err.code === "EADDRINUSE") {
-                    console.warn(`[BlogDistiller] 端口 ${port} 占用，转用动态备用端口...`);
-                    this.outer.listen(0, "127.0.0.1", () => {
-                        const addr = this.outer.address();
-                        this.port = typeof addr === "object" && addr ? addr.port : 8899;
-                        resolve(this.port);
-                    });
-                }
-            };
-            this.outer.once("error", onError);
-            this.outer.listen(port, "127.0.0.1", () => {
-                this.outer.removeListener("error", onError);
-                const addr = this.outer.address();
-                this.port = typeof addr === "object" && addr ? addr.port : port;
-                console.log(`[BlogDistiller] 代理服务就绪，稳定监听 127.0.0.1:${this.port}`);
-                resolve(this.port);
-            });
-        });
-    }
-
-    close() {
-        for (const s of this.sockets) s.destroy();
-        this.sockets.clear();
-        try { this.outer.close(); } catch(e){}
-        try { this.tls.close(); } catch(e){}
-        try { this.intercept.close(); } catch(e){}
-    }
-}
-
-// =========================================================================
-// 4. Windows 系统代理配置与 WinINet 广播
+// 4. 旧版系统代理残留清理（嗅探代理已移除，仅负责善后）
 // =========================================================================
 const INET_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
 const REFRESH_SCRIPT = "$s='[DllImport(\"wininet.dll\",SetLastError=true)] public static extern bool InternetSetOption(IntPtr h,int o,IntPtr b,int l);';$t=Add-Type -MemberDefinition $s -Name W -Namespace I -PassThru;$t::InternetSetOption([IntPtr]::Zero,39,[IntPtr]::Zero,0)|Out-Null;$t::InternetSetOption([IntPtr]::Zero,37,[IntPtr]::Zero,0)|Out-Null";
 const REFRESH_ENCODED = Buffer.from(REFRESH_SCRIPT, "utf16le").toString("base64");
 
-function applyWindowsPac(port, enable) {
+// 旧版本（≤v1.2.5）启动时会强改系统代理指向嗅探端口 127.0.0.1:8899（微信嗅探用，该引擎已整体移除）。
+// 旧版用户若上次异常退出（崩溃/被强杀）或直接升级，注册表里可能残留指向这个死端口的系统代理，
+// 导致全系统断网。这里做"指纹匹配"的精准清理：
+//   - 仅当注册表 ProxyServer 确实指向 127.0.0.1:8899（本工具旧版特征）时才关闭代理；
+//   - 绝不碰用户自己配置的代理（公司代理、Clash 等），避免误伤正常上网；
+//   - 改完广播 WinINet 刷新，让系统立即恢复直连。
+function clearStaleProxyIfOurs() {
     if (process.platform !== "win32") return;
-    const refreshCmd = `powershell -NoProfile -NonInteractive -EncodedCommand ${REFRESH_ENCODED}`;
-
-    if (enable) {
-        // 关键：彻底清除任何遗留的 AutoConfigURL，确保 Windows 流量 100% 走 ProxyServer 127.0.0.1:port
-        // 同时把 ProxyOverride（绕过列表）重置为仅绕过本地地址，防止残留的 *.qq.com 等条目把微信流量绕过代理
-        const cmd = `reg delete "${INET_KEY}" /v AutoConfigURL /f 2>nul & reg add "${INET_KEY}" /v ProxyEnable /t REG_DWORD /d 1 /f & reg add "${INET_KEY}" /v ProxyServer /t REG_SZ /d "127.0.0.1:${port}" /f & reg add "${INET_KEY}" /v ProxyOverride /t REG_SZ /d "<local>" /f`;
-        exec(cmd, () => {
-            exec(refreshCmd, () => {
-                console.log(`[BlogDistiller] Windows 系统代理已强制激活: 127.0.0.1:${port}`);
-                // 回读注册表实际状态并输出到诊断日志，方便确认代理是否真的生效
-                exec(`reg query "${INET_KEY}" /v ProxyServer & reg query "${INET_KEY}" /v ProxyOverride 2>nul`, (qErr, qStdout) => {
-                    const state = qStdout ? qStdout.replace(/\s+/g, " ").trim() : "注册表回读失败";
-                    sendDebugLog(`[系统代理] 已激活并广播刷新 (127.0.0.1:${port})。回读状态: ${state}`, "info");
-                });
+    exec(`reg query "${INET_KEY}" /v ProxyServer`, (qErr, qStdout) => {
+        const val = (qStdout || "").replace(/\s+/g, " ");
+        if (val.includes("127.0.0.1:8899")) {
+            // 只关代理总开关（ProxyEnable=0），不动 AutoConfigURL——那可能是用户自己的 PAC 配置
+            const cmd = `reg add "${INET_KEY}" /v ProxyEnable /t REG_DWORD /d 0 /f`;
+            exec(cmd, () => {
+                exec(`powershell -NoProfile -NonInteractive -EncodedCommand ${REFRESH_ENCODED}`);
+                console.log("[BlogDistiller] 已清理旧版遗留的系统代理残留 (127.0.0.1:8899)");
+                sendDebugLog("[系统代理] 检测到旧版嗅探代理残留 (127.0.0.1:8899)，已自动关闭恢复直连", "info");
             });
-        });
-    } else {
-        const cmd = `reg delete "${INET_KEY}" /v AutoConfigURL /f 2>nul & reg add "${INET_KEY}" /v ProxyEnable /t REG_DWORD /d 0 /f`;
-        exec(cmd, () => {
-            exec(refreshCmd);
-        });
-    }
-}
-
-function installCaToTrustStore(certFile) {
-    if (process.platform !== "win32") return;
-    exec(`certutil.exe -user -addstore -f Root "${certFile}"`, (err) => {
-        if (!err) console.log("[BlogDistiller] CA 根证书已成功信任");
+        }
     });
 }
 
@@ -699,375 +338,6 @@ function sendDebugLog(text, level = "info") {
     }
 }
 
-// 从任意响应体（HTML/JS/JSON）中抓取微信凭证，解决 key 只出现在页面脚本或 JSON 中的情况。
-function extractAuthFromBody(resBodyStr, reqUrl = "") {
-    if (!resBodyStr) return;
-    const payload = resBodyStr;
-    const keyM = payload.match(/["']?key["']?\s*[:=]\s*["']([a-f0-9]{32,})["']/i) ||
-                 payload.match(/var\s+key\s*=\s*["']([a-f0-9]{32,})["']/i);
-    const passM = payload.match(/["']?pass_ticket["']?\s*[:=]\s*["']([^"']+)["']/i) ||
-                  payload.match(/var\s+pass_ticket\s*=\s*["']([^"']+)["']/i);
-    const tokenM = payload.match(/["']?appmsg_token["']?\s*[:=]\s*["']([^"']+)["']/i) ||
-                   payload.match(/var\s+appmsg_token\s*=\s*["']([^"']+)["']/i);
-    const bizM = payload.match(/["']?__?biz["']?\s*[:=]\s*["']([A-Za-z0-9+/=]{10,})["']/i) ||
-                 payload.match(/var\s+biz\s*=\s*["']([A-Za-z0-9+/=]{10,})["']/i);
-    if (keyM || passM || tokenM) {
-        const tokenMatch = reqUrl.match(/profile_ext\?([^\s]*)/);
-        const isProfileRequest = tokenMatch ? tokenMatch[0].includes("action=home") || tokenMatch[0].includes("action=getmsg") : false;
-        handleCapturedAuth({
-            key: keyM ? keyM[1] : undefined,
-            pass_ticket: passM ? passM[1] : undefined,
-            appmsg_token: tokenM ? tokenM[1] : undefined,
-            biz: bizM ? bizM[1] : undefined,
-            isProfileRequest
-        });
-    }
-}
-
-function parseResponseArticles(reqUrl, resBodyStr) {
-    if (!resBodyStr) return;
-
-    // 恢复 v1.0 的嗅探活动日志（限频 5 秒防刷屏）：让用户能在诊断日志里直观看到嗅探通道是否在工作
-    const sniffNow = Date.now();
-    if (!parseResponseArticles._lastLog || sniffNow - parseResponseArticles._lastLog > 5000) {
-        parseResponseArticles._lastLog = sniffNow;
-        sendDebugLog(`[微信嗅探] 收到响应: ${reqUrl.slice(0, 80)} (${resBodyStr.length} 字符)`, "info");
-    }
-
-    // 任何响应都可能携带新 key/pass_ticket/appmsg_token，先在响应体里抓一次凭证。
-    extractAuthFromBody(resBodyStr, reqUrl);
-
-    // 调试采样：把嗅探到的 profile_ext 响应全文保存到本地（带时间戳，永不覆盖），
-    // 供离线分析微信真实数据结构。这是定位"嗅探到主页响应却提取不到文章"的决定性手段。
-    if (reqUrl.includes("profile_ext")) {
-        try {
-            const now = new Date();
-            const ts = `${now.getHours().toString().padStart(2,"0")}${now.getMinutes().toString().padStart(2,"0")}${now.getSeconds().toString().padStart(2,"0")}_${now.getMilliseconds().toString().padStart(3,"0")}`;
-            const isGetmsg = reqUrl.includes("action=getmsg");
-            const actionTag = isGetmsg ? "getmsg" : "home";
-            const sampleFile = path.join(DATA_DIR, `debug_${actionTag}_${ts}.${isGetmsg ? "json" : "html"}`);
-            fs.writeFileSync(sampleFile, resBodyStr, "utf8");
-            // 同步保存一份当前最新副本，方便快速查看
-            const latestFile = path.join(DATA_DIR, isGetmsg ? "debug_last_getmsg.json" : "debug_last_home.html");
-            fs.writeFileSync(latestFile, resBodyStr, "utf8");
-            if (!isGetmsg) {
-                const rawMsg = extractMsgListFromHtml(resBodyStr);
-                const parsedPreview = parseMsgListRaw(rawMsg || "");
-                // 打印主页 HTML 的关键特征，并保存提取到的 msgList 原始字符串，便于定位解析失败点
-                const feat = {
-                    长度: resBodyStr.length,
-                    "var_msgList": /var\s+msgList/.test(resBodyStr),
-                    "msgList赋值": /msgList\s*=/.test(resBodyStr),
-                    "window_msgList": /window\s*\.\s*msgList/.test(resBodyStr),
-                    "含getmsg接口串": resBodyStr.includes("action=getmsg"),
-                    "文章链接数": (resBodyStr.match(/mp\.weixin\.qq\.com\/s\?__biz/g) || []).length,
-                    "含home_page_list": resBodyStr.includes("home_page_list"),
-                    "含general_msg_list": resBodyStr.includes("general_msg_list"),
-                    "是否验证页": resBodyStr.includes("请在微信客户端打开链接"),
-                    "提取rawMsg长度": rawMsg ? rawMsg.length : 0,
-                    "解析后列表长度": parsedPreview.length
-                };
-                sendDebugLog(`[主页采样] 已保存 ${sampleFile}。特征: ${JSON.stringify(feat)}`, "info");
-                if (rawMsg) {
-                    fs.writeFileSync(path.join(DATA_DIR, `debug_home_${ts}_raw.txt`), rawMsg, "utf8");
-                } else if (/msgList/i.test(resBodyStr)) {
-                    // msgList 存在但提取失败：保存其前后 600 字符片段，直接看清微信当前的赋值格式
-                    const idx = resBodyStr.search(/msgList/i);
-                    const snippet = resBodyStr.slice(Math.max(0, idx - 100), idx + 500);
-                    fs.writeFileSync(path.join(DATA_DIR, `debug_home_${ts}_snippet.txt`), snippet, "utf8");
-                    sendDebugLog(`[主页采样] msgList 提取失败，已保存上下文片段至 debug_home_${ts}_snippet.txt`, "warn");
-                }
-            } else {
-                sendDebugLog(`[分页采样] 已保存 ${sampleFile} (${resBodyStr.length} 字符)`, "info");
-            }
-        } catch(e) {}
-    }
-
-    // 尝试从页面或响应中提取公众号名称与 biz
-    let detectedAuthor = wechatAuth.author || "微信公众号";
-    
-    // 多维度智能提取公众号名称 (支持微信最新桌面版/H5/LiteApp等各种模板)
-    const nickPatterns = [
-        /var\s+nickname\s*=\s*['"]([^'"]+)['"]/i,
-        /<strong[^>]*class="[^"]*profile_nickname[^"]*"[^>]*>([\s\S]*?)<\/strong>/i,
-        /<a[^>]*id="js_name"[^>]*>([\s\S]*?)<\/a>/i,
-        /<div[^>]*class="[^"]*profile_nickname[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-        /<p[^>]*class="[^"]*profile_account_name[^"]*"[^>]*>([\s\S]*?)<\/p>/i,
-        /"nickname"\s*:\s*["']([^"']+)["']/i,
-        /"author"\s*:\s*["']([^"']+)["']/i,
-        /<meta\s+property="og:title"\s+content="([^"]+)"/i
-    ];
-
-    for (const p of nickPatterns) {
-        const m = resBodyStr.match(p);
-        if (m && m[1] && m[1].trim()) {
-            const clean = unescapeWechatText(m[1].replace(/<[^>]+>/g, "").trim());
-            if (clean && !clean.includes("微信") && !clean.includes("JavaScript") && !clean.includes("页面不存在") && clean.length <= 40) {
-                detectedAuthor = clean;
-                wechatAuth.author = clean;
-                break;
-            } else if (clean && clean !== "微信公众号" && clean.length <= 40) {
-                detectedAuthor = clean;
-                wechatAuth.author = clean;
-            }
-        }
-    }
-    if (!detectedAuthor || detectedAuthor === "微信公众号") {
-        if (wechatAuth.author && wechatAuth.author !== "微信公众号") {
-            detectedAuthor = wechatAuth.author;
-        }
-    }
-
-    const detectedBiz = extractWechatBiz(reqUrl, resBodyStr, wechatAuth.biz);
-    if (detectedBiz && isValidBiz(detectedBiz)) {
-        wechatAuth.biz = detectedBiz;
-        sendDebugLog(`[微信嗅探] 成功锁定公众号【${detectedAuthor}】(biz: ${detectedBiz})`, "success");
-    }
-
-    // 1. profile_ext?action=getmsg (分页历史文章列表)
-    if (reqUrl.includes("profile_ext") && reqUrl.includes("action=getmsg")) {
-        try {
-            const data = JSON.parse(resBodyStr);
-            const rawList = data.general_msg_list || data.msg_list || data.app_msg_list || data.list || data.home_page_list;
-            if (rawList) {
-                const listObj = typeof rawList === "string" ? JSON.parse(rawList) : rawList;
-                const msgList = Array.isArray(listObj) ? listObj : (listObj.list || listObj.app_msg_list || []);
-                const extracted = [];
-                for (const item of msgList) {
-                    const comm = item.comm_msg_info || {};
-                    const appInfo = item.app_msg_ext_info;
-                    if (!appInfo) continue;
-                    const create_time = comm.datetime ? new Date(comm.datetime * 1000).toISOString().split("T")[0] : "";
-                    if (appInfo.title && appInfo.content_url) {
-                        const cleanUrl = appInfo.content_url.replace(/&amp;/g, "&");
-                        extracted.push({
-                            id: `art_${comm.id || Date.now()}_0`,
-                            title: appInfo.title.replace(/<[^>]+>/g, "").trim(),
-                            author: detectedAuthor,
-                            url: cleanUrl.startsWith("http") ? cleanUrl : `https://mp.weixin.qq.com${cleanUrl}`,
-                            create_time,
-                            digest: appInfo.digest || "",
-                            cover: appInfo.cover || "",
-                            is_original: appInfo.copyright_stat === 11 || appInfo.copyright_stat === 1,
-                            biz: wechatAuth.biz,
-                            status: "pending",
-                            fail_reason: ""
-                        });
-                    }
-                    if (appInfo.multi_app_msg_item_list && Array.isArray(appInfo.multi_app_msg_item_list)) {
-                        for (let subIdx = 0; subIdx < appInfo.multi_app_msg_item_list.length; subIdx++) {
-                            const sub = appInfo.multi_app_msg_item_list[subIdx];
-                            if (sub.title && sub.content_url) {
-                                const cleanSubUrl = sub.content_url.replace(/&amp;/g, "&");
-                                extracted.push({
-                                    id: `art_${comm.id || Date.now()}_${subIdx + 1}`,
-                                    title: sub.title.replace(/<[^>]+>/g, "").trim(),
-                                    author: detectedAuthor,
-                                    url: cleanSubUrl.startsWith("http") ? cleanSubUrl : `https://mp.weixin.qq.com${cleanSubUrl}`,
-                                    create_time,
-                                    digest: sub.digest || "",
-                                    cover: sub.cover || "",
-                                    is_original: sub.copyright_stat === 11 || sub.copyright_stat === 1,
-                                    biz: wechatAuth.biz,
-                                    status: "pending",
-                                    fail_reason: ""
-                                });
-                            }
-                        }
-                    }
-                }
-                if (extracted.length > 0) {
-                    sendDebugLog(`[微信嗅探] 实时捕获微信历史文章流: 成功提取 ${extracted.length} 篇！`, "success");
-                    if (mainWindow && !mainWindow.isDestroyed()) {
-                        mainWindow.webContents.send("wechat:stream-articles", { articles: extracted, author: detectedAuthor });
-                    }
-                }
-            }
-        } catch(e) {}
-    }
-
-    // 2. profile_ext?action=home 或 authorpage (主页首屏历史文章)
-    if (reqUrl.includes("profile_ext") || reqUrl.includes("authorpage") || reqUrl.includes("homepage")) {
-        try {
-            // 使用可靠的引号配对扫描提取 msgList（旧正则会把 {\"list\" 截断成 "{" 导致解析必败）
-            const rawMsg = extractMsgListFromHtml(resBodyStr);
-            if (rawMsg) {
-                const msgList = parseMsgListRaw(rawMsg);
-                const extracted = [];
-                for (const item of msgList) {
-                    const comm = item.comm_msg_info || {};
-                    const appInfo = item.app_msg_ext_info;
-                    if (!appInfo) continue;
-                    const create_time = comm.datetime ? new Date(comm.datetime * 1000).toISOString().split("T")[0] : "";
-                    if (appInfo.title && appInfo.content_url) {
-                        const cleanUrl = appInfo.content_url.replace(/&amp;/g, "&");
-                        extracted.push({
-                            id: `art_${comm.id || Date.now()}_0`,
-                            title: appInfo.title.replace(/<[^>]+>/g, "").trim(),
-                            author: detectedAuthor,
-                            url: cleanUrl.startsWith("http") ? cleanUrl : `https://mp.weixin.qq.com${cleanUrl}`,
-                            create_time,
-                            digest: appInfo.digest || "",
-                            cover: appInfo.cover || "",
-                            is_original: appInfo.copyright_stat === 11 || appInfo.copyright_stat === 1,
-                            biz: wechatAuth.biz,
-                            status: "pending",
-                            fail_reason: ""
-                        });
-                    }
-                    if (appInfo.multi_app_msg_item_list && Array.isArray(appInfo.multi_app_msg_item_list)) {
-                        for (let subIdx = 0; subIdx < appInfo.multi_app_msg_item_list.length; subIdx++) {
-                            const sub = appInfo.multi_app_msg_item_list[subIdx];
-                            if (sub.title && sub.content_url) {
-                                const cleanSubUrl = sub.content_url.replace(/&amp;/g, "&");
-                                extracted.push({
-                                    id: `art_${comm.id || Date.now()}_${subIdx + 1}`,
-                                    title: sub.title.replace(/<[^>]+>/g, "").trim(),
-                                    author: detectedAuthor,
-                                    url: cleanSubUrl.startsWith("http") ? cleanSubUrl : `https://mp.weixin.qq.com${cleanSubUrl}`,
-                                    create_time,
-                                    digest: sub.digest || "",
-                                    cover: sub.cover || "",
-                                    is_original: sub.copyright_stat === 11 || sub.copyright_stat === 1,
-                                    biz: wechatAuth.biz,
-                                    status: "pending",
-                                    fail_reason: ""
-                                });
-                            }
-                        }
-                    }
-                }
-                if (extracted.length > 0) {
-                    sendDebugLog(`[微信嗅探] 实时捕获主页首屏文章: 成功提取 ${extracted.length} 篇！`, "success");
-                    if (mainWindow && !mainWindow.isDestroyed()) {
-                        mainWindow.webContents.send("wechat:stream-articles", { articles: extracted, author: detectedAuthor });
-                    }
-                }
-            }
-        } catch(e) {}
-    }
-
-    // 3. 实时捕获单篇文章页面 (/s/ 或 /s?)
-    if (reqUrl.startsWith("/s/") || reqUrl.startsWith("/s?")) {
-        try {
-            const parsed = parseSingleArticleFromHtml(resBodyStr, `https://mp.weixin.qq.com${reqUrl}`);
-            if (parsed.title && parsed.title !== "未知标题" && !parsed.title.includes("环境异常")) {
-                sendDebugLog(`[微信嗅探] 实时捕获正在阅读的推文: 《${parsed.title.slice(0, 22)}...》 (作者: 【${parsed.author}】)`, "success");
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send("wechat:stream-articles", { articles: [parsed], author: parsed.author });
-                }
-            }
-        } catch(e) {}
-    }
-
-    // 4. 通用微信文章流遍历扫描 (覆盖搜一搜、合集、推荐、主页历史流等所有页面)
-    try {
-        const normalizedStr = resBodyStr.replace(/\\\//g, "/");
-        const urlPattern = /(?:https?:)?\/\/mp\.weixin\.qq\.com\/s(?:\/|(?:\?[^"'\s<>]*))/g;
-        let match;
-        const autoExtracted = [];
-        const seenUrls = new Set();
-        while ((match = urlPattern.exec(normalizedStr)) !== null) {
-            let rawUrl = match[0];
-            if (rawUrl.startsWith("//")) rawUrl = "https:" + rawUrl;
-            const cleanUrl = rawUrl.replace(/&amp;/g, "&").replace(/\\x26/g, "&");
-            if (!seenUrls.has(cleanUrl)) {
-                seenUrls.add(cleanUrl);
-                const startPos = Math.max(0, match.index - 600);
-                const endPos = Math.min(normalizedStr.length, match.index + 600);
-                const snippet = normalizedStr.slice(startPos, endPos);
-                
-                const titleMatch = snippet.match(/"title"\s*:\s*"([^"]+)"/) ||
-                                   snippet.match(/"msg_title"\s*:\s*"([^"]+)"/) ||
-                                   snippet.match(/title="([^"]+)"/) ||
-                                   snippet.match(/data-title="([^"]+)"/) ||
-                                   snippet.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/) ||
-                                   snippet.match(/<a[^>]+>([\s\S]*?)<\/a>/);
-                
-                let title = titleMatch ? unescapeWechatText(titleMatch[1].replace(/<[^>]+>/g, "")) : "";
-                if (!title || title.length <= 2 || title.includes("weixin.qq.com") || title.includes("JavaScript")) {
-                    title = `推文_${autoExtracted.length + 1}`;
-                }
-
-                const timeMatch = snippet.match(/"datetime"\s*:\s*([0-9]{9,11})/) || snippet.match(/"create_time"\s*:\s*([0-9]{9,11})/);
-                const create_time = timeMatch ? new Date(parseInt(timeMatch[1], 10) * 1000).toISOString().split("T")[0] : "";
-
-                autoExtracted.push({
-                    id: `art_${Date.now()}_${autoExtracted.length}`,
-                    title,
-                    author: detectedAuthor,
-                    url: cleanUrl,
-                    create_time,
-                    digest: "",
-                    cover: "",
-                    is_original: true,
-                    biz: wechatAuth.biz || "",
-                    status: "pending",
-                    fail_reason: ""
-                });
-            }
-        }
-        if (autoExtracted.length > 0) {
-            sendDebugLog(`[微信嗅探] 🌟 深度扫描自动提取到 ${autoExtracted.length} 篇推文！`, "success");
-            if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send("wechat:stream-articles", { articles: autoExtracted, author: detectedAuthor });
-            }
-        }
-    } catch(e) {}
-}
-
-let lastLoggedKey = "";
-function handleCapturedAuth(data) {
-    // 保存旧凭证，用于判断本次嗅探是否带来了新的会话要素
-    const prevKey = wechatAuth.key;
-    const prevPassTicket = wechatAuth.pass_ticket;
-    const prevWapSid2 = wechatAuth.wap_sid2;
-
-    const isNewKey = Boolean(data.key && data.key !== prevKey);
-    const isNewPassTicket = Boolean(data.pass_ticket && data.pass_ticket !== prevPassTicket);
-    const isNewWapSid2 = Boolean(data.wap_sid2 && data.wap_sid2 !== prevWapSid2);
-
-    // 关键修复：用展开运算符保留 mpToken/mpCookie/mpConnected/lastTrafficAt 等字段，
-    // 否则每次嗅探到新凭证都会把"官方扫码通道已连接"的状态整体抹掉，
-    // 导致界面上官方通道显示退回"未连接"、链路自检永远误报"流量未经过代理"。
-    wechatAuth = {
-        ...wechatAuth,
-        captured: true,
-        uin: data.uin || wechatAuth.uin,
-        key: data.key || wechatAuth.key,
-        pass_ticket: data.pass_ticket || wechatAuth.pass_ticket,
-        appmsg_token: data.appmsg_token || wechatAuth.appmsg_token,
-        wap_sid2: data.wap_sid2 || wechatAuth.wap_sid2,
-        biz: (data.biz && isValidBiz(data.biz)) ? data.biz : wechatAuth.biz,
-        author: data.author || wechatAuth.author || "",
-        captured_at: new Date().toLocaleTimeString(),
-        // 新增：毫秒级时间戳。此前只存 toLocaleTimeString()（如 "10:30:45"），
-        // 渲染层 new Date() 解析不出日期，导致 30 分钟凭证倒计时永远显示满格。
-        captured_ts: Date.now()
-    };
-    try {
-        fs.writeFileSync(AUTH_FILE, JSON.stringify(wechatAuth, null, 2), "utf8");
-    } catch(e) {}
-
-    if ((isNewKey || isNewPassTicket || isNewWapSid2) && wechatAuth.key !== lastLoggedKey) {
-        lastLoggedKey = wechatAuth.key;
-        sendDebugLog(`[通信状态] 成功截获并更新微信最新会话凭证 (uin: ${wechatAuth.uin || "已具备"}, key: ${wechatAuth.key ? wechatAuth.key.slice(0, 8) + "..." : "已具备"}, pass_ticket: ${wechatAuth.pass_ticket ? "已具备" : "缺省"})`, "success");
-    }
-    if (mainWindow) {
-        mainWindow.webContents.send("wechat:status-change", wechatAuth);
-    }
-
-    // 自动触发全量文章拉取（恢复 v1.0 可用版行为：只要嗅探到任何微信会话活动且有凭证，立即重试待办任务。
-    // 反重力版本收紧为"必须凭证更新才触发"，导致用户打开文章/主页后软件经常不自动重试，表现为"获取不到"）
-    if (pendingAutoFetchTarget && (wechatAuth.key || wechatAuth.pass_ticket || wechatAuth.wap_sid2)) {
-        const targetInfo = pendingAutoFetchTarget;
-        pendingAutoFetchTarget = null;
-        sendDebugLog(`[自动就绪] 嗅探到微信会话活动，立即自动触发对【${targetInfo.author || "公众号"}】的全量历史文章拉取！`, "info");
-        if (mainWindow) {
-            mainWindow.webContents.send("wechat:auto-trigger-search", targetInfo);
-        }
-    }
-}
 
 function fetchPageHtml(targetUrl, maxRedirects = 5) {
     return new Promise((resolve, reject) => {
@@ -4268,6 +3538,22 @@ function createMainWindow(port = null) {
         }
     });
 
+    // 外链一律交给系统默认浏览器打开：
+    // 页面里的 <a target="_blank">（GitHub 仓库/发布页、个人主页、CSDN 等）会触发 Electron 的"开新窗口"流程，
+    // 若不加拦截，Electron 会弹出一个软件内置的子窗口（看起来像浏览器其实不是），体验割裂。
+    // 统一策略：外部 http/https 链接 → 调用 shell.openExternal 交给系统默认浏览器；
+    // 其余任何弹窗请求一律拒绝——本应用的界面始终只在主窗口内切换，不允许弹小窗。
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        try {
+            const u = new URL(url);
+            const isLocal = u.hostname === "127.0.0.1" || u.hostname === "localhost";
+            if (!isLocal && (u.protocol === "http:" || u.protocol === "https:")) {
+                shell.openExternal(url);
+            }
+        } catch (e) { /* 非 http(s) 的异常地址直接忽略，同样不弹窗 */ }
+        return { action: "deny" };
+    });
+
     // 未传 port：先展示初始化进度页，等内核部署完成后由 navigateMainWindowToWorkbench 切入工作台
     if (!port) {
         bootPageActive = true;
@@ -4356,26 +3642,8 @@ app.whenReady().then(async () => {
 
     navigateMainWindowToWorkbench(pythonStatus.port || 8000);
 
-    let proxyPort = 8899;
-    try {
-        const certStore = new CertStore(CERTS_DIR);
-        installCaToTrustStore(certStore.caCertFile);
-
-        proxyInstance = new InterceptProxy(certStore, (data) => {
-            handleCapturedAuth(data);
-        });
-
-        proxyPort = await proxyInstance.listen(8899);
-        applyWindowsPac(proxyPort, true);
-    } catch (err) {
-        console.error("[BlogDistiller] 代理服务初始化异常:", err);
-    }
-
-    ipcMain.handle("wechat:get-status", () => wechatAuth);
-    ipcMain.handle("wechat:toggle-proxy", (_, enable) => {
-        applyWindowsPac(proxyPort, enable);
-        return enable;
-    });
+    // 善后：清理旧版本嗅探代理可能遗留的系统代理残留（新版本自身不再开启任何系统代理）
+    clearStaleProxyIfOurs();
 
     ipcMain.handle("app:open-external", (_, targetUrl) => {
         if (targetUrl && targetUrl.startsWith("http")) {
@@ -5005,10 +4273,7 @@ app.whenReady().then(async () => {
 });
 
 function cleanup() {
-    applyWindowsPac(8899, false);
-    if (proxyInstance) {
-        try { proxyInstance.close(); } catch (e) {}
-    }
+    clearStaleProxyIfOurs();  // 清理旧版可能残留的死代理，新版本自身永不开代理
     if (localPythonManager) {
         try { localPythonManager.stop(); } catch (e) {}
     }
