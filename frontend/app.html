@@ -2006,7 +2006,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     <div style="font-size: 0.9rem; font-weight: 700; color: var(--text-primary); margin-bottom: 14px;">支持平台与格式</div>
                     <ul style="list-style: none; padding: 0; margin: 0; font-size: 0.82rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 8px;">
                         <li>微信公众号公开文章</li>
-                        <li>知乎专栏 / 个人回答</li>
+                        <li>知乎文章 / 个人回答</li>
                         <li>新浪微博 / 新浪博客</li>
                         <li>简书 / 掘金 / CSDN</li>
                         <li>博客园 / 51CTO / 自定义链接</li>
@@ -3054,9 +3054,9 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 tipHtml: ''
             },
             'zhihu': {
-                label: '输入知乎博主主页或回答/专栏链接',
-                placeholder: '输入知乎博主主页 (如 https://www.zhihu.com/people/excited-vczh) 或专栏/回答链接...\n(支持智能溯源定位该博主全量内容)',
-                tipHtml: '<b style="color:#0284c7;">🔵 知乎通道：</b>支持输入知乎博主主页、专栏文章链接或单篇回答链接，一键全自动抓取与排版导出。'
+                label: '输入知乎博主主页或单篇回答/文章链接',
+                placeholder: '输入知乎博主主页 (如 https://www.zhihu.com/people/excited-vczh) 或单篇回答/文章链接...\n(支持智能溯源定位该博主全量内容)',
+                tipHtml: '<b style="color:#0284c7;">🔵 知乎通道：</b>支持输入知乎博主主页或单篇回答/文章链接，一键全自动抓取与排版导出。'
             },
             'weibo': {
                 label: '输入微博博主主页链接或长文链接',
@@ -3066,7 +3066,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
             'sina_blog': {
                 label: '输入新浪博客博主主页或博文目录链接',
                 placeholder: '输入新浪博客主页 (如 https://blog.sina.com.cn/u/5320406686) 或目录链接 (如 articlelist_5320406686_0_1.html)...',
-                tipHtml: '<b style="color:#e6162d;">🏮 新浪博客专属通道：</b>无需登录与插件，支持按全量博文或指定分类专栏一键提取，自动解析高清无损大图。'
+                tipHtml: '<b style="color:#e6162d;">🏮 新浪博客专属通道：</b>无需登录与插件，支持按全量博文或指定分类一键提取，自动解析高清无损大图。'
             },
             'jianshu': {
                 label: '输入简书博主主页、专题或文章链接',
@@ -3076,7 +3076,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
             'juejin': {
                 label: '输入掘金博主个人主页链接',
                 placeholder: '输入掘金博主主页 (如 https://juejin.cn/user/1556564194374926)...',
-                tipHtml: '<b style="color:#b45309;">🟠 掘金专属通道：</b>一键提取博主全部专栏与技术文章，原生提取高质量 Markdown。'
+                tipHtml: '<b style="color:#b45309;">🟠 掘金专属通道：</b>一键提取博主主页全部技术文章，原生提取高质量 Markdown。'
             },
             'csdn': {
                 label: '输入 CSDN 博主博客主页链接',
@@ -3091,7 +3091,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
             '51cto': {
                 label: '输入 51CTO 博主主页链接',
                 placeholder: '输入 51CTO 主页链接 (如 https://blog.51cto.com/u_15127607)...',
-                tipHtml: '<b style="color:#0284c7;">🔵 51CTO 专属通道：</b>分页获取博主历史发表的技术博文与专栏。'
+                tipHtml: '<b style="color:#0284c7;">🔵 51CTO 专属通道：</b>分页获取博主历史发表的全部技术博文。'
             },
             'custom_urls': {
                 label: '粘贴跨平台网页文章 URL 列表 (每行一条)',
@@ -3177,7 +3177,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     const uname = data.user_name || data.username || '已登录用户';
                     const handle = data.url_token ? ` (@${data.url_token})` : '';
                     title.innerHTML = `知乎账号已连接: <b style="color:var(--accent-emerald);">${uname}</b>${handle}`;
-                    desc.innerText = '已激活全量权限，可批量抓取全网任意博主历史所有回答、专栏长文与想法';
+                    desc.innerText = '已激活全量权限，可批量抓取全网任意博主历史所有回答、文章与想法';
                     if (logoutBtn) logoutBtn.style.display = 'inline-flex';
                 } else if (data.has_cookie) {
                     dot.style.background = '#f59e0b'; // 黄色
@@ -3719,7 +3719,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     'wechat': '微信公众号',
                     'csdn': 'CSDN 博客',
                     '51cto': '51CTO 技术栈',
-                    'zhihu': '知乎专栏/问答',
+                    'zhihu': '知乎文章/问答',
                     'weibo': '新浪微博',
                     'sina_blog': '新浪博客',
                     'jianshu': '简书',
