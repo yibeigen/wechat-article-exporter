@@ -210,8 +210,19 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                     if (type !== 'pin' && !t) return;
                     const timeEl = card.querySelector('.ContentItem-time');
                     // 想法卡片没有标题（链接本身就是"发布于 xx"的时间文字），
-                    // title 仅文章/回答取链接文本；想法标题留空，详情阶段用正文首行兜底
-                    out[href] = { url: href, title: type === 'pin' ? '' : t, type: type, time: timeEl ? (timeEl.innerText || '').trim() : '' };
+                    // 从卡片的折叠正文里取第一句作为标题，让检索清单阶段就能
+                    // 显示可读文字而不是"想法_ID"占位符（详情阶段会用全文首行覆盖）
+                    let pinTitle = '';
+                    if (type === 'pin') {
+                        const rich = card.querySelector('.RichContent-inner .RichText, .RichText');
+                        if (rich) {
+                            const lines = (rich.innerText || '').split('\\n')
+                                .map(s => s.trim())
+                                .filter(s => s && !/^(展开|收起|阅读全文|收起全文)$/.test(s));
+                            if (lines.length) pinTitle = lines[0];
+                        }
+                    }
+                    out[href] = { url: href, title: type === 'pin' ? pinTitle : t, type: type, time: timeEl ? (timeEl.innerText || '').trim() : '' };
                 });
                 return Object.values(out);
             }'''
@@ -414,11 +425,18 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                     break
                 seen_urls.add(u)
                 pin_id = u.rstrip("/").split("/")[-1]
+                # 想法没有传统标题：列表阶段已从卡片折叠正文提取第一句，
+                # 这里清理空白与行尾残留（分隔线「|」、截断符「…」），
+                # 超过 40 字截断加省略号（与详情阶段标题规则一致）；
+                # 空则回退 ID 占位。详情抓取阶段会用全文首行重新生成标题覆盖
+                pin_head = re.sub(r"\s+", " ", (r.get("title") or "")).strip()
+                pin_head = re.sub(r"[\s|…]+$", "", pin_head)
+                if len(pin_head) > 40:
+                    pin_head = pin_head[:40].rstrip() + "…"
                 all_articles.append({
                     "id": pin_id or u,
                     "url": u,
-                    # 想法没有标题：先占位，详情抓取阶段会用正文首行生成标题覆盖
-                    "title": "【想法】想法_" + pin_id,
+                    "title": "【想法】" + (pin_head or f"想法_{pin_id}"),
                     "publish_time": _extract_time(r.get("time")),
                     "content_html": "",
                     "excerpt": "",
