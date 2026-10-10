@@ -130,17 +130,44 @@ class WeChatScraper(BaseScraper):
         urls = [line for line in lines if line.startswith("http")]
 
         # 场景 A: 检查是否输入了微信「专辑/合集」链接 (appmsgalbum 或 album_id)
+        # 支持多行多个合集链接：逐个抓取后跨合集合并去重（配合前端"贴单篇链接自动探测合集"功能）
         album_urls = [u for u in urls if ("appmsgalbum" in u or "album_id" in u)]
         print(f"[WeChatScraper] album_urls detected: {len(album_urls)}, 'album_id' in target: {'album_id' in self.target}")
         if album_urls or "album_id" in self.target:
-            target_album_url = album_urls[0] if album_urls else self.target.strip()
-            print(f"[WeChatScraper] entering album branch, url={target_album_url[:200]!r}")
-            album_articles = await self._fetch_album_articles(target_album_url, progress_callback)
-            print(f"[WeChatScraper] album branch returned {len(album_articles)} articles")
-            if album_articles:
-                return album_articles
-            # 如果专辑解析返回空，不直接 fallback，给用户明确提示；但继续向后执行以防其他通道能救场
-            print("[WeChatScraper] album branch returned empty, will try fallback channels")
+            # 用户只贴了一个裸 album_id（无完整 URL）时，待抓列表就是它本身
+            album_tasks = album_urls or [self.target.strip()]
+            total_albums = len(album_tasks)
+            seen_urls = set()        # 跨合集全局去重：同一篇文章可能同时挂在多个合集里
+            merged_articles = []
+            failed_albums = 0        # 抓取失败的合集数，不中断任务，最后统一提示
+            for album_idx, album_url in enumerate(album_tasks, 1):
+                print(f"[WeChatScraper] entering album branch {album_idx}/{total_albums}, url={album_url[:200]!r}")
+                # album_label 用于进度消息展示序号；base_count 是前面合集已累计的篇数
+                batch = await self._fetch_album_articles(
+                    album_url, progress_callback,
+                    album_label=f"{album_idx}/{total_albums}", base_count=len(merged_articles))
+                print(f"[WeChatScraper] album branch {album_idx} returned {len(batch)} articles")
+                if not batch:
+                    # 该合集返回空（解析失败或确实无文章）：跳过但不中断，继续下一个
+                    failed_albums += 1
+                    print(f"[WeChatScraper] album branch {album_idx} returned empty, skip it")
+                    continue
+                for art in batch:
+                    if art.get("url") and art["url"] not in seen_urls:
+                        seen_urls.add(art["url"])
+                        merged_articles.append(art)
+                # 达到 max_articles 上限就立即截断停止，避免超大批量任务拖太久
+                if self.max_articles and len(merged_articles) >= self.max_articles:
+                    merged_articles = merged_articles[:self.max_articles]
+                    break
+            if merged_articles:
+                if progress_callback and failed_albums:
+                    progress_callback(
+                        f"⚠️ {failed_albums} 个合集抓取失败已跳过，其余合集合并去重共 {len(merged_articles)} 篇",
+                        len(merged_articles), 0)
+                return merged_articles
+            # 如果所有专辑解析都返回空，不直接 fallback，给用户明确提示；但继续向后执行以防其他通道能救场
+            print("[WeChatScraper] all album branches empty, will try fallback channels")
 
         # 场景 B: 用户只输入了 1 条普通的微信文章链接
         # 免凭证直接导出单篇；如需该号全部历史，可点「获取公众号链接」在微信打开
@@ -611,7 +638,8 @@ class WeChatScraper(BaseScraper):
                 return []
         return []
 
-    async def _fetch_album_articles(self, album_url: str, progress_callback: Optional[Callable[[str, int, int], None]] = None) -> List[Dict[str, str]]:
+    async def _fetch_album_articles(self, album_url: str, progress_callback: Optional[Callable[[str, int, int], None]] = None,
+                                    album_label: str = "", base_count: int = 0) -> List[Dict[str, str]]:
         """
         自动解析微信专辑/合集链接下的全部文章 (免凭证 · 零风控)
         微信合集页面结构会不定期变化，常见两种形式：
@@ -622,7 +650,12 @@ class WeChatScraper(BaseScraper):
         articles = []
         html = ""
         final_url = album_url
+        # 进度消息里展示的合集名：调用方传了标题就用标题，否则用 URL 尾部做标识
+        label_display = album_label or f"合集...{album_url[-8:]}"
         try:
+            if progress_callback:
+                # 第二个参数会被 task_manager 写入 total_articles，多合集时传「之前合集累计 + 本合集」
+                progress_callback(f"正在抓取合集 {label_display}...", base_count, 0)
             print(f"[WeChatScraper._fetch_album_articles] 请求合集页: {album_url[:300]!r}")
             resp = await self.client.get(album_url, headers=WECHAT_HEADERS, timeout=15.0, follow_redirects=True)
             final_url = str(resp.url)
@@ -723,6 +756,10 @@ class WeChatScraper(BaseScraper):
             if page_items:
                 last = page_items[-1]
                 print(f"[WeChatScraper._fetch_album_articles] 尝试以 msg_id={last.get('_msg_id')} item_idx={last.get('_item_idx')} 为起点翻页...")
+                if progress_callback:
+                    # 静态解析只是第一步，微信合集页 DOM 常只渲染 10 篇，其余要走 AJAX 翻页
+                    progress_callback(f"合集 {label_display} 静态解析到 {len(articles)} 篇，正在翻页加载剩余文章...",
+                                      base_count + len(articles), 0)
                 paged_articles = await self._fetch_album_pages_via_ajax(album_url, page_items, html)
                 print(f"[WeChatScraper._fetch_album_articles] 翻页加载额外获得: {len(paged_articles)} 篇")
             for art in paged_articles:
@@ -746,6 +783,10 @@ class WeChatScraper(BaseScraper):
                     unique.append(clean)
             articles = unique
             print(f"[WeChatScraper._fetch_album_articles] 最终去重后: {len(articles)} 篇")
+            if progress_callback:
+                # 本合集完成：汇报累计篇数（之前合集的 base_count + 本合集篇数）
+                progress_callback(f"合集 {label_display} 解析完成，共 {len(articles)} 篇",
+                                  base_count + len(articles), 0)
         except Exception as e:
             print(f"[WeChatScraper._fetch_album_articles] 解析微信合集失败: {e}")
             import traceback

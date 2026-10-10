@@ -160,12 +160,13 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
             # "关注了/关注者"，所以两种位置都要读、互相兜底
             declared = page.evaluate('''() => {
                 const out = {};
-                document.querySelectorAll('a[href*="/answers"], a[href*="/posts"]').forEach(a => {
+                document.querySelectorAll('a[href*="/answers"], a[href*="/posts"], a[href*="/pins"]').forEach(a => {
                     const href = a.href || '';
                     const t = (a.innerText || '').replace(/\\s+/g, ' ').trim();
                     let key = null;
                     if (/\\/answers\\b/.test(href)) key = '回答';
                     else if (/\\/posts\\b/.test(href)) key = '文章';
+                    else if (/\\/pins\\b/.test(href)) key = '想法';
                     if (!key) return;
                     // Tab 文本形如"回答 295"，取末尾的数字部分
                     const m = t.match(/([\\d.,]+\\s*[万亿kKwW]?)\\s*$/);
@@ -189,21 +190,28 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
             # 签好名的请求返回，稳定且不易触发风控
             # ==========================================================
 
-            # 通用 JS：从当前页面的卡片 DOM 中解析出文章/回答条目
+            # 通用 JS：从当前页面的卡片 DOM 中解析出文章/回答/想法条目
+            # 注意：想法链接 /pin/{id} 不命中 a[href*="/p/"]（"pin" 的 p 后面是
+            # 字母 i 而非斜杠），必须单独加 a[href*="/pin/"] 选择器才能被选中
             extract_js = '''() => {
                 const out = {};
                 document.querySelectorAll('.List-item, .Card').forEach(card => {
-                    const a = card.querySelector('a[href*="/p/"], a[href*="/answer/"]');
+                    const a = card.querySelector('a[href*="/p/"], a[href*="/answer/"], a[href*="/pin/"]');
                     if (!a) return;
                     const href = a.href || '';
                     const t = (a.innerText || '').trim();
-                    if (!t) return;
                     let type = null;
-                    if (/zhihu\\.com\\/p\\/\\d+/.test(href)) type = 'article';
+                    if (/zhihu\\.com\\/pin\\/\\d+/.test(href)) type = 'pin';
+                    else if (/zhihu\\.com\\/p\\/\\d+/.test(href)) type = 'article';
                     else if (/question\\/\\d+\\/answer\\/\\d+/.test(href)) type = 'answer';
                     if (!type) return;
+                    // 文章/回答维持旧的"链接必须有文本"过滤（排除无效卡片）；
+                    // 想法的链接文本是时间文字、且我们不留标题，不做此限制
+                    if (type !== 'pin' && !t) return;
                     const timeEl = card.querySelector('.ContentItem-time');
-                    out[href] = { url: href, title: t, type: type, time: timeEl ? (timeEl.innerText || '').trim() : '' };
+                    // 想法卡片没有标题（链接本身就是"发布于 xx"的时间文字），
+                    // title 仅文章/回答取链接文本；想法标题留空，详情阶段用正文首行兜底
+                    out[href] = { url: href, title: type === 'pin' ? '' : t, type: type, time: timeEl ? (timeEl.innerText || '').trim() : '' };
                 });
                 return Object.values(out);
             }'''
@@ -264,7 +272,7 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                 last_count = 0
                 items = []
                 wall_type = ""
-                type_label = "文章" if expected_type == "article" else "回答"
+                type_label = {"article": "文章", "answer": "回答", "pin": "想法"}.get(expected_type, "内容")
                 while stable_rounds < 5:
                     if max_articles and len(all_articles) >= max_articles:
                         break
@@ -381,7 +389,44 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                 })
 
             # ==========================================================
-            # 步骤 3: 最后访问专栏页，建立「文章 URL -> 专栏名」映射并打标
+            # 步骤 3: 全量抓取博主「想法」Tab（短内容，URL 形如 /pin/{id}）
+            # 说明：想法列表卡片正文是折叠的（"…阅读全文"），列表页拿不到
+            # 完整内容，因此此处仅收集链接与时间，正文由详情阶段逐篇补全
+            # ==========================================================
+            try:
+                page.goto(f"https://www.zhihu.com/people/{url_token}/pins", wait_until="domcontentloaded", timeout=25000)
+                time.sleep(2.0)
+            except Exception:
+                pass
+            pin_items, wall_pins = _scroll_collect("pin")
+            if wall_pins:
+                # 被登录墙/风控截断：如实告知用户列表不完整，而不是静默导出一部分
+                wall_label = "登录墙（知乎要求登录）" if wall_pins == "login" else "安全验证（知乎风控）"
+                wall_hint = "建议在设置中同步/扫码知乎 Cookie 后重试" if wall_pins == "login" else "建议稍后重试，或降低抓取频率"
+                warnings.append(f"⚠️ 想法列表被知乎{wall_label}截断，只加载到 {len(pin_items)} 条，{wall_hint}")
+                if progress_callback:
+                    progress_callback(f"⚠️ 想法列表被知乎{wall_label}截断，只加载到 {len(pin_items)} 条...", len(all_articles), 0)
+            for r in pin_items:
+                u = r.get("url") or ""
+                if u in seen_urls:
+                    continue
+                if max_articles and len(all_articles) >= max_articles:
+                    break
+                seen_urls.add(u)
+                pin_id = u.rstrip("/").split("/")[-1]
+                all_articles.append({
+                    "id": pin_id or u,
+                    "url": u,
+                    # 想法没有标题：先占位，详情抓取阶段会用正文首行生成标题覆盖
+                    "title": "【想法】想法_" + pin_id,
+                    "publish_time": _extract_time(r.get("time")),
+                    "content_html": "",
+                    "excerpt": "",
+                    "content_type": "pin"  # 知乎想法（短内容）
+                })
+
+            # ==========================================================
+            # 步骤 4: 最后访问专栏页，建立「文章 URL -> 专栏名」映射并打标
             # （专栏列表接口不受签名保护，随时可访问；放在最后顺路完成）
             # ==========================================================
             try:
@@ -554,12 +599,14 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
     try:
         n_articles = sum(1 for a in all_articles if a.get("content_type") == "article")
         n_answers = sum(1 for a in all_articles if a.get("content_type") == "answer")
+        n_pins = sum(1 for a in all_articles if a.get("content_type") == "pin")
         declared_articles = _parse_count(declared.get("文章", ""))
         declared_answers = _parse_count(declared.get("回答", ""))
+        declared_pins = _parse_count(declared.get("想法", ""))
         # 把声明总数上报给前端：检索清单弹窗会显示「标称 X 篇 vs 收录 Y 篇」，
         # 用户一眼就能看出是否抓全（此前这里一直是空，导致漏抓毫无提示）
-        if declared_articles + declared_answers > 0:
-            declared_total = declared_articles + declared_answers
+        if declared_articles + declared_answers + declared_pins > 0:
+            declared_total = declared_articles + declared_answers + declared_pins
         # 知乎主页的声明数量是博主本人视角（含“仅自己可见”的私密内容），访客视角通常只能看到公开内容。
         # 差异在 25% 以内多数情况下属于正常（博主删除、设为私密、平台下架等），不必动不动就报警。
         completeness_threshold = 0.75
@@ -583,6 +630,16 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
             )
             warnings.append(
                 f"⚠️ 回答未抓全：主页声明约 {declared_answers} 篇回答，本次仅加载到 {n_answers} 篇。{reason_hint}"
+                f"建议在工作台「设置」中通过浏览器扩展同步、扫码登录或手动粘贴 Cookie 后重试。"
+            )
+        if declared_pins > 0 and n_pins < declared_pins * completeness_threshold:
+            reason_hint = (
+                "当前未检测到有效登录 Cookie (z_c0)，知乎很可能只返回了游客可见部分。"
+                if not has_login_cookie else
+                "可能受知乎登录墙/风控影响，或差额内容已被博主设为私密/仅自己可见。"
+            )
+            warnings.append(
+                f"⚠️ 想法未抓全：主页声明约 {declared_pins} 条想法，本次仅加载到 {n_pins} 条。{reason_hint}"
                 f"建议在工作台「设置」中通过浏览器扩展同步、扫码登录或手动粘贴 Cookie 后重试。"
             )
         if warnings:
@@ -688,10 +745,21 @@ class ZhihuScraper(BaseScraper):
             time.sleep(1.5)  # 防风控拟人化等待，保持与旧版一致不压缩
 
             extracted = page.evaluate('''() => {
+                // 想法详情页 (/pin/{id}) 没有 h1 标题，需用页面 <title> 兜底，
+                // 其格式为「作者名 的想法: 正文前缀 - 知乎」
+                const isPin = /zhihu\\.com\\/pin\\/\\d+/.test(location.href);
                 const titleEl = document.querySelector('h1.Post-Title, .QuestionHeader-title, h1');
-                const richEl = document.querySelector('.Post-RichText, .RichContent-inner, .RichText, .css-79elbk');
+                let title = titleEl ? titleEl.innerText.trim() : '';
+                if (!title && isPin) {
+                    title = (document.title || '').replace(/\\s*-\\s*知乎\\s*$/, '').trim();
+                }
+                // 想法正文必须精确命中 .RichContent-inner 内的正文本体（.RichText）：
+                // 若直接用外层 .css-79elbk 会把整个评论区都抓进来
+                const pinSel = '.RichContent-inner .RichText, .Post-RichText, .RichContent-inner, .RichText';
+                const normSel = '.Post-RichText, .RichContent-inner, .RichText, .css-79elbk';
+                const richEl = document.querySelector(isPin ? pinSel : normSel);
                 return {
-                    title: titleEl ? titleEl.innerText.trim() : '',
+                    title: title,
                     html: richEl ? richEl.innerHTML : ''
                 };
             }''')
@@ -896,6 +964,33 @@ class ZhihuScraper(BaseScraper):
                 title = extracted["title"]
             if extracted.get("html"):
                 raw_html = extracted["html"]
+
+        # 想法没有标题：把详情页兜底标题「作者名 的想法: 正文前缀」里的正文
+        # 前缀剥出来，再用正文首行生成可读标题（策略与微博纯博文一致，截 40 字）
+        if content_type == "pin":
+            pin_heading = title
+            m = re.search(r"的想法[:：]\s*(.*)$", pin_heading or "", re.S)
+            if m:
+                pin_heading = m.group(1).strip()
+            first_line = ""
+            if raw_html:
+                # 去掉 HTML 标签后取第一段非空文本作为标题
+                text_only = re.sub(r"<[^>]+>", "\n", raw_html)
+                for line in text_only.splitlines():
+                    line = line.strip()
+                    if line:
+                        first_line = line
+                        break
+            pin_id_m = re.search(r"/pin/(\d+)", url)
+            title = first_line or pin_heading or (f"想法_{pin_id_m.group(1)}" if pin_id_m else "知乎想法")
+            # 清理行尾残留：知乎想法正文的视觉分隔线会导出为文本「|」，
+            # 截断符「…」也不是作者原文，一并去掉（仅去行尾，不动正文中间）
+            title = re.sub(r"[\s|…]+$", "", title)
+            # 首行若只有分隔符（清完为空），回退到兜底标题
+            if not title:
+                title = pin_heading or (f"想法_{pin_id_m.group(1)}" if pin_id_m else "知乎想法")
+            if len(title) > 40:
+                title = title[:40].rstrip() + "…"
 
         if raw_html:
             cleaned_html, md_content, images = clean_html_content(raw_html, self.enable_noise_filter, remove_watermark=self.remove_image_watermark)

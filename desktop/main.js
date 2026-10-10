@@ -2608,7 +2608,17 @@ class LocalPythonManager {
         this.port = 8000;
         this.running = false;
         this.lastError = null;
+        // 内核部署失败的真实原因（venv/pip 的 stderr 摘要），拼进兜底页报错里，
+        // 替代笼统的"请检查网络"——很多部署失败根本不是网络问题（如假 Python、依赖不兼容）
+        this.lastDeployDetail = null;
         this.stdoutLogs = [];
+    }
+
+    // 记录一次部署失败的真实原因：取 stderr 末尾两行压成单行（错误摘要都在末尾），
+    // 截断到 220 字符防止兜底页被超长堆栈撑爆
+    setDeployDetail(stage, stderr) {
+        const tail = String(stderr || "").trim().split(/\r?\n/).filter(Boolean).slice(-2).join(" | ");
+        this.lastDeployDetail = tail ? `${stage}: ${tail.slice(-220)}` : stage;
     }
 
     async findFreePort(startPort = 8000, maxPort = 8050) {
@@ -2679,16 +2689,32 @@ class LocalPythonManager {
         if (process.platform === "win32") {
             try {
                 const r = spawnSync("py", ["-3", "--version"], { encoding: "utf8", timeout: 8000, windowsHide: true });
-                if (!r.error) return { cmd: "py", prefix: ["-3"] };
+                if (this.isValidPythonProbe(r)) return { cmd: "py", prefix: ["-3"] };
             } catch (_) {}
         }
         // 兜底二：PATH 里的 python/python3
         try {
             const name = process.platform === "win32" ? "python.exe" : "python3";
             const r = spawnSync(name, ["--version"], { encoding: "utf8", timeout: 8000, windowsHide: true });
-            if (!r.error) return { cmd: name, prefix: [] };
+            if (this.isValidPythonProbe(r)) return { cmd: name, prefix: [] };
         } catch (_) {}
         return null;
+    }
+
+    // 校验一次 "--version" 探测结果是不是"真 Python 3"，两个兜底路径都必须过这道闸：
+    // 1) Windows 10/11 自带"应用执行别名"：WindowsApps\python.exe 是个商店跳转 stub，
+    //    进程能正常启动（spawn 不报错），但退出码是 9009、输出 "Python was not found..."。
+    //    此前只判 !r.error 会把它误当可用 Python，后续建 venv 必然失败，
+    //    用户看到的是误导性的"请检查网络"（真实原因根本没触网）。2026-10 国外新用户案例。
+    // 2) 版本下限卡 3.8：pydantic 2.x / fastapi 0.110+ / lxml 5.x 等依赖最低支持 3.8，
+    //    更老的 Python（3.7-）装依赖必失败，同样表现成"部署失败"，不如一开始就跳过，
+    //    让上层走"自动下载内嵌内核"分支拿到保证兼容的 3.12.6。下限取 3.8 也与 Win7 版内嵌 3.8.10 对齐。
+    isValidPythonProbe(r) {
+        if (!r || r.error || r.status !== 0) return false;
+        // 真解释器输出形如 "Python 3.12.6"；商店 stub 输出 "Python was not found..." 不匹配
+        const m = String(r.stdout || "").trim().match(/^Python\s+3\.(\d+)(?:\.(\d+))?/i);
+        if (!m) return false;
+        return parseInt(m[1], 10) >= 8; // 次版本 >= 8 即 Python >= 3.8
     }
 
     // 统一的命令执行封装：超时自动杀进程，永不抛异常（失败以 ok:false 表达）
@@ -2771,11 +2797,13 @@ class LocalPythonManager {
         const mk = await this.runCmd(cmd, [...prefix, "-m", "venv", venvDir], 180000);
         if (!mk.ok || !fs.existsSync(venvPy)) {
             console.error("[LocalPython] 创建 venv 失败:", mk.stderr || mk.err);
+            this.setDeployDetail("创建独立运行环境(venv)失败", mk.stderr || (mk.err && mk.err.message));
             return null;
         }
 
         if (!fs.existsSync(reqFile)) {
             console.error("[LocalPython] 未找到依赖清单 requirements.txt:", reqFile);
+            this.setDeployDetail(`未找到依赖清单 requirements.txt（${reqFile}）`, "");
             return null;
         }
         setBootStatus("正在安装核心依赖（约 2~5 分钟，视网速而定）…");
@@ -2786,6 +2814,7 @@ class LocalPythonManager {
         }
         if (!pip.ok) {
             console.error("[LocalPython] 依赖安装失败:", pip.stderr);
+            this.setDeployDetail("依赖安装失败(官方源与清华镜像均失败)", pip.stderr);
             return null;
         }
 
@@ -2902,18 +2931,24 @@ class LocalPythonManager {
             `https://www.python.org/ftp/python/${pyVer}/${zipName}`
         ];
         let zipBuf = null;
+        const dlErrs = []; // 收集三条线路的失败原因，供兜底页透传真实报错
         for (let i = 0; i < mirrors.length; i++) {
             try {
                 setBootStatus(`正在下载便携 Python 内核 ${pyVer}（约 12MB）— 线路 ${i + 1}/${mirrors.length}…`);
                 zipBuf = await this.downloadFile(mirrors[i]);
                 if (zipBuf && zipBuf.length > 1000000) break; // 简单体积校验，防止拿到错误页
                 zipBuf = null;
+                dlErrs.push(`线路${i + 1}内容异常`);
             } catch (e) {
                 console.warn(`[LocalPython] 内核下载线路 ${i + 1} 失败:`, e.message);
+                dlErrs.push(`线路${i + 1}: ${e.message}`);
                 zipBuf = null;
             }
         }
-        if (!zipBuf) return null;
+        if (!zipBuf) {
+            this.setDeployDetail(`便携 Python 内核下载失败(华为云/npmmirror/python.org均不可达) ${pyVer}`, dlErrs.join(" | "));
+            return null;
+        }
 
         setBootStatus("正在解压 Python 内核…");
         try {
@@ -2930,6 +2965,7 @@ class LocalPythonManager {
             }
         } catch (e) {
             console.error("[LocalPython] 解压 Python 内核失败:", e);
+            this.setDeployDetail("解压 Python 内核失败", e.message);
             return null;
         }
 
@@ -2952,10 +2988,12 @@ class LocalPythonManager {
             const gp = await this.runCmd(pyExe, [getpipPath, "--no-warn-script-location", "-i", "https://pypi.tuna.tsinghua.edu.cn/simple"], 300000);
             if (!gp.ok) {
                 console.error("[LocalPython] pip 初始化失败:", gp.stderr);
+                this.setDeployDetail("pip 初始化失败(get-pip)", gp.stderr);
                 return null;
             }
         } catch (e) {
             console.error("[LocalPython] 下载 get-pip 失败:", e.message);
+            this.setDeployDetail("下载 get-pip 失败(bootstrap.pypa.io 不可达)", e.message);
             return null;
         }
 
@@ -2978,6 +3016,7 @@ class LocalPythonManager {
         }
         if (!r.ok) {
             console.error("[LocalPython] 依赖安装失败:", r.stderr);
+            this.setDeployDetail("内嵌内核依赖安装失败(官方源与清华镜像均失败)", r.stderr);
             return null;
         }
         // Playwright 渲染内核放到服务就绪后后台安装
@@ -3126,6 +3165,7 @@ class LocalPythonManager {
         try {
             // ===== Python 解释器解析 + 首次运行内核自动部署 =====
             setBootStatus("正在检测本地 Python 运行环境…");
+            this.lastDeployDetail = null; // 每次启动重置，避免上一次失败的旧原因串到本次报错里
             const resolved = this.resolvePython();
             let pythonCmd = null;
             let pyPrefix = [];
@@ -3139,7 +3179,8 @@ class LocalPythonManager {
                 setBootStatus("未检测到 Python，正在自动下载便携 Python 内核（约 12MB）…");
                 const emb = await this.ensureEmbeddedPython();
                 if (!emb) {
-                    const err = "Python 内核自动下载失败，请检查网络后重启应用，或到 python.org 手动安装 Python";
+                    const detail = this.lastDeployDetail ? `（详细原因：${this.lastDeployDetail}）` : "";
+                    const err = `Python 内核自动下载失败${detail}，请检查网络后重启应用，或到 python.org 手动安装 Python`;
                     console.error(`[LocalPython] ${err}`);
                     this.lastError = err;
                     setBootStatus("❌ " + err);
@@ -3173,7 +3214,8 @@ class LocalPythonManager {
                     kernel = await this.ensureKernel(pythonCmd, pyPrefix, projectRoot);
                 }
                 if (!kernel) {
-                    const err = "本地 Python 内核自动部署失败，请检查网络后重启应用重试";
+                    const detail = this.lastDeployDetail ? `（详细原因：${this.lastDeployDetail}）` : "";
+                    const err = `本地 Python 内核自动部署失败${detail}，请检查网络后重启应用重试`;
                     console.error(`[LocalPython] ${err}`);
                     this.lastError = err;
                     setBootStatus("❌ " + err);

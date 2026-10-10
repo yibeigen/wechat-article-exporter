@@ -45,7 +45,7 @@ class ArticleItem(BaseModel):
     comments: List[Dict[str, Any]] = Field(default_factory=list)
     is_failed: bool = False
     error_reason: Optional[str] = None
-    content_type: Optional[str] = Field(default=None, description="内容类型：article 知乎文章（全量） / answer 问题回答，用于分类展示")
+    content_type: Optional[str] = Field(default=None, description="内容类型：article 知乎文章（全量） / answer 问题回答 / pin 知乎想法，用于分类展示")
     column_title: Optional[str] = Field(default=None, description="所属专栏名（文章的归类标签，可多选，用 、 分隔）")
 
     # 兼容旧数据：未设置 content_type 时，根据标题前缀推断（仅知乎历史数据）
@@ -59,6 +59,8 @@ class ArticleItem(BaseModel):
             return "article"
         if self.title.startswith("【回答】"):
             return "answer"
+        if self.title.startswith("【想法】"):
+            return "pin"
         return "article"
 
 class TaskCreateRequest(BaseModel):

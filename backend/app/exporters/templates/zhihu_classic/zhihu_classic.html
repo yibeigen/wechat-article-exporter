@@ -374,6 +374,7 @@
                     <!-- 专栏 Tab：专指被收录进专栏的文章，具体专栏名标注在目录条目小字中 -->
                     <div class="zh-filter-tab" data-filter="column" onclick="switchFilter(this)">专栏</div>
                     <div class="zh-filter-tab" data-filter="answer" onclick="switchFilter(this)">回答</div>
+                    <div class="zh-filter-tab" data-filter="pin" onclick="switchFilter(this)">想法</div>
                 </div>
                 <div class="zh-toc-list" id="tocList"></div>
             </div>
@@ -468,6 +469,10 @@
                     <div class="cell">
                         <div class="num" id="statAnswer">{{ answer_count }}</div>
                         <div class="label">回答</div>
+                    </div>
+                    <div class="cell">
+                        <div class="num" id="statPin">{{ pin_count }}</div>
+                        <div class="label">想法</div>
                     </div>
                 </div>
             </div>
@@ -597,9 +602,9 @@
             // 其余 Tab（全部/文章/回答）：平铺列表
             list.innerHTML = visible.map((a) => {
                 const realIdx = articles.indexOf(a);
-                // 全部 Tab 下显示类型小标签（文章/专栏/回答），其余 Tab 类型单一无需标签
+                // 全部 Tab 下显示类型小标签（文章/专栏/回答/想法），其余 Tab 类型单一无需标签
                 const tag = currentFilter === 'all'
-                    ? (normType(a) === 'answer' ? '回答' : (a.column_title ? '专栏' : '文章'))
+                    ? (normType(a) === 'answer' ? '回答' : (normType(a) === 'pin' ? '想法' : (a.column_title ? '专栏' : '文章')))
                     : '';
                 const isActive = realIdx === currentIndex;
                 const title = (a.title || '').replace(/^【[^】]*】/, '');
@@ -646,9 +651,10 @@
                 chip.style.display = 'none';
             }
 
-            // 「N 人赞同了该文章/该回答」meta 行
+            // 「N 人赞同了该文章/该回答/该想法」meta 行
             const like = art.like_count || 0;
-            document.getElementById('voteMeta').innerText = `${like} 人赞同了${isAnswer ? '该回答' : '该文章'}`;
+            const likeTarget = isAnswer ? '该回答' : (normType(art) === 'pin' ? '该想法' : '该文章');
+            document.getElementById('voteMeta').innerText = `${like} 人赞同了${likeTarget}`;
 
             // 作者信息（离线存档不展示头像，名字前加「作者：」标识）
             document.getElementById('authorName').innerText = '作者：' + (art.author || '{{ author_name }}');

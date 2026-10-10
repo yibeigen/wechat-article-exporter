@@ -346,6 +346,12 @@ class TaskManager:
         """根据 URL 规则智能识别平台 (若包含多条 URL 则自动转为自定义聚合模式)"""
         urls = re.findall(r'https?://[^\s,"\'<>]+', target)
         if len(urls) > 1:
+            # 例外：全部是微信链接且包含合集链接时，仍归 WECHAT。
+            # 多合集合并导出必须走 WeChatScraper 场景 A（逐合集翻页 + 跨合集去重），
+            # 若落到 CUSTOM_URLS 会把合集页当单篇文章页解析，整个合集只出 1 篇。
+            if (all("weixin.qq.com" in u.lower() for u in urls)
+                    and any(("appmsgalbum" in u or "album_id=" in u) for u in urls)):
+                return PlatformEnum.WECHAT
             return PlatformEnum.CUSTOM_URLS
 
         t = target.lower()

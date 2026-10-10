@@ -1233,6 +1233,49 @@ async def scan_wechat_albums(req: Dict[str, Any] = Body(...)):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"解析文章公开网页失败: {str(e)}")
 
+    # 2.5 按 album_id 去重并补全每个合集的文章总数 (article_count)
+    # 微信合集页支持 f=json 的纯接口形态，响应里 base_info.article_count 就是合集总篇数，
+    # 免凭证、无风控，与合集翻页接口同构；解析失败保持 0，前端只显示合集名不影响功能。
+    _seen_ids = set()
+    _deduped = []
+    for _alb in albums:
+        _aid = str(_alb.get("album_id") or "")
+        # 跳过没有 album_id 或重复的合集（文章页与主页可能发现同一个合集）
+        if not _aid or _aid in _seen_ids:
+            continue
+        _seen_ids.add(_aid)
+        _deduped.append(_alb)
+    albums = _deduped[:8]  # 上限 8 个：正常一篇文章最多挂 2~3 个合集，防异常页面拖慢探测
+
+    for _alb in albums:
+        if _alb.get("article_count"):
+            continue  # 已有篇数的不重复请求
+        # 合集链接尾部带 #wechat_redirect 锚点，必须先剥掉才能追加 &f=json 查询参数
+        _alb_url = (_alb.get("url") or "").split("#")[0]
+        if "album_id=" not in _alb_url:
+            # 解析出的 href 不完整时，用 biz + album_id 拼一个标准合集接口地址
+            _alb_url = (f"https://mp.weixin.qq.com/mp/appmsgalbum"
+                        f"?action=getalbum&__biz={biz}&album_id={_alb.get('album_id')}")
+        try:
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+                _r = await client.get(_alb_url + "&f=json", headers=headers)
+                if _r.status_code == 200:
+                    _cnt = None
+                    try:
+                        # 优先走标准 JSON 字段（结构与合集翻页接口一致）
+                        _cnt = (_r.json().get("getalbum_resp", {}).get("base_info", {}) or {}).get("article_count")
+                    except Exception:
+                        pass
+                    if not _cnt:
+                        # 兜底：直接正则从响应文本里抓，防微信调整字段层级
+                        _m = re.search(r'"article_count"\s*:\s*"?(\d+)', _r.text)
+                        _cnt = _m.group(1) if _m else None
+                    if _cnt:
+                        _alb["article_count"] = int(_cnt)
+        except Exception:
+            pass  # 单个合集的篇数补全失败不影响整体探测结果
+        await asyncio.sleep(0.5)  # 礼貌间隔，避免连续请求触发微信风控
+
     # 3. 本地持久化与去重
     saved_albums = []
     if biz:

@@ -366,6 +366,7 @@ class OriginalHTMLExporter(BaseExporter):
         # 知乎内容统计：「文章」为全量集合（含被收录进专栏的），专栏只是归类标签
         article_count = sum(1 for a in articles if a.get_content_type() in ("article", "column_article"))
         answer_count = sum(1 for a in articles if a.get_content_type() == "answer")
+        pin_count = sum(1 for a in articles if a.get_content_type() == "pin")
         # 专栏按「个数」统计：从文章的 column_title 字段（多专栏用 、 分隔）去重
         column_count = len({c.strip() for a in articles for c in (a.column_title or "").split("、") if c.strip()})
 
@@ -443,6 +444,9 @@ class OriginalHTMLExporter(BaseExporter):
                 display_title = display_title[len("【专栏】"):]
             elif display_title.startswith("【回答】"):
                 display_title = display_title[len("【回答】"):]
+            elif display_title.startswith("【想法】"):
+                # 想法同样可能有旧缓存带前缀的情况，统一剥掉由模板干净展示
+                display_title = display_title[len("【想法】"):]
             articles_data.append({
                 "id": art.id or str(idx),
                 "title": display_title,
@@ -475,6 +479,7 @@ class OriginalHTMLExporter(BaseExporter):
             article_count=article_count,
             column_count=column_count,
             answer_count=answer_count,
+            pin_count=pin_count,
             articles_json=json.dumps(articles_data, ensure_ascii=False)
         )
 
