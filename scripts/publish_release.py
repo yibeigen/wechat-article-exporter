@@ -12,35 +12,37 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 REPO = "yibeigen/wechat-article-exporter"
-TAG = "v1.2.7"
-TITLE = "BlogDistiller (博萃) 文章导出助手 v1.2.7 官方正式版"
-DIST_DIR = Path(r"E:\Tools\Web\下载各个平台\dist")
+TAG = "v1.2.8"
+TITLE = "BlogDistiller (博萃) 文章导出助手 v1.2.8 官方正式版"
+DIST_DIR = Path(r"E:\Tools\Web\下载各个平台\dist_1.2.8_final")
 API_BASE = f"https://api.github.com/repos/{REPO}"
 
 # 发布说明（全中文）。注意：GitHub 附件名只保留英文/数字/点/横线，
 # 中文名会被自动改写，所以这里写的文件名必须与下方 ASSETS 的英文附件名一致
-BODY = """# 🎉 BlogDistiller (博萃) 文章导出助手 v1.2.7 正式发布！
+BODY = """# 🎉 BlogDistiller (博萃) 文章导出助手 v1.2.8 正式发布！
 
 BlogDistiller 是一款多平台博主文章批量抓取、去广告清洗与多格式合并导出工具，
 支持 **微信公众号 · 知乎 · 微博 · 新浪博客 · 简书 · CSDN · 掘金 · 博客园 · 51CTO** 等 9 大主流平台。
 
-### 🆕 本版本更新（相对 v1.2.6 的变化）：
-1. **🐛 修复"本地 Python 内核自动部署失败"误判**：未安装 Python 的电脑上，Windows 系统自带的商店占位程序（假 python.exe）曾被误当成真实 Python，导致首次启动内核部署必然失败、报错误导性地提示"请检查网络"。现已正确识别并自动下载官方便携版 Python 内核（国内/国外网络均可）；
-2. **🩹 报错原因透明化**：内核部署失败时，初始化页会直接显示真实失败原因（如具体哪条下载线路不通），方便快速定位，不再笼统提示"请检查网络"。
+### 🆕 本版本更新（相对 v1.2.7 的变化）：
+1. **🐛 修复微博「官方扫码登录」窗口一闪而过**：微博对未登录访客也会下发名为 SUB 的访客凭证，旧逻辑一看到 SUB 就误判登录成功并在 2 秒内关窗，二维码根本来不及扫。现在须经微博官方接口验证 login=true 才算登录成功；
+2. **🐛 修复微博扫码成功后界面仍显示未登录**：weibo.com 桌面端登录凭证与 m.weibo.cn 抓取通道域隔离、互不认可。现在登录成功后会自动经 m.weibo.cn 换取移动端凭证并合并保存，扫码完成即真正可用；
+3. **🐛 修复重复点击「官方扫码登录」把已登录账号踢下线**：不再清空登录会话，按钮改为幂等——已是登录态时直接静默同步凭证并显示账号信息，不弹窗、不登出；
+4. **✨ 知乎扫码登录后端验证制**：分区残留的旧凭证先验证有效性，过期才要求重新扫码；已登录时同样一键静默同步，界面直接显示真实账号昵称。
+
+> 💡 Windows 7 / 8.1 兼容版本次未重新构建，仍为上一条 release 的 v1.2.7 版本，如需请前往历史 release 下载。
 
 ---
 
-### 📥 下载与使用指引（按您的系统版本二选一，见下方 Assets 附件）：
-- **Windows 10 / 11 用户**：下载附件 `BlogDistiller-Setup-1.2.7.exe` 双击安装；
-- **Windows 7 / 8.1 用户**：下载附件 `BlogDistiller-Win7-Setup-x64.exe` 双击安装。
+### 📥 下载与使用指引（见下方 Assets 附件）：
+- **Windows 10 / 11 用户**：下载附件 `BlogDistiller-Setup-1.2.8.exe` 双击安装。
 
 > 💡 首次启动会显示初始化进度页（下载/部署本地内核，约 3~10 分钟，视网速而定），请保持网络畅通耐心等待；完成后自动进入工作台，以后启动无需再等。
 """
 
 # 附件清单：(本地文件路径, GitHub 附件名)。附件名必须全英文，否则会被 GitHub 改写
 ASSETS = [
-    (DIST_DIR / "BlogDistiller 文章导出助手 Setup 1.2.7.exe", "BlogDistiller-Setup-1.2.7.exe"),
-    (DIST_DIR / "win7" / "BlogDistiller 文章导出助手 Setup 1.2.7.exe", "BlogDistiller-Win7-Setup-x64.exe"),
+    (DIST_DIR / "BlogDistiller 文章导出助手 Setup 1.2.8.exe", "BlogDistiller-Setup-1.2.8.exe"),
 ]
 
 

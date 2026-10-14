@@ -956,11 +956,102 @@ async function openMpLoginWindow() {
 // 知乎官方扫码登录窗口 (Zhihu Official Login Window)
 // =========================================================================
 let zhihuLoginWindow = null;
-function openZhihuLoginWindow() {
+// 把分区里的知乎 Cookie 交给本地后端验证（POST set-cookie 会保存并返回最新登录状态）。
+// resolve 后端返回的状态对象；后端不可达时 resolve null（可重试）。
+const postZhihuSessionToBackend = (cookieArr) => new Promise((resolve) => {
+    const port = (localPythonManager && localPythonManager.port) || 8000;
+    const cookieStr = cookieArr.map(c => `${c.name}=${c.value}`).join("; ");
+    const postData = JSON.stringify({ cookie: cookieStr });
+    try {
+        const req = http.request({
+            hostname: "127.0.0.1",
+            port: port,
+            path: "/api/zhihu/set-cookie",
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(postData)
+            }
+        }, (res) => {
+            let data = "";
+            res.on("data", c => data += c);
+            res.on("end", () => {
+                try { resolve(JSON.parse(data)); } catch (e) { resolve(null); }
+            });
+        });
+        req.on("error", () => resolve(null));
+        req.write(postData);
+        req.end();
+    } catch (e) { resolve(null); }
+});
+
+const saveZhihuLoginSuccess = (cookies) => {
+    const cookieDict = {};
+    cookies.forEach(c => { cookieDict[c.name] = c.value; });
+    const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join("; ");
+
+    // 写入数据持久化文件
+    const projectRoot = localPythonManager ? localPythonManager.getProjectRoot() : process.cwd();
+    const sessionFileProject = path.join(projectRoot, "data", "zhihu_session.json");
+    const sessionFileDataDir = path.join(DATA_DIR, "zhihu_session.json");
+    try {
+        fs.mkdirSync(path.dirname(sessionFileProject), { recursive: true });
+        fs.writeFileSync(sessionFileProject, JSON.stringify(cookieDict, null, 2), "utf8");
+    } catch(e) {}
+    try {
+        fs.writeFileSync(sessionFileDataDir, JSON.stringify(cookieDict, null, 2), "utf8");
+    } catch(e) {}
+
+    // 同步至本地 Python 后端（set-cookie 内部会保存并回传状态，这里即发即弃）
+    const port = (localPythonManager && localPythonManager.port) || 8000;
+    try {
+        const postData = JSON.stringify({ cookie: cookieStr });
+        const req = http.request({
+            hostname: "127.0.0.1",
+            port: port,
+            path: "/api/zhihu/set-cookie",
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(postData)
+            }
+        });
+        req.on("error", () => {});
+        req.write(postData);
+        req.end();
+    } catch(e) {}
+
+    sendDebugLog("[知乎登录] 知乎官方登录成功，登录凭证 (z_c0) 已同步至本地引擎！", "success");
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("zhihu:login-success", { success: true });
+    }
+};
+
+async function openZhihuLoginWindow() {
     if (zhihuLoginWindow && !zhihuLoginWindow.isDestroyed()) {
         zhihuLoginWindow.focus();
         return;
     }
+    // 不再清空分区 Cookie（清空会把用户已登录的会话直接踢下线）。
+    // 幂等策略：分区已有 z_c0 先经后端验证——有效则直接同步并提示，不重复扫码；
+    // 无效（过期）或不存在才打开扫码页。轮询同样改为"验证通过才算成功"，
+    // 因为残留的 z_c0 可能已过期，只看名字会把旧凭证误判成已登录。
+    const loginSession = session.fromPartition("persist:zhihu-direct");
+    try {
+        const existing = await loginSession.cookies.get({ domain: ".zhihu.com" });
+        const zc0 = existing.find(c => c.name === "z_c0" && c.value);
+        if (zc0) {
+            sendDebugLog("[知乎登录] 检测到分区已有 z_c0，正在验证有效性...", "info");
+            const st = await postZhihuSessionToBackend(existing);
+            if (st && st.is_logged_in) {
+                saveZhihuLoginSuccess(existing);
+                sendDebugLog("[知乎登录] 分区凭证有效，已直接同步（无需重复扫码）", "success");
+                return;
+            }
+            sendDebugLog("[知乎登录] 分区已有凭证已失效，请重新扫码", "warn");
+        }
+    } catch (e) {}
+
     zhihuLoginWindow = new BrowserWindow({
         width: 1020,
         height: 760,
@@ -976,62 +1067,31 @@ function openZhihuLoginWindow() {
     zhihuLoginWindow.loadURL("https://www.zhihu.com/signin");
 
     let checkInterval = null;
+    let lastCheckedZc0 = "";  // 已验证过的 z_c0 值，不变时不重复验证
     const pollZhihuCookies = async () => {
         if (!zhihuLoginWindow || zhihuLoginWindow.isDestroyed()) {
             if (checkInterval) clearInterval(checkInterval);
             return;
         }
         try {
-            const cookies = await zhihuLoginWindow.webContents.session.cookies.get({ domain: ".zhihu.com" });
+            const cookies = await loginSession.cookies.get({ domain: ".zhihu.com" });
             const zc0 = cookies.find(c => c.name === "z_c0");
-            if (zc0 && zc0.value) {
-                if (checkInterval) clearInterval(checkInterval);
-                const cookieDict = {};
-                cookies.forEach(c => { cookieDict[c.name] = c.value; });
-                const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join("; ");
-
-                // 写入数据持久化文件
-                const projectRoot = localPythonManager ? localPythonManager.getProjectRoot() : process.cwd();
-                const sessionFileProject = path.join(projectRoot, "data", "zhihu_session.json");
-                const sessionFileDataDir = path.join(DATA_DIR, "zhihu_session.json");
-                try {
-                    fs.mkdirSync(path.dirname(sessionFileProject), { recursive: true });
-                    fs.writeFileSync(sessionFileProject, JSON.stringify(cookieDict, null, 2), "utf8");
-                } catch(e) {}
-                try {
-                    fs.writeFileSync(sessionFileDataDir, JSON.stringify(cookieDict, null, 2), "utf8");
-                } catch(e) {}
-
-                // 同步至本地 Python 后端
-                const port = (localPythonManager && localPythonManager.port) || 8000;
-                try {
-                    const postData = JSON.stringify({ cookie: cookieStr });
-                    const req = http.request({
-                        hostname: "127.0.0.1",
-                        port: port,
-                        path: "/api/zhihu/set-cookie",
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Content-Length": Buffer.byteLength(postData)
-                        }
-                    });
-                    req.on("error", () => {});
-                    req.write(postData);
-                    req.end();
-                } catch(e) {}
-
-                sendDebugLog("[知乎登录] 知乎官方登录成功，登录凭证 (z_c0) 已同步至本地引擎！", "success");
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send("zhihu:login-success", { success: true });
-                }
-
-                setTimeout(() => {
-                    if (zhihuLoginWindow && !zhihuLoginWindow.isDestroyed()) {
-                        zhihuLoginWindow.close();
-                    }
-                }, 1200);
+            if (!zc0 || !zc0.value) return;               // 还没出现 z_c0，继续等
+            if (zc0.value === lastCheckedZc0) return;     // 该值已验证过，等扫码后值变化
+            const st = await postZhihuSessionToBackend(cookies);
+            if (st === null) return;                      // 后端不可达，下一轮重试
+            lastCheckedZc0 = zc0.value;
+            if (!st.is_logged_in) {
+                sendDebugLog("[知乎登录] 当前 z_c0 未通过后端验证，等待扫码...", "info");
+                return;
             }
+            if (checkInterval) clearInterval(checkInterval);
+            saveZhihuLoginSuccess(cookies);
+            setTimeout(() => {
+                if (zhihuLoginWindow && !zhihuLoginWindow.isDestroyed()) {
+                    zhihuLoginWindow.close();
+                }
+            }, 1200);
         } catch(e) {}
     };
 
@@ -1048,11 +1108,72 @@ function openZhihuLoginWindow() {
 // 新浪微博官方扫码登录窗口 (Weibo Official Login Window)
 // =========================================================================
 let weiboLoginWindow = null;
-function openWeiboLoginWindow() {
+// 拿当前 Cookie 串向微博官方接口验证是否真登录：
+// resolve true = 已登录 / false = 访客或已失效 / null = 网络异常（可重试）
+// 背景：微博对未登录访客也会下发一条"访客 SUB"（与登录 SUB 同名），
+// 只看 cookie 名字存在就把访客误判成已登录，是扫码窗口秒关的根源。
+const validateWeiboLogin = (cookieStr) => new Promise((resolve) => {
+    const req = https.request({
+        hostname: "m.weibo.cn",
+        path: "/api/config",
+        method: "GET",
+        headers: {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+            "Cookie": cookieStr,
+            "Referer": "https://m.weibo.cn/",
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json, text/plain, */*"
+        },
+        timeout: 8000
+    }, (res) => {
+        let data = "";
+        res.on("data", c => data += c);
+        res.on("end", () => {
+            try {
+                const login = !!(((JSON.parse(data) || {}).data) || {}).login;
+                resolve(login);
+            } catch (e) {
+                resolve(null);
+            }
+        });
+    });
+    req.on("error", () => resolve(null));
+    req.on("timeout", () => { req.destroy(); resolve(null); });
+    req.end();
+});
+
+// 经隐藏窗口访问 m.weibo.cn 触发微博跨域 SSO：
+// weibo.com 桌面端登录种下的 SUB 与 m.weibo.cn 移动端体系域隔离，直接拿去问
+// m.weibo.cn 永远 login=false（2026-10-14 实测）。让已登录会话访问一次 m.weibo.cn，
+// 微博会自动给 .weibo.cn 域种下移动端凭证，合并后再验证即可通过。
+// 返回 { verdict, jar }：jar 为合并后的完整凭证数组（.weibo.com + .weibo.cn）。
+const bridgeWeiboMweibo = async (wbCookies) => new Promise(async (resolve) => {
+    let hidden = null;
+    try {
+        const ses = session.fromPartition("persist:weibo-direct");
+        hidden = new BrowserWindow({ show: false, webPreferences: { partition: "persist:weibo-direct" } });
+        await hidden.loadURL("https://m.weibo.cn");
+        await new Promise(r => setTimeout(r, 6000));
+        try { hidden.close(); } catch (e) {}
+        const cnCookies = await ses.cookies.get({ domain: ".weibo.cn" });
+        const merged = [...wbCookies, ...cnCookies.filter(c => !wbCookies.find(x => x.name === c.name && x.domain === c.domain))];
+        const verdict = await validateWeiboLogin(merged.map(c => `${c.name}=${c.value}`).join("; "));
+        resolve({ verdict, jar: merged });
+    } catch (e) {
+        try { if (hidden) hidden.close(); } catch (e2) {}
+        resolve({ verdict: null, jar: wbCookies });
+    }
+});
+
+async function openWeiboLoginWindow() {
     if (weiboLoginWindow && !weiboLoginWindow.isDestroyed()) {
         weiboLoginWindow.focus();
         return;
     }
+    // 不再清空分区 Cookie（清空会把用户已登录的会话直接踢下线，2026-10-14 实测踩坑）。
+    // 幂等策略：分区里已有登录态 → 轮询验证直接通过 → 同步凭证关窗；
+    // 无登录态/访客凭证 → 验证拦截 → 窗口保持打开等扫码。
+    const loginSession = session.fromPartition("persist:weibo-direct");
     weiboLoginWindow = new BrowserWindow({
         width: 1020,
         height: 760,
@@ -1068,62 +1189,88 @@ function openWeiboLoginWindow() {
     weiboLoginWindow.loadURL("https://weibo.com/login.php");
 
     let checkInterval = null;
+    let lastCheckedSub = "";  // 已验证过的 SUB 值，不变时不重复验证
+    let lastBridgedSub = "";  // 已做过 m.weibo.cn 桥接的 SUB 值，每个新值只桥接一次
     const pollWeiboCookies = async () => {
         if (!weiboLoginWindow || weiboLoginWindow.isDestroyed()) {
             if (checkInterval) clearInterval(checkInterval);
             return;
         }
         try {
-            const cookies = await weiboLoginWindow.webContents.session.cookies.get({ domain: ".weibo.com" });
-            const sub = cookies.find(c => c.name === "SUB");
-            if (sub && sub.value) {
-                if (checkInterval) clearInterval(checkInterval);
-                const cookieDict = {};
-                cookies.forEach(c => { cookieDict[c.name] = c.value; });
-                const cookieStr = cookies.map(c => `${c.name}=${c.value}`).join("; ");
+            const wbCookies = await loginSession.cookies.get({ domain: ".weibo.com" });
+            const sub = wbCookies.find(c => c.name === "SUB");
+            if (!sub || !sub.value) return;              // 还没出现 SUB，继续等页面加载
+            if (sub.value === lastCheckedSub) return;    // 该 SUB 已验证过，等值变化再验
 
-                // 写入数据持久化文件
-                const projectRoot = localPythonManager ? localPythonManager.getProjectRoot() : process.cwd();
-                const sessionFileProject = path.join(projectRoot, "data", "weibo_session.json");
-                const sessionFileDataDir = path.join(DATA_DIR, "weibo_session.json");
-                try {
-                    fs.mkdirSync(path.dirname(sessionFileProject), { recursive: true });
-                    fs.writeFileSync(sessionFileProject, JSON.stringify(cookieDict, null, 2), "utf8");
-                } catch(e) {}
-                try {
-                    fs.writeFileSync(sessionFileDataDir, JSON.stringify(cookieDict, null, 2), "utf8");
-                } catch(e) {}
+            let jar = wbCookies;
+            let verdict = await validateWeiboLogin(jar.map(c => `${c.name}=${c.value}`).join("; "));
+            if (verdict === null) return;                // 网络异常，下一轮重试同一个 SUB
+            lastCheckedSub = sub.value;
 
-                // 同步至本地 Python 后端
-                const port = (localPythonManager && localPythonManager.port) || 8000;
-                try {
-                    const postData = JSON.stringify({ cookies: cookieDict, cookie: cookieStr });
-                    const req = http.request({
-                        hostname: "127.0.0.1",
-                        port: port,
-                        path: "/api/weibo/set-cookie",
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Content-Length": Buffer.byteLength(postData)
-                        }
-                    });
-                    req.on("error", () => {});
-                    req.write(postData);
-                    req.end();
-                } catch(e) {}
-
-                sendDebugLog("[微博登录] 微博官方登录成功，登录凭证 (SUB) 已同步至本地引擎！", "success");
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send("weibo:login-success", { success: true });
+            if (verdict !== true && sub.value !== lastBridgedSub) {
+                // 新 SUB 且直连验证未过 → 做一次跨域桥接（访客 SUB 桥接后依然 false，无害）
+                lastBridgedSub = sub.value;
+                sendDebugLog("[微博登录] 正在经 m.weibo.cn 同步移动端登录凭证...", "info");
+                const bridged = await bridgeWeiboMweibo(wbCookies);
+                if (bridged.verdict !== null) {
+                    verdict = bridged.verdict;
+                    jar = bridged.jar;
+                    if (verdict === true) lastCheckedSub = ""; // 成功路径不必再管 lastChecked
                 }
-
-                setTimeout(() => {
-                    if (weiboLoginWindow && !weiboLoginWindow.isDestroyed()) {
-                        weiboLoginWindow.close();
-                    }
-                }, 1200);
             }
+
+            if (verdict !== true) {
+                sendDebugLog("[微博登录] 当前为微博访客凭证（未登录），等待扫码...", "info");
+                return;
+            }
+
+            if (checkInterval) clearInterval(checkInterval);
+
+            const cookieDict = {};
+            jar.forEach(c => { cookieDict[c.name] = c.value; });
+            const cookieStr = jar.map(c => `${c.name}=${c.value}`).join("; ");
+
+            // 写入数据持久化文件
+            const projectRoot = localPythonManager ? localPythonManager.getProjectRoot() : process.cwd();
+            const sessionFileProject = path.join(projectRoot, "data", "weibo_session.json");
+            const sessionFileDataDir = path.join(DATA_DIR, "weibo_session.json");
+            try {
+                fs.mkdirSync(path.dirname(sessionFileProject), { recursive: true });
+                fs.writeFileSync(sessionFileProject, JSON.stringify(cookieDict, null, 2), "utf8");
+            } catch(e) {}
+            try {
+                fs.writeFileSync(sessionFileDataDir, JSON.stringify(cookieDict, null, 2), "utf8");
+            } catch(e) {}
+
+            // 同步至本地 Python 后端
+            const port = (localPythonManager && localPythonManager.port) || 8000;
+            try {
+                const postData = JSON.stringify({ cookies: cookieDict, cookie: cookieStr });
+                const req = http.request({
+                    hostname: "127.0.0.1",
+                    port: port,
+                    path: "/api/weibo/set-cookie",
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Content-Length": Buffer.byteLength(postData)
+                    }
+                });
+                req.on("error", () => {});
+                req.write(postData);
+                req.end();
+            } catch(e) {}
+
+            sendDebugLog("[微博登录] 微博官方登录成功，登录凭证 (SUB) 已同步至本地引擎！", "success");
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send("weibo:login-success", { success: true });
+            }
+
+            setTimeout(() => {
+                if (weiboLoginWindow && !weiboLoginWindow.isDestroyed()) {
+                    weiboLoginWindow.close();
+                }
+            }, 1200);
         } catch(e) {}
     };
 

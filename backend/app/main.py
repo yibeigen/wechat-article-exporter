@@ -19,9 +19,10 @@ if sys.platform == "win32":
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import httpx
+import traceback
 from fastapi import FastAPI, HTTPException, Query, Body, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse, Response
+from fastapi.responses import FileResponse, StreamingResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from typing import Optional, List, Dict, Any
@@ -72,6 +73,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """兜底所有未捕获异常（2026-10-11 用户报障修复）。
+
+    此前任何接口抛未捕获异常时，FastAPI 默认返回纯文本 "Internal Server Error"（500），
+    前端用 res.json() 解析报错体必然失败，弹窗只显示
+    "Unexpected token 'I', \"Internal S\"... is not valid JSON"，
+    把真实错误完全掩盖，用户截图无法排查。
+    现在统一返回 JSON（detail 含异常类型+摘要），前端可直接展示真实原因；
+    完整堆栈照常打印到 stdout（桌面端进 Electron 日志，服务器进 journalctl）。
+    注意：HTTPException(400/404/422 等) 不走这里，仍由框架正常返回。
+    """
+    traceback.print_exc()
+    # MemoryError 等异常 str() 为空，必须用 "类型名: 消息" 格式才可排查（项目既有教训）
+    reason = f"{type(exc).__name__}: {exc}".strip(": ")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"服务器内部错误（{reason}）。若反复出现，请尝试以管理员身份运行软件，或把本提示截图反馈给开发者。"},
+    )
 
 @app.on_event("startup")
 async def startup_event():
@@ -1549,8 +1571,8 @@ async def api_admin_update_contributor(contributor_id: str, data: dict = Body(..
 async def get_client_version():
     """获取最新客户端版本信息与下载链接"""
     return {
-        "version": "1.3.0",
-        "release_notes": "支持本地优先桌面客户端架构，全流程本地运算，彻底规避云端流量、内存瓶颈与网络风控。",
+        "version": "1.2.8",
+        "release_notes": "修复微博/知乎扫码登录：窗口一闪而过、扫码后界面仍显示未登录、重复点击把已登录账号踢下线；已登录时按钮改为静默同步凭证。",
         "standard_download_url": "/api/client/download",
         "win7_download_url": "/api/client/download/win7",
         "mandatory": False,
