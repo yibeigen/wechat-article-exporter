@@ -33,12 +33,13 @@ BlogDistiller 是一款多平台博主文章批量抓取、去广告清洗与多
 6. **🐛 断点续爬优化**：失败任务保留快照可从断点重试（已成功篇目命中缓存不重复下载），已完成/取消任务自动清理快照；
 7. **🐛 修复扫码登录成功弹窗期间界面仍显示"未登录"的误判**（先刷新状态条再弹提示）。
 
-> 💡 Windows 7 / 8.1 兼容版本次未重新构建，仍为历史 release 的版本，如需请前往历史 release 下载。
+> 💡 **Windows 7 / 8.1 用户**：下载附件 `BlogDistiller-Win7-Setup-x64.exe`（基于 Electron 22 + Python 3.8.10 稳定技术链构建）。
 
 ---
 
 ### 📥 下载与使用指引（见下方 Assets 附件）：
 - **Windows 10 / 11 用户**：下载附件 `BlogDistiller-Setup-1.2.9.exe` 双击安装。
+- **Windows 7 / 8.1 用户**：下载附件 `BlogDistiller-Win7-Setup-x64.exe` 双击安装。
 
 > 💡 首次启动会显示初始化进度页（下载/部署本地内核，约 3~10 分钟，视网速而定），请保持网络畅通耐心等待；完成后自动进入工作台，以后启动无需再等。已安装旧版的用户直接覆盖安装即可。
 """
@@ -46,6 +47,7 @@ BlogDistiller 是一款多平台博主文章批量抓取、去广告清洗与多
 # 附件清单：(本地文件路径, GitHub 附件名)。附件名必须全英文，否则会被 GitHub 改写
 ASSETS = [
     (DIST_DIR / "BlogDistiller 文章导出助手 Setup 1.2.9.exe", "BlogDistiller-Setup-1.2.9.exe"),
+    (DIST_DIR / "win7/BlogDistiller 文章导出助手 Setup 1.2.9.exe", "BlogDistiller-Win7-Setup-x64.exe"),
 ]
 
 
