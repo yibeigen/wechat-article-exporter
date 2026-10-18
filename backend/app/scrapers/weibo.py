@@ -1,4 +1,6 @@
 import re
+import asyncio
+import random
 import datetime
 from typing import List, Dict, Any, Optional, Callable, Tuple
 from app.scrapers.base import BaseScraper
@@ -49,6 +51,8 @@ class WeiboScraper(BaseScraper):
                     author_info["name"] = user_info.get("screen_name", author_info["name"])
                     author_info["avatar"] = user_info.get("avatar_hd", "")
                     author_info["bio"] = user_info.get("description", "")
+                    # 主页标称微博数：前端检索清单据此显示「标称 X / 实得 Y」缺口
+                    self.declared_count = user_info.get("statuses_count") or None
                     
                     tabs = data.get("data", {}).get("tabsInfo", {}).get("tabs", [])
                     for tab in tabs:
@@ -66,6 +70,48 @@ class WeiboScraper(BaseScraper):
         _, author_info = await self._get_container_id(uid)
         return author_info
 
+    async def _fetch_container_page(self, api_url: str, page: int) -> Optional[Dict[str, Any]]:
+        """翻一页微博时间线，返回解析后的 JSON；被风控连续拦死时返回 None。
+
+        微博深翻页会随机打回 HTTP 432 或一段风控 HTML 而不是 JSON。这不代表
+        时间线到底，旧代码却把它当成「翻完了」静默收口，导致 6000+ 条的博主
+        只返回几十页。这里退避重试，重试仍失败才交给调用方判定。
+        """
+        for attempt in range(4):
+            try:
+                resp = await self.client.get(api_url)
+                if resp.status_code == 200:
+                    try:
+                        data = resp.json()
+                    except Exception:
+                        data = None
+                    if isinstance(data, dict) and "ok" in data:
+                        return data
+            except Exception:
+                pass
+            if attempt < 3:
+                await asyncio.sleep(8 * (attempt + 1) + random.uniform(0, 4))
+        return None
+
+    def _report_count_gap(self, actual: int, stop_reason: str, reached_bottom: bool):
+        """把「主页标称 N 条 / 实收 M 条」的缺口和成因摊开说，避免用户以为静默漏抓。"""
+        if not self.declared_count or actual >= self.declared_count:
+            return
+        diff = self.declared_count - actual
+        if reached_bottom:
+            self.explanation = (
+                f"博主主页标称 <b>{self.declared_count}</b> 条微博，实际检索到 <b>{actual}</b> 条（{stop_reason}）。<br>"
+                f"差额 <b>{diff}</b> 条通常为博主多年间自行删除、设为仅自己可见，或微博对公开时间线的"
+                f"展示深度限制所致（公网已无对应访问页面），并非系统漏抓。"
+            )
+        else:
+            self.explanation = (
+                f"博主主页标称 <b>{self.declared_count}</b> 条微博，本次检索到 <b>{actual}</b> 条，"
+                f"差额 <b>{diff}</b> 条本次未翻完。<br>"
+                f"中断原因：{stop_reason}。这通常是微博对当前账号/IP 的翻页风控，"
+                f"稍后重试或重新同步微博 Cookie 可继续向后翻取更早的微博。"
+            )
+
     async def get_article_list(self, progress_callback: Optional[Callable[[str, int, int], None]] = None) -> List[Dict[str, str]]:
         if "weibo.com/detail/" in self.target or "m.weibo.cn/status/" in self.target or "/status/" in self.target or re.search(r"weibo\.com/\d+/[a-zA-Z0-9]+", self.target):
             m_single = re.search(r"weibo\.com/(?:detail/|\d+/)?([a-zA-Z0-9]+)", self.target)
@@ -75,32 +121,46 @@ class WeiboScraper(BaseScraper):
         uid = self._extract_uid()
         container_id, _ = await self._get_container_id(uid)
         articles = []
+        seen_ids = set()
         page = 1
-        
-        while True:
+        # m 接口每页仅 10~20 条，大博主需数百页；真正的收口交给下面
+        # 「无更多卡片 / 整页重复」两条判定，此上限只用于兜底防死循环
+        max_page = 700
+        stop_reason = f"已达最大翻页数上限 {max_page} 页"
+        reached_bottom = False
+
+        while page <= max_page:
             api_url = f"https://m.weibo.cn/api/container/getIndex?type=uid&value={uid}&containerid={container_id}&page={page}"
             try:
-                resp = await self.client.get(api_url)
-                if resp.status_code == 432:
-                    raise RuntimeError(f"微博官方对博主【微博用户_{uid}】开启了登录访问保护 (HTTP 432)。请在浏览器登录 weibo.com 并使用插件同步登录凭证！")
-                if resp.status_code != 200:
+                data = await self._fetch_container_page(api_url, page)
+                if data is None:
+                    if page == 1:
+                        raise RuntimeError("微博第 1 页即被风控拦下，请重新同步微博 Cookie 或稍后再试。")
+                    stop_reason = f"第 {page} 页起被微博风控连续拦截"
                     break
-                data = resp.json()
                 if data.get("ok") == -100:
                     raise RuntimeError(f"微博提示需要登录才能访问博主主页，请使用插件同步微博 Cookie 凭证！")
                 if data.get("ok") != 1:
+                    stop_reason = f"第 {page} 页接口拒答 (ok={data.get('ok')})"
                     break
-                    
+
                 cards = data.get("data", {}).get("cards", [])
                 if not cards:
+                    stop_reason = f"第 {page} 页已无更多卡片，时间线到底"
+                    reached_bottom = True
                     break
-                    
+
+                new_on_page = 0
                 for card in cards:
                     mblog = card.get("mblog")
                     if not mblog:
                         continue
-                        
+
                     mblog_id = str(mblog.get("id", ""))
+                    if mblog_id in seen_ids:
+                        continue
+                    seen_ids.add(mblog_id)
+                    new_on_page += 1
                     bid = mblog.get("bid", mblog_id)
                     raw_text = mblog.get("raw_text") or mblog.get("text", "")
                     created_at = mblog.get("created_at", "")
@@ -170,15 +230,24 @@ class WeiboScraper(BaseScraper):
                     if self.max_articles and len(articles) >= self.max_articles:
                         return articles
                         
-                if progress_callback:
-                    progress_callback(f"已发现微博内容 {len(articles)} 条 (第 {page} 页)...", len(articles), 0)
-                    
-                page += 1
-                if page > 50:
+                if new_on_page == 0:
+                    stop_reason = f"第 {page} 页整页均为重复卡片，判定时间线到底"
+                    reached_bottom = True
                     break
-            except Exception:
+
+                if progress_callback:
+                    progress_callback(f"已发现微博内容 {len(articles)} 条 (第 {page} 页)...", len(articles), self.declared_count or 0)
+
+                page += 1
+                if page <= max_page:
+                    await asyncio.sleep(0.6 + random.uniform(0, 0.9))
+            except RuntimeError:
+                raise
+            except Exception as e:
+                stop_reason = f"第 {page} 页请求异常 ({type(e).__name__})"
                 break
-                
+
+        self._report_count_gap(len(articles), stop_reason, reached_bottom)
         return articles
 
     async def scrape_article_detail(self, article_meta: Dict[str, str]) -> ArticleItem:

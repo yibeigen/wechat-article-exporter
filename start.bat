@@ -73,7 +73,7 @@ echo [提示] 正在启动本地服务...
 echo [地址] 本地控制台: http://127.0.0.1:8000
 echo.
 echo 正在拉起默认浏览器...
-start "" "http://127.0.0.1:8000"
+start "" "http://127.0.0.1:8000/app"
 
 .\.venv\Scripts\python.exe run.py
 pause

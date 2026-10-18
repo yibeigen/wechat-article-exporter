@@ -1607,6 +1607,17 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     </div>
                 </div>
 
+                <!-- 知乎专享：抓取内容类型勾选（想法/回答多达数千条时，取消勾选可大幅提速） -->
+                <div id="zhihuTypeBox" style="display: none; padding: 12px 14px; background: var(--bg-subtle); border: 1px solid var(--border-main); border-radius: 8px; margin-bottom: 8px;">
+                    <div style="font-size: 0.84rem; font-weight: 700; color: var(--text-primary); margin-bottom: 8px;">抓取内容类型（知乎专享）：</div>
+                    <div style="display: flex; gap: 18px; flex-wrap: wrap; font-size: 0.84rem; color: var(--text-primary);">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="checkbox" id="zhihuTypeArticles" checked> 文章</label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="checkbox" id="zhihuTypeAnswers" checked> 回答</label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="checkbox" id="zhihuTypePins" checked> 想法</label>
+                    </div>
+                    <div style="margin-top: 6px; font-size: 0.76rem; color: var(--text-muted);">检索清单只包含勾选的类型。回答/想法多达数千条时，只勾「文章」可跳过漫长的滚动加载。</div>
+                </div>
+
                 <!-- 动态展开的范围输入控制面板 -->
                 <div id="rangeInputsContainer" style="display: none; padding: 12px 14px; background: var(--bg-subtle); border: 1px solid var(--border-main); border-radius: 8px; margin-top: 6px;">
                     <div id="recentRangeBox" style="display: none; align-items: center; gap: 10px; font-size: 0.84rem; flex-wrap: wrap;">
@@ -1826,7 +1837,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     </div>
                 </div>
                 <div class="modal-body" style="padding: 24px;">
-                    <div style="font-size: 0.9rem; color: var(--text-primary); line-height: 1.7;">
+                    <div id="resumeDescText" style="font-size: 0.9rem; color: var(--text-primary); line-height: 1.7;">
                         上次在下载 <b id="resumeTargetText">...</b> 的内容时，任务因关闭页面、断网或重启等原因中途停止了。
                     </div>
                     <div id="resumeProgressText" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 6px;"></div>
@@ -2543,7 +2554,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
                     <svg class="icon" viewBox="0 0 24 24" style="color: #6366f1;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                     <span>BlogDistiller 版本更新日志</span>
-                    <span style="font-size: 0.68rem; padding: 2px 8px; border-radius: 9999px; background: rgba(0, 102, 255, 0.12); color: #0066ff; font-weight: 800; font-family: monospace;">v1.2.8</span>
+                    <span style="font-size: 0.68rem; padding: 2px 8px; border-radius: 9999px; background: rgba(0, 102, 255, 0.12); color: #0066ff; font-weight: 800; font-family: monospace;">v1.2.9</span>
                 </div>
                 <button class="modal-close-btn" onclick="closeChangelogModal()">&times;</button>
             </div>
@@ -2555,10 +2566,27 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     </div>
 
                     <div style="display: flex; flex-direction: column; gap: 14px;">
-                        <!-- v1.2.8 最新版本：蓝色高亮卡 -->
+                        <!-- v1.2.9 最新版本：蓝色高亮卡 -->
                         <div style="background: var(--bg-surface); border: 1px solid rgba(0, 102, 255, 0.35); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow-sm);">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <span style="background: #0066ff; color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; font-family: monospace;">v1.2.8</span>
+                                <span style="background: #0066ff; color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; font-family: monospace;">v1.2.9</span>
+                                <span style="font-size: 0.74rem; color: var(--text-muted);">2026-10-18</span>
+                            </div>
+                            <ul style="margin: 0; padding-left: 18px; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.7;">
+                                <li>知乎检索支持按内容类型勾选（文章/回答/想法独立勾选，未勾选整体跳过，大博主大幅提速）；</li>
+                                <li>修复知乎大博主滚动采集假死：进度条实时更新（旧版滚动期间恒为 0）、万级条目计数不再卡顿、会话刷新期不再崩溃；</li>
+                                <li>检索清单新增排序：按发布时间（最新/最旧）与点赞数排序（知乎/掘金），大数字万级格式化；</li>
+                                <li>微博检索显示「标称 X / 实得 Y」缺口提示，抓取是否完整一目了然；</li>
+                                <li>缓存容错：磁盘只读/权限不足时自动降级无缓存模式，软件照常可用，不再出现"必须管理员权限才能打开"；</li>
+                                <li>断点续爬优化：失败任务保留快照可从断点重试，已完成/取消任务自动清理快照；</li>
+                                <li>修复扫码登录成功弹窗期间界面仍显示"未登录"的误判（先刷新状态再弹提示）。</li>
+                            </ul>
+                        </div>
+
+                        <!-- v1.2.8 -->
+                        <div style="background: var(--bg-subtle); border: 1px solid var(--border-main); border-radius: 10px; padding: 14px 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="background: var(--text-muted); color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; font-family: monospace;">v1.2.8</span>
                                 <span style="font-size: 0.74rem; color: var(--text-muted);">2026-10-06</span>
                             </div>
                             <ul style="margin: 0; padding-left: 18px; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.7;">
@@ -2789,6 +2817,11 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                         <span id="linksCountBadge" style="background: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); padding: 3px 10px; border-radius: 20px; font-weight: 700; font-size: 0.78rem;">已选 0 / 0 篇</span>
                     </div>
                     <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <select id="linksSortSelect" onchange="switchLinksSort(this.value)" style="height: 28px; border: 1px solid var(--border-main); border-radius: 6px; padding: 0 8px; font-size: 0.75rem; background: var(--bg-main); color: var(--text-primary);" title="排序同时决定导出顺序：下载时按当前列表展示顺序导出">
+                            <option value="newest">⬇ 从新到旧</option>
+                            <option value="oldest">⬆ 从旧到新</option>
+                            <option value="likes" style="display: none;">👍 按赞数（从高到低）</option>
+                        </select>
                         <button type="button" class="nav-btn" onclick="exportOnlyUrls()" style="font-size: 0.75rem; height: 28px; padding: 0 10px; display: inline-flex; align-items: center; gap: 4px;" title="仅导出已选文章的原文链接URL（纯文本TXT）">
                             🔗 导出链接
                         </button>
@@ -2896,6 +2929,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
         let currentRangeMode = 'all';
         let currentLinksFilter = 'all'; // 知乎弹窗中的文章/回答筛选
         let currentColumnFilter = 'all'; // 知乎弹窗中的专栏下拉筛选（专栏只是文章的归类标签）
+        let currentLinksSort = 'newest'; // 清单弹窗排序：newest=从新到旧(默认) / oldest=从旧到新 / likes=按赞数从高到低
 
         const platformIcons = {
             'juejin': `<svg class="icon icon-lg" viewBox="0 0 24 24"><polygon points="12 2 2 12 12 22 22 12 12 2"></polygon><polyline points="7 12 12 17 17 12"></polyline><polyline points="9 8 12 11 15 8"></polyline></svg>`,
@@ -3130,8 +3164,28 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 }
             }
 
+            const zhihuTypeBox = document.getElementById('zhihuTypeBox');
+            if (zhihuTypeBox) zhihuTypeBox.style.display = (currentPlatform === 'zhihu') ? 'block' : 'none';
+
             updateZhihuAuthUI();
             updateWeiboAuthUI();
+        }
+
+        // 读取知乎内容类型勾选；一个都没勾时返回 undefined（后端回退全量并提示）
+        function getZhihuContentTypes() {
+            if (currentPlatform !== 'zhihu') return undefined;
+            const types = [];
+            if (document.getElementById('zhihuTypeArticles')?.checked) types.push('articles');
+            if (document.getElementById('zhihuTypeAnswers')?.checked) types.push('answers');
+            if (document.getElementById('zhihuTypePins')?.checked) types.push('pins');
+            return types.length ? types : undefined;
+        }
+
+        function validateZhihuTypeSelection() {
+            if (currentPlatform !== 'zhihu') return true;
+            if (getZhihuContentTypes()) return true;
+            showToast('请至少勾选一种要抓取的内容类型（文章 / 回答 / 想法）');
+            return false;
         }
 
         function updateZhihuAuthUI() {
@@ -3281,10 +3335,11 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 }
 
                 // 纯浏览器环境：调用后台 Playwright 弹窗接口
+                // 先刷新状态再 alert：alert 会同步冻结 JS，先弹会让状态条停留在"未登录"造成误判
                 const res = await fetch('/api/zhihu/qr-login', { method: 'POST' });
                 const data = await res.json();
-                alert(data.message || (data.success ? '知乎扫码登录成功！' : '登录未完成'));
                 await checkZhihuAuth();
+                alert(data.message || (data.success ? '知乎扫码登录成功！' : '登录未完成'));
             } catch (e) {
                 alert('拉起知乎扫码登录异常: ' + e.message + '\n\n提示：您也可以点击【手动 Cookie】直接粘贴凭证。');
                 await checkZhihuAuth();
@@ -3456,10 +3511,11 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 }
 
                 // 纯浏览器环境：调用后台 Playwright 弹窗接口
+                // 先刷新状态再 alert：alert 会同步冻结 JS，先弹会让状态条停留在"未登录"造成误判
                 const res = await fetch('/api/weibo/qr-login', { method: 'POST' });
                 const data = await res.json();
-                alert(data.message || (data.success ? '微博扫码登录成功！' : '登录未完成'));
                 await checkWeiboAuth();
+                alert(data.message || (data.success ? '微博扫码登录成功！' : '登录未完成'));
             } catch (e) {
                 alert('拉起微博扫码登录异常: ' + e.message + '\n\n提示：您也可以点击【手动 Cookie】直接粘贴凭证。');
                 await checkWeiboAuth();
@@ -3698,6 +3754,11 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 return;
             }
 
+            // 知乎：内容类型至少勾选一种，否则检索清单会为空
+            if (!validateZhihuTypeSelection()) {
+                return;
+            }
+
             if (document.getElementById('targetInput')) {
                 document.getElementById('targetInput').value = target;
             }
@@ -3746,6 +3807,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     max_articles: maxArticlesParam,
                     cookie: document.getElementById('wechatCookieInput')?.value.trim() || undefined,
                     token: document.getElementById('wechatTokenInput')?.value.trim() || undefined,
+                    content_types: getZhihuContentTypes(),
                     async_mode: true
                 };
 
@@ -3780,6 +3842,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     if (data.job_id) {
                         const jobId = data.job_id;
                         let lastKnownCount = 0;
+                        let pollFailCount = 0;
                         while (!extractAbortController.signal.aborted) {
                             await new Promise(r => setTimeout(r, 400));
                             if (extractAbortController.signal.aborted) break;
@@ -3791,8 +3854,19 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                                 });
                                 if (!progRes.ok) continue;
                                 progData = await progRes.json();
+                                pollFailCount = 0;
                             } catch (pErr) {
                                 if (extractAbortController.signal.aborted) break;
+                                // 后端进程异常退出时轮询会连续失败：明确告知用户
+                                // 服务已中断（而不是把弹窗冻结在旧进度上，让人误以为还在跑）
+                                pollFailCount++;
+                                if (pollFailCount >= 5) {
+                                    const badge = document.getElementById('streamStatusBadge');
+                                    if (badge) badge.innerText = '⚠️ 后端服务已中断（进程异常退出），请重启程序后重新检索';
+                                    const pg = document.getElementById('streamProgressPercent');
+                                    if (pg) pg.innerText = pg.innerText;
+                                    break;
+                                }
                                 continue;
                             }
 
@@ -4071,12 +4145,24 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
             const modal = document.getElementById('linksModal');
             // 保存当前调用上下文，便于筛选切换时快速恢复
             window._lastRenderedLinks = { author, articles, channel, meta };
-            // 新弹窗打开时重置筛选为全部（仅非筛选切换场景）
+            // 新弹窗打开时重置筛选与排序为默认（仅非筛选切换场景）
             if (!checkedUrls) {
                 currentLinksFilter = 'all';
+                currentLinksSort = 'newest';
                 document.querySelectorAll('.link-type-filter').forEach(b => {
                     b.classList.toggle('active', b.dataset.filter === 'all');
                 });
+            }
+            const sortSel = document.getElementById('linksSortSelect');
+            // 「按赞数」选项在知乎/掘金平台下始终显示（清单数据未带赞数时选择它等于保持原序），
+            // 其他平台数据无赞数字段，隐藏避免选了没效果
+            const hasLikesData = articles.some(a => typeof a.like_count === 'number' && a.like_count !== null);
+            const likesCapable = hasLikesData || currentPlatform === 'zhihu' || currentPlatform === 'juejin';
+            if (sortSel) {
+                const likesOpt = sortSel.querySelector('option[value="likes"]');
+                if (likesOpt) likesOpt.style.display = likesCapable ? '' : 'none';
+                if (currentLinksSort === 'likes' && !likesCapable) currentLinksSort = 'newest';
+                sortSel.value = currentLinksSort;
             }
             const isOfficial = channel === 'official' || channel === 'extension';
             const declaredCount = (meta && meta.declared_count != null) ? Number(meta.declared_count) : null;
@@ -4141,9 +4227,10 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                         noticeTitle.innerText = `为什么源网页标称 ${declaredCount} 篇，实际检索到 ${actualCount} 篇？`;
                     }
                     if (noticeTag) {
+                        const truncated = meta.explanation && meta.explanation.includes('未翻完');
                         noticeTag.style.background = 'rgba(245, 158, 11, 0.15)';
                         noticeTag.style.color = '#d97706';
-                        noticeTag.innerText = `全部分页深度穿透完成 · 无遗漏`;
+                        noticeTag.innerText = truncated ? `本次未翻完 · 可稍后重试` : `全部分页深度穿透完成 · 无遗漏`;
                     }
                     if (noticeContent) {
                         const targetDesc = categoryName ? `「${escapeHtml(categoryName)}」` : (author ? `「${escapeHtml(author)}」` : '该作者主页');
@@ -4295,6 +4382,11 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 filteredArticles = filteredArticles.filter(a => (a.column_title || '').split('、').map(s => s.trim()).includes(currentColumnFilter));
             }
 
+            // 排序（展示顺序即导出顺序：下载时按勾选行的 DOM 顺序回传 articles_meta）
+            filteredArticles = currentLinksSort === 'likes'
+                ? filteredArticles.slice().sort((x, y) => (y.like_count || 0) - (x.like_count || 0))
+                : sortArticlesByTime(filteredArticles, currentLinksSort);
+
             if (hasContentType && currentLinksFilter === 'all' && currentColumnFilter === 'all') {
                 // 全部模式下按类型分组：文章（全量，含被专栏收录的）+ 问题回答 + 想法
                 const groups = { article: [], answer: [], pin: [], other: [] };
@@ -4351,7 +4443,17 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
             if (a.column_title) {
                 typeTag += '<span style="font-size:0.7rem;background:#fdf2f8;color:#be185d;padding:1px 5px;border-radius:3px;margin-right:6px;">收录于 ' + a.column_title + '</span>';
             }
-            const isChecked = checkedUrls && checkedUrls.has(a.url) ? true : shouldCheck(originalIdx);
+            // 互动数据徽标（知乎回答/文章、掘金文章在列表阶段已采集；无数据不显示）
+            const fmtCount = (n) => n >= 10000 ? (Math.round(n / 1000) / 10) + '万' : String(n);
+            if (typeof a.like_count === 'number' && a.like_count !== null) {
+                typeTag += '<span style="font-size:0.7rem;background:#fff7e6;color:#d46b08;padding:1px 5px;border-radius:3px;margin-right:6px;">赞 ' + fmtCount(a.like_count) + '</span>';
+            }
+            if (typeof a.read_num === 'number' && a.read_num > 0) {
+                typeTag += '<span style="font-size:0.7rem;background:#f4f4f5;color:#57606a;padding:1px 5px;border-radius:3px;margin-right:6px;">阅 ' + fmtCount(a.read_num) + '</span>';
+            }
+            // 传入 checkedUrls（排序/筛选切换场景）时完全以它为准恢复勾选，
+            // 否则用户手动取消的勾选会被 shouldCheck 预选逻辑重新勾上
+            const isChecked = checkedUrls ? checkedUrls.has(a.url) : shouldCheck(originalIdx);
             return `
                 <tr style="border-bottom: 1px solid var(--border-subtle);">
                     <td style="padding: 8px 10px; text-align: center;">
@@ -4395,6 +4497,45 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
         // 切换知乎弹窗里的专栏下拉筛选（专栏只是文章的归类标签，不影响全量勾选状态）
         function switchColumnFilter(val) {
             currentColumnFilter = val;
+            // 记录当前已勾选的 URL，重新渲染后恢复，避免丢失用户手动选择
+            const checkedUrls = new Set(
+                Array.from(document.querySelectorAll('.link-item-checkbox:checked')).map(b => b.getAttribute('data-url'))
+            );
+            if (window._lastRenderedLinks) {
+                renderLinksModal(
+                    window._lastRenderedLinks.author,
+                    window._lastRenderedLinks.articles,
+                    window._lastRenderedLinks.channel,
+                    window._lastRenderedLinks.meta,
+                    checkedUrls
+                );
+            }
+        }
+
+        // 按发布时间排序（返回新数组，不动原列表）。
+        // 各平台时间格式不一（"2026-10-11 22:31"、时间戳、"2026年10月11日"等），
+        // 解析不出来的条目稳定排在末尾并保持原有相对顺序
+        function parseArticleTimeVal(a) {
+            const raw = String(a.create_time || a.publish_time || '').trim();
+            if (!raw) return NaN;
+            if (/^\d{10}$/.test(raw)) return parseInt(raw, 10) * 1000;
+            if (/^\d{13}$/.test(raw)) return parseInt(raw, 10);
+            const t = Date.parse(raw.replace(/年|月/g, '-').replace(/日/g, ' ').replace(/时|分/g, ':').replace(/秒/g, ''));
+            return isNaN(t) ? NaN : t;
+        }
+        function sortArticlesByTime(list, mode) {
+            const dir = (mode === 'oldest') ? 1 : -1;
+            return list.slice().sort((x, y) => {
+                const tx = parseArticleTimeVal(x), ty = parseArticleTimeVal(y);
+                if (isNaN(tx) && isNaN(ty)) return 0;
+                if (isNaN(tx)) return 1;
+                if (isNaN(ty)) return -1;
+                return dir * (tx - ty);
+            });
+        }
+        // 切换清单弹窗的排序（默认顺序 / 从新到旧 / 从旧到新 / 按赞数）
+        function switchLinksSort(val) {
+            currentLinksSort = val;
             // 记录当前已勾选的 URL，重新渲染后恢复，避免丢失用户手动选择
             const checkedUrls = new Set(
                 Array.from(document.querySelectorAll('.link-item-checkbox:checked')).map(b => b.getAttribute('data-url'))
@@ -4991,6 +5132,11 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 return;
             }
 
+            // 知乎：内容类型至少勾选一种
+            if (!validateZhihuTypeSelection()) {
+                return;
+            }
+
             const formats = getSelectedFormats();
             if (formats.length === 0) {
                 alert('请至少选择一种导出格式！');
@@ -5036,6 +5182,8 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 author_name_override: authorOverride || null,
                 wechat_token: wechatToken || null,
                 wechat_cookie: wechatCookie || null,
+                // 知乎专享：直接开抓（未经弹窗勾选）时也要带上内容类型，避免列表阶段全量滚动
+                zhihu_content_types: getZhihuContentTypes() || null,
                 // 两阶段导出：若从弹窗勾选了文章，把完整元数据回传后端，避免 URL 列表丢失分类信息
                 articles_meta: selectedArticles,
                 client_id: getOrCreateClientId()
@@ -5591,6 +5739,10 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     if (resultSummaryText) {
                         const succCount = (task.success_articles || []).length;
                         resultSummaryText.innerText = `本次共成功处理 ${succCount} 篇文章，但在导出阶段失败：${task.error_message || '未知错误'}。`;
+                    }
+                    // 失败后主动检测断点快照：已抓到部分文章时弹「从断点重试」，不用用户刷新页面
+                    if ((task.current_article_index || 0) > 0) {
+                        setTimeout(checkIncompleteTasks, 800);
                     }
                 }
             };
@@ -6596,6 +6748,13 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 // 通常不会同时中断多个任务，只对最新一条弹窗，其余走后续刷新自然处理
                 const t = tasks[0];
                 resumePendingTask = t;
+                // 失败与中断的文案区分：失败强调已成功篇目已入缓存、重试不重复下载
+                const descEl = document.getElementById('resumeDescText');
+                if (descEl) {
+                    descEl.innerHTML = (t.phase === 'failed')
+                        ? '上次在下载 <b id="resumeTargetText">...</b> 的内容时任务执行失败了，<b>已成功抓取的篇目已存入本地缓存</b>。'
+                        : '上次在下载 <b id="resumeTargetText">...</b> 的内容时，任务因关闭页面、断网或重启等原因中途停止了。';
+                }
                 const targetEl = document.getElementById('resumeTargetText');
                 if (targetEl) {
                     targetEl.textContent = (t.author || '目标博主')

@@ -94,3 +94,10 @@ desktop.ini
 # ----------------------------------------------
 dist_local/
 wcplusPro_windows.zip
+dist_*/
+releases/
+.tmp_*/
+_tmp_*/
+tests/*.log
+album_debug*.html
+trash*/

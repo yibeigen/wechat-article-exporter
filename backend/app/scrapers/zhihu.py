@@ -115,11 +115,15 @@ def _parse_count(s: str) -> int:
     except ValueError:
         return 0
 
-def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Optional[Dict[str, str]], max_articles: Optional[int], target_fallback_url: str, is_direct_article: bool, progress_callback: Optional[Callable[[str, int, int], None]] = None) -> tuple:
+def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Optional[Dict[str, str]], max_articles: Optional[int], target_fallback_url: str, is_direct_article: bool, progress_callback: Optional[Callable[[str, int, int], None]] = None, content_types: Optional[set] = None) -> tuple:
     """在工作线程中同步抓取博主全部回答与专栏文章
-    返回 (文章列表, 警告列表)：警告列表非空说明本次列表可能不完整（如被登录墙截断）"""
+    返回 (文章列表, 警告列表)：警告列表非空说明本次列表可能不完整（如被登录墙截断）
+    content_types：勾选的抓取类型子集 (articles/answers/pins)，None/空表示全量"""
     import time
     from playwright.sync_api import sync_playwright
+
+    valid_types = {"articles", "answers", "pins"}
+    selected_types = {t for t in (content_types or []) if t in valid_types} or valid_types
 
     all_articles: List[Dict[str, str]] = []
     seen_urls = set()
@@ -150,15 +154,29 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
             page = context.new_page()
             page.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
 
-            # 先加载博主主页，激活浏览器会话与安全签名
+            # 先加载博主主页，激活浏览器会话与安全签名。
+            # 注意：知乎首页加载完还会触发一次客户端整页刷新（会话激活），
+            # 盲睡 1.5 秒常正好撞上刷新中途——此时 document.body 为 null、
+            # 任何 evaluate 都会以 "context destroyed" 炸掉整个抓取，
+            # 因此这里等 body 真正稳定存在再继续（超时兜底 10 秒）。
             page.goto(f"https://www.zhihu.com/people/{url_token}", wait_until="domcontentloaded", timeout=25000)
-            time.sleep(1.5)
+            try:
+                page.wait_for_function(
+                    "() => document.body && document.body.innerText.length > 20",
+                    timeout=10000
+                )
+                time.sleep(1.0)
+            except Exception:
+                time.sleep(1.5)
 
             # 读取博主主页声明的总篇数（如"回答 295 / 文章 44"），抓取完成后用于
             # 比对列表是否加载完整。注意：新版知乎把数字直接放在主页 Tab 栏上
             # （回答 295 / 文章 44），旧版的右侧数字板（NumberBoard）现在只剩
-            # "关注了/关注者"，所以两种位置都要读、互相兜底
-            declared = page.evaluate('''() => {
+            # "关注了/关注者"，所以两种位置都要读、互相兜底。
+            # 它只服务于完整性提示，绝不能因为读取失败而报废整个抓取。
+            declared: Dict[str, str] = {}
+            try:
+                declared = page.evaluate('''() => {
                 const out = {};
                 document.querySelectorAll('a[href*="/answers"], a[href*="/posts"], a[href*="/pins"]').forEach(a => {
                     const href = a.href || '';
@@ -182,6 +200,8 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                 });
                 return out;
             }''') or {}
+            except Exception as _declared_e:
+                print(f"[知乎] 读取主页声明篇数失败（不影响抓取）: {_declared_e}")
 
             # ==========================================================
             # 步骤 1: 全量抓取博主「文章」Tab（模拟真人浏览，滚动加载）
@@ -222,7 +242,16 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                             if (lines.length) pinTitle = lines[0];
                         }
                     }
-                    out[href] = { url: href, title: type === 'pin' ? pinTitle : t, type: type, time: timeEl ? (timeEl.innerText || '').trim() : '' };
+                    // 赞同数：从卡片操作栏的 VoteButton 解析（"赞同 128" / "赞同 1.2 万"）。
+                    // 按钮存在但没有数字 = 0 赞；按钮不存在（该版式无互动栏）= null，
+                    // 排序时 null 与 0 一起沉底且不影响原顺序
+                    const voteEl = card.querySelector('.VoteButton--T, .VoteButton');
+                    let votes = null;
+                    if (voteEl) {
+                        const vm = (voteEl.innerText || '').replace(/,/g, '').match(/(\\d+(?:\\.\\d+)?)\\s*(万)?/);
+                        votes = vm ? Math.round(parseFloat(vm[1]) * (vm[2] === '万' ? 10000 : 1)) : 0;
+                    }
+                    out[href] = { url: href, title: type === 'pin' ? pinTitle : t, type: type, time: timeEl ? (timeEl.innerText || '').trim() : '', votes: votes };
                 });
                 return Object.values(out);
             }'''
@@ -236,15 +265,32 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                 """统一文章 URL 主机名：www.zhihu.com/p/x 与 zhuanlan.zhihu.com/p/x 视为同一篇"""
                 return re.sub(r"^https?://(?:www\.)?zhihu\.com/p/", "https://zhuanlan.zhihu.com/p/", u or "")
 
+            # 轻量计数 JS：_wait_load 每 0.5 秒轮询一次条目数，绝不能跑全量
+            # extract_js——它会对页面所有卡片逐个读 innerText（强制排版），
+            # 六千张卡片时单次轮询就要数十秒，滚动采集整体二次方劣化直至假死。
+            # 这里只取选择器命中数（不触碰 innerText），仅供稳定性判断
+            count_js_by_type = {
+                "article": "document.querySelectorAll('a[href*=\"/p/\"]').length",
+                "answer": "document.querySelectorAll('a[href*=\"/answer/\"]').length",
+                "pin": "document.querySelectorAll('a[href*=\"/pin/\"]').length"
+            }
+
             def _count_items(expected_type):
-                """统计当前页面 DOM 中指定类型（文章/回答）的条目数量"""
-                raw = page.evaluate(extract_js) or []
-                return sum(1 for r in raw if r.get("type") == expected_type)
+                """统计当前页面 DOM 中指定类型（文章/回答/想法）的条目数量"""
+                try:
+                    return page.evaluate(count_js_by_type.get(expected_type, "0")) or 0
+                except Exception:
+                    return 0
 
             def _detect_wall():
                 """检测知乎是否弹出登录墙或安全验证（触发后页面不会再返回新数据）。
-                返回 'login'（登录墙）/ 'captcha'（风控验证）/ ''（正常）"""
-                return page.evaluate('''() => {
+                返回 'login'（登录墙）/ 'captcha'（风控验证）/ ''（正常）。
+                页面跳转中途 evaluate 可能抛 context destroyed，视为正常等下一轮"""
+                try:
+                    return page.evaluate('''() => {
+                    // 页面可能正处于跳转中途（document.body 为 null），
+                    // 此时任何 DOM 判断都无意义，直接按"正常"处理等下一轮再检
+                    if (!document.body) return '';
                     // 强信号 1：整页被重定向到 unhuman 安全验证页
                     // （这是知乎把服务器 IP 拉黑的标志，出现即代表游客通道已废）
                     if (/zhihu\\.com\\/account\\/unhuman/.test(location.href)) return 'captcha';
@@ -259,6 +305,8 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                     if (/安全验证|系统监测到异常/.test(document.body.innerText || '')) return 'captcha';
                     return '';
                 }''') or ""
+                except Exception:
+                    return ""
 
             def _wait_load(expected_type, timeout_s=8.0):
                 """滚动后的智能等待：知乎加载下一批数据经常超过 1 秒（尤其服务器
@@ -295,10 +343,18 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                     # 智能等待知乎把下一批数据真正渲染出来（最多 8 秒）
                     _wait_load(expected_type)
-                    raw = page.evaluate(extract_js) or []
+                    try:
+                        raw = page.evaluate(extract_js) or []
+                    except Exception:
+                        # 页面跳转中途 evaluate 会炸（context destroyed / body 为 null），
+                        # 本轮按空处理，下一轮滚动会重试，绝不能让单次异常报废整个抓取
+                        raw = []
                     items = [r for r in raw if r.get("type") == expected_type]
                     if progress_callback:
-                        progress_callback(f"正在滚动加载博主【{author_name}】的{type_label} (已发现 {len(items)} 条)...", len(all_articles), 0)
+                        # 进度计数 = 已入库的 + 当前类型滚动中已发现的。
+                        # 旧版只传 len(all_articles)，而条目要等滚动全部结束才入库，
+                        # 导致整个滚动期间"已检索"恒为 0，用户必然以为卡死了
+                        progress_callback(f"正在滚动加载博主【{author_name}】的{type_label} (已发现 {len(items)} 条)...", len(all_articles) + len(items), 0)
                     if len(items) == last_count:
                         stable_rounds += 1
                     else:
@@ -332,13 +388,15 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                 browser.close()
                 return all_articles, warnings, None
 
-            # 打开「文章」Tab 并滚动采集
-            try:
-                page.goto(f"https://www.zhihu.com/people/{url_token}/posts", wait_until="domcontentloaded", timeout=25000)
-                time.sleep(2.0)
-            except Exception:
-                pass
-            posts_items, wall_posts = _scroll_collect("article")
+            # 打开「文章」Tab 并滚动采集（未勾选文章类型则整体跳过）
+            posts_items, wall_posts = [], ""
+            if "articles" in selected_types:
+                try:
+                    page.goto(f"https://www.zhihu.com/people/{url_token}/posts", wait_until="domcontentloaded", timeout=25000)
+                    time.sleep(2.0)
+                except Exception:
+                    pass
+                posts_items, wall_posts = _scroll_collect("article")
             if wall_posts:
                 # 被登录墙/风控截断：如实告知用户列表不完整，而不是静默导出一部分
                 wall_label = "登录墙（知乎要求登录）" if wall_posts == "login" else "安全验证（知乎风控）"
@@ -361,19 +419,22 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                     "publish_time": _extract_time(r.get("time")),
                     "content_html": "",
                     "excerpt": "",
+                    "like_count": r.get("votes"),
                     "content_type": "article",  # article 普通知乎文章 / 后续步骤会升级为专栏文章
                     "column_title": None
                 })
 
             # ==========================================================
-            # 步骤 2: 全量抓取博主历史回答（同样滚动「回答」Tab 采集）
+            # 步骤 2: 全量抓取博主历史回答（同样滚动「回答」Tab 采集，未勾选则跳过）
             # ==========================================================
-            try:
-                page.goto(f"https://www.zhihu.com/people/{url_token}/answers", wait_until="domcontentloaded", timeout=25000)
-                time.sleep(2.0)
-            except Exception:
-                pass
-            answer_items, wall_answers = _scroll_collect("answer")
+            answer_items, wall_answers = [], ""
+            if "answers" in selected_types:
+                try:
+                    page.goto(f"https://www.zhihu.com/people/{url_token}/answers", wait_until="domcontentloaded", timeout=25000)
+                    time.sleep(2.0)
+                except Exception:
+                    pass
+                answer_items, wall_answers = _scroll_collect("answer")
             if wall_answers:
                 # 被登录墙/风控截断：如实告知用户列表不完整，而不是静默导出一部分
                 wall_label = "登录墙（知乎要求登录）" if wall_answers == "login" else "安全验证（知乎风控）"
@@ -396,20 +457,23 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                     "publish_time": _extract_time(r.get("time")),
                     "content_html": "",
                     "excerpt": "",
+                    "like_count": r.get("votes"),
                     "content_type": "answer"  # 知乎问题回答
                 })
 
             # ==========================================================
-            # 步骤 3: 全量抓取博主「想法」Tab（短内容，URL 形如 /pin/{id}）
+            # 步骤 3: 全量抓取博主「想法」Tab（短内容，URL 形如 /pin/{id}，未勾选则跳过）
             # 说明：想法列表卡片正文是折叠的（"…阅读全文"），列表页拿不到
             # 完整内容，因此此处仅收集链接与时间，正文由详情阶段逐篇补全
             # ==========================================================
-            try:
-                page.goto(f"https://www.zhihu.com/people/{url_token}/pins", wait_until="domcontentloaded", timeout=25000)
-                time.sleep(2.0)
-            except Exception:
-                pass
-            pin_items, wall_pins = _scroll_collect("pin")
+            pin_items, wall_pins = [], ""
+            if "pins" in selected_types:
+                try:
+                    page.goto(f"https://www.zhihu.com/people/{url_token}/pins", wait_until="domcontentloaded", timeout=25000)
+                    time.sleep(2.0)
+                except Exception:
+                    pass
+                pin_items, wall_pins = _scroll_collect("pin")
             if wall_pins:
                 # 被登录墙/风控截断：如实告知用户列表不完整，而不是静默导出一部分
                 wall_label = "登录墙（知乎要求登录）" if wall_pins == "login" else "安全验证（知乎风控）"
@@ -445,9 +509,13 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
 
             # ==========================================================
             # 步骤 4: 最后访问专栏页，建立「文章 URL -> 专栏名」映射并打标
-            # （专栏列表接口不受签名保护，随时可访问；放在最后顺路完成）
+            # （专栏列表接口不受签名保护，随时可访问；放在最后顺路完成。
+            #   未勾选文章类型时整体跳过：专栏映射只会产出文章条目，
+            #   对纯回答/想法检索纯属白跑，还会把未勾选的文章混进清单）
             # ==========================================================
             try:
+                if "articles" not in selected_types:
+                    raise LookupError("未勾选文章类型，跳过专栏映射")
                 page.goto(f"https://www.zhihu.com/people/{url_token}/columns", wait_until="domcontentloaded", timeout=25000)
                 time.sleep(1.5)
                 # 轻微滚动一次，触发可能的懒加载内容
@@ -478,10 +546,17 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
 
                 print(f"[知乎] 从专栏页解析到 {len(slugs)} 个专栏: {list(slugs.keys())}")
 
+                # 滚动采集已结束、进入静默的专栏校对阶段前先上报一次，
+                # 否则多专栏博主这一步要磨几分钟，UI 会冻在最后一次滚动消息上，用户必以为卡死
+                if progress_callback:
+                    progress_callback(
+                        f"列表滚动完成，正在校对 {len(slugs)} 个专栏的文章归属（此步较慢，请稍候）...",
+                        len(all_articles), 0)
+
                 # 专栏归属映射：key=文章 URL, value=该文章所属的专栏名列表
                 # 注意：「文章」是全量集合，专栏只是文章的归类标签（一篇文章可属于多个专栏）
                 column_map: Dict[str, List[str]] = {}
-                for slug in slugs:
+                for ci, slug in enumerate(list(slugs), 1):
                     if not slug:
                         continue
                     # 获取专栏名称（失败则退回链接文本或 slug）
@@ -489,7 +564,7 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                     try:
                         col_meta = page.evaluate(f'''async () => {{
                             try {{
-                                const resp = await fetch('/api/v4/columns/{slug}');
+                                const resp = await fetch('/api/v4/columns/{slug}', {{ signal: AbortSignal.timeout(8000) }});
                                 if (!resp.ok) return null;
                                 return await resp.json();
                             }} catch(e) {{
@@ -501,12 +576,17 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                     except Exception:
                         pass
 
+                    if progress_callback:
+                        progress_callback(
+                            f"正在校对专栏归属 (第 {ci}/{len(slugs)} 个: {col_title[:20]})...",
+                            len(all_articles), 0)
+
                     # 分页拉取该专栏下的全部文章 URL（/articles 失败时退回 /items）
                     coff = 0
                     while True:
                         col_articles = page.evaluate(f'''async () => {{
                             try {{
-                                const resp = await fetch('/api/v4/columns/{slug}/articles?limit=20&offset={coff}');
+                                const resp = await fetch('/api/v4/columns/{slug}/articles?limit=20&offset={coff}', {{ signal: AbortSignal.timeout(8000) }});
                                 if (!resp.ok) return null;
                                 return await resp.json();
                             }} catch(e) {{
@@ -516,7 +596,7 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
                         if not col_articles:
                             col_articles = page.evaluate(f'''async () => {{
                                 try {{
-                                    const resp = await fetch('/api/v4/columns/{slug}/items?limit=20&offset={coff}');
+                                    const resp = await fetch('/api/v4/columns/{slug}/items?limit=20&offset={coff}', {{ signal: AbortSignal.timeout(8000) }});
                                     if (!resp.ok) return null;
                                     return await resp.json();
                                 }} catch(e) {{
@@ -618,9 +698,10 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
         n_articles = sum(1 for a in all_articles if a.get("content_type") == "article")
         n_answers = sum(1 for a in all_articles if a.get("content_type") == "answer")
         n_pins = sum(1 for a in all_articles if a.get("content_type") == "pin")
-        declared_articles = _parse_count(declared.get("文章", ""))
-        declared_answers = _parse_count(declared.get("回答", ""))
-        declared_pins = _parse_count(declared.get("想法", ""))
+        # 未勾选的类型不参与完整性比对与标称总数（否则会被误报「未抓全」）
+        declared_articles = _parse_count(declared.get("文章", "")) if "articles" in selected_types else 0
+        declared_answers = _parse_count(declared.get("回答", "")) if "answers" in selected_types else 0
+        declared_pins = _parse_count(declared.get("想法", "")) if "pins" in selected_types else 0
         # 把声明总数上报给前端：检索清单弹窗会显示「标称 X 篇 vs 收录 Y 篇」，
         # 用户一眼就能看出是否抓全（此前这里一直是空，导致漏抓毫无提示）
         if declared_articles + declared_answers + declared_pins > 0:
@@ -682,10 +763,15 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
 class ZhihuScraper(BaseScraper):
     """知乎全维度博主内容抓取器 (支持专栏/个人主页/单篇内容溯源全量抓取)"""
     
-    def __init__(self, target: str, enable_noise_filter: bool = True, max_articles: Optional[int] = None, remove_image_watermark: bool = True):
+    def __init__(self, target: str, enable_noise_filter: bool = True, max_articles: Optional[int] = None, remove_image_watermark: bool = True, content_types: Optional[List[str]] = None):
         super().__init__(target, enable_noise_filter=enable_noise_filter, max_articles=max_articles, remove_image_watermark=remove_image_watermark)
         self.cookies = get_saved_zhihu_cookies()
         self.author_info_cache = {}
+        # 内容类型勾选（前端检索前可选 文章/回答/想法）；非法值与空集一律回退全量，
+        # 兼容不传该参数的旧版前端
+        valid_types = {"articles", "answers", "pins"}
+        selected = {t for t in (content_types or []) if t in valid_types}
+        self.content_types = selected if selected else valid_types
         # ===== 详情抓取的浏览器复用（性能优化）=====
         # 旧实现每篇文章都冷启动一个完整 Chromium（约 2~3 秒/篇），几百篇的任务白白浪费十几分钟。
         # 新实现：首次抓取时在专用单线程内创建一次浏览器，之后逐篇复用同一个 page；
@@ -882,7 +968,9 @@ class ZhihuScraper(BaseScraper):
         author_name = author_info.get("name", url_token)
 
         if progress_callback:
-            progress_callback(f"已锁定博主【{author_name}】(@{url_token})，正在遍历其全量回答与专栏文章...", 0, 0)
+            _labels = {"articles": "文章", "answers": "回答", "pins": "想法"}
+            scope = "、".join(_labels[t] for t in ("articles", "answers", "pins") if t in self.content_types)
+            progress_callback(f"已锁定博主【{author_name}】(@{url_token})，本次仅检索：{scope}...", 0, 0)
 
         # 3. 通过工作线程中的同步 Playwright 自动化获取博主全部回答和文章
         articles, warnings, declared_total = await asyncio.to_thread(
@@ -893,7 +981,8 @@ class ZhihuScraper(BaseScraper):
             self.max_articles,
             self.target,
             self._is_direct_article_url(),
-            progress_callback
+            progress_callback,
+            self.content_types
         )
         # 完整性警告（列表可能没抓全）写入 explanation，
         # task_manager 会自动透传到前端任务详情中展示
@@ -1023,6 +1112,7 @@ class ZhihuScraper(BaseScraper):
                 content_html=cleaned_html,
                 content_markdown=md_content,
                 images=images,
+                like_count=article_meta.get("like_count"),
                 content_type=content_type,
                 column_title=column_title
             )
@@ -1037,6 +1127,7 @@ class ZhihuScraper(BaseScraper):
             content_html="<p>内容提取失败或需要登录知乎账号</p>",
             content_markdown="内容提取失败或需要登录知乎账号",
             images=[],
+            like_count=article_meta.get("like_count"),
             content_type=content_type,
             column_title=column_title
         )

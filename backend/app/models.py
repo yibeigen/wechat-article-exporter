@@ -93,7 +93,7 @@ class TaskCreateRequest(BaseModel):
     wechat_appmsg_token: Optional[str] = Field(None, description="微信阅读端 appmsg_token 会话凭证 (可选)")
     include_comments: bool = Field(True, description="是否抓取并内嵌微信精选留言与互动统计")
     zhihu_cookie: Optional[str] = Field(None, description="知乎登录凭证 Cookie / z_c0 (可选，用于抓取个人主页全部文章与回答)")
-    zhihu_content_types: Optional[List[str]] = Field(default=["articles", "answers"], description="知乎抓取内容类型 (默认抓取全部文章与回答)")
+    zhihu_content_types: Optional[List[str]] = Field(None, description="知乎抓取内容类型 (articles/answers/pins)；None 或空表示全部三种")
     # 两阶段导出专用：当用户在「检索文章清单」弹窗中勾选具体篇目后，
     # 前端把已选文章的完整元数据回传，后端直接使用这些元数据抓取正文并导出，
     # 避免把 URL 列表错判定为 custom_urls 而丢失 content_type / column_title 等分类信息

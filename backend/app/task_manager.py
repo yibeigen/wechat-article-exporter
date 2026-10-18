@@ -261,6 +261,8 @@ class TaskManager:
             return results
         # 终态枚举：到达这些状态的任务它自己的 finally 会删快照，这里再防御一次
         terminal = (TaskStatusEnum.COMPLETED, TaskStatusEnum.FAILED, TaskStatusEnum.CANCELLED)
+        # 完成/取消的快照属于该删没删的边角；失败任务快照要保留用于「从断点重试」
+        cleanup = (TaskStatusEnum.COMPLETED, TaskStatusEnum.CANCELLED)
         for p in self._snap_dir.glob("*.json"):
             try:
                 snap = json.loads(p.read_text(encoding="utf-8"))
@@ -278,8 +280,9 @@ class TaskManager:
             # 该任务还在内存里正常运行(未到终态) => 不是残留，不打扰
             if task_id in self.tasks and self.tasks[task_id].status not in terminal:
                 continue
-            # 若任务其实已结束但快照占着没删掉(异常边角)，顺手清掉
-            if task_id in self.tasks and self.tasks[task_id].status in terminal:
+            # 若任务其实已完成/取消但快照占着没删掉(异常边角)，顺手清掉；
+            # 失败任务的快照保留，供用户「从断点重试」
+            if task_id in self.tasks and self.tasks[task_id].status in cleanup:
                 self._remove_snapshot(task_id)
                 continue
             results.append({
@@ -386,7 +389,7 @@ class TaskManager:
         elif platform == PlatformEnum.CTO51:
             return CTO51Scraper(request.target, request.enable_noise_filter, request.max_articles, remove_image_watermark=request.remove_image_watermark)
         elif platform == PlatformEnum.ZHIHU:
-            return ZhihuScraper(request.target, request.enable_noise_filter, request.max_articles, remove_image_watermark=request.remove_image_watermark)
+            return ZhihuScraper(request.target, request.enable_noise_filter, request.max_articles, remove_image_watermark=request.remove_image_watermark, content_types=request.zhihu_content_types)
         elif platform == PlatformEnum.WEIBO:
             return WeiboScraper(request.target, request.enable_noise_filter, request.max_articles, remove_image_watermark=request.remove_image_watermark)
         elif platform == PlatformEnum.SINA_BLOG:
@@ -1177,8 +1180,12 @@ class TaskManager:
                     relay_file_path.unlink()
             except Exception:
                 pass
-            # 任务到达终态后，同时删除续跑快照：不再把它当作"未完成的残留任务"去打扰用户续跑
-            if task.status in (TaskStatusEnum.COMPLETED, TaskStatusEnum.FAILED, TaskStatusEnum.CANCELLED):
+            # 完成/取消后删除续跑快照；失败但已抓到部分文章的保留快照并刷新到最终进度，
+            # 下次打开页面弹「从断点重试」，已成功的篇目命中缓存不重复下载。
+            # 抓取尚未开始(index=0)就失败的（如列表为空、连接失败）没有断点价值，照删。
+            if task.status == TaskStatusEnum.FAILED and task.current_article_index > 0:
+                self._save_snapshot(task)
+            elif task.status in (TaskStatusEnum.COMPLETED, TaskStatusEnum.CANCELLED):
                 self._remove_snapshot(task_id)
             # 清理该任务的请求序列化缓存，防止长驻进程内存累积
             self._serialized_requests.pop(task_id, None)

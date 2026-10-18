@@ -55,8 +55,6 @@ extraResources:
     to: "run.py"
   - from: "../requirements-win7.txt"
     to: "requirements.txt"
-  - from: "../start.bat"
-    to: "start.bat"
 
 nsis:
   oneClick: false

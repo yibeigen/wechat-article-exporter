@@ -1,0 +1,3 @@
+# bat 脚本必须 CRLF：LF 换行会导致 cmd 解析 goto 标签失败、双击闪退
+*.bat text eol=crlf
+*.cmd text eol=crlf

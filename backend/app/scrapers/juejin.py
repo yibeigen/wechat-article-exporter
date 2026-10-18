@@ -167,15 +167,18 @@ class JuejinScraper(BaseScraper):
                         "url": url,
                         "title": title,
                         "publish_time": publish_time,
-                        "brief_content": article_info.get("brief_content", "")
+                        "brief_content": article_info.get("brief_content", ""),
+                        "like_count": article_info.get("digg_count"),
+                        "read_num": article_info.get("view_count"),
+                        "comment_count": article_info.get("comment_count")
                     })
-                    
+
                     if self.max_articles and len(articles) >= self.max_articles:
                         return articles
-                        
+
                 if progress_callback:
                     progress_callback(f"已发现掘金文章 {len(articles)} 篇...", len(articles), 0)
-                    
+
                 if not data.get("has_more", False):
                     break
                 cursor = str(data.get("cursor", ""))
@@ -183,7 +186,7 @@ class JuejinScraper(BaseScraper):
                     break
             except Exception:
                 break
-                
+
         return articles
 
     async def scrape_article_detail(self, article_meta: Dict[str, str]) -> ArticleItem:
@@ -235,7 +238,10 @@ class JuejinScraper(BaseScraper):
                             summary=article_info.get("brief_content", ""),
                             content_html=cleaned_html,
                             content_markdown=md_content,
-                            images=images
+                            images=images,
+                            like_count=article_meta.get("like_count"),
+                            read_num=article_meta.get("read_num"),
+                            comment_count=article_meta.get("comment_count")
                         )
         except Exception:
             pass
@@ -287,7 +293,10 @@ class JuejinScraper(BaseScraper):
                             summary="",
                             content_html=cleaned_html,
                             content_markdown=md_content,
-                            images=images
+                            images=images,
+                            like_count=article_meta.get("like_count"),
+                            read_num=article_meta.get("read_num"),
+                            comment_count=article_meta.get("comment_count")
                         )
         except Exception:
             pass
@@ -321,7 +330,10 @@ class JuejinScraper(BaseScraper):
                     summary="",
                     content_html=cleaned_html,
                     content_markdown=md_content,
-                    images=images
+                    images=images,
+                    like_count=article_meta.get("like_count"),
+                    read_num=article_meta.get("read_num"),
+                    comment_count=article_meta.get("comment_count")
                 )
         except Exception:
             pass
@@ -335,5 +347,8 @@ class JuejinScraper(BaseScraper):
             platform="掘金",
             content_html="<p>内容获取异常，请稍后重试</p>",
             content_markdown="内容获取异常，请稍后重试",
-            images=[]
+            images=[],
+            like_count=article_meta.get("like_count"),
+            read_num=article_meta.get("read_num"),
+            comment_count=article_meta.get("comment_count")
         )

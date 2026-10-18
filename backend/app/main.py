@@ -109,7 +109,8 @@ async def startup_event():
   |____/|_|\___/ \__, |____/|_|___/\__|_|_|_|\___|_|   
                  |___/                                  
   BlogDistiller · 博萃 - 全网博文批量导出与知识蒸馏神器
-  原作者: 艺杯羹 (https://github.com/yibeigen/wechat-article-exporter)
+  作者: 艺杯羹 (Yibeigen)
+  GitHub 仓库: https://github.com/yibeigen/wechat-article-exporter
   开源协议: CC BY-NC-SA 4.0 (严禁商用 · 强制署名 · 相同方式共享)
   官方公众号: 微信搜索【艺杯羹】
 ======================================================================
@@ -266,6 +267,8 @@ class ExtractLinksRequest(BaseModel):
     key: Optional[str] = None
     pass_ticket: Optional[str] = None
     appmsg_token: Optional[str] = None
+    # 知乎专享：只检索勾选的内容类型 (articles/answers/pins)；空/缺省表示全部
+    content_types: Optional[List[str]] = None
     # 新版前端传 true 使用异步任务模式；旧版缓存前端不传，后端走同步模式兼容旧行为
     async_mode: Optional[bool] = Field(None, description="是否以异步任务模式执行（海量文章防网关超时）")
 
@@ -301,7 +304,8 @@ async def _do_extract_links(request: ExtractLinksRequest, job_id: Optional[str] 
         wechat_uin=request.uin,
         wechat_key=request.key,
         wechat_pass_ticket=request.pass_ticket,
-        wechat_appmsg_token=request.appmsg_token
+        wechat_appmsg_token=request.appmsg_token,
+        zhihu_content_types=request.content_types
     )
     detected = task_manager._detect_platform(request.target, p_enum)
     scraper = task_manager._get_scraper(dummy_req, detected)
@@ -1571,8 +1575,8 @@ async def api_admin_update_contributor(contributor_id: str, data: dict = Body(..
 async def get_client_version():
     """获取最新客户端版本信息与下载链接"""
     return {
-        "version": "1.2.8",
-        "release_notes": "修复微博/知乎扫码登录：窗口一闪而过、扫码后界面仍显示未登录、重复点击把已登录账号踢下线；已登录时按钮改为静默同步凭证。",
+        "version": "1.2.9",
+        "release_notes": "知乎检索支持按内容类型勾选（文章/回答/想法独立提速）并修复大博主滚动采集假死；微博显示标称/实得数缺口；缓存与断点容错降级；检索清单新增时间与点赞排序。",
         "standard_download_url": "/api/client/download",
         "win7_download_url": "/api/client/download/win7",
         "mandatory": False,

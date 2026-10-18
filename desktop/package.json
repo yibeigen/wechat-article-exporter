@@ -1,7 +1,7 @@
 {
   "name": "blogdistiller-desktop",
   "productName": "BlogDistiller 文章导出助手",
-  "version": "1.2.8",
+  "version": "1.2.9",
   "description": "BlogDistiller —— 多平台博主文章批量抓取与排版导出桌面客户端",
   "private": true,
   "main": "./main.js",
@@ -62,10 +62,6 @@
       {
         "from": "../requirements.txt",
         "to": "requirements.txt"
-      },
-      {
-        "from": "../start.bat",
-        "to": "start.bat"
       }
     ],
     "nsis": {
