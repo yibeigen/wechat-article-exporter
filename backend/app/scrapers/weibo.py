@@ -147,8 +147,18 @@ class WeiboScraper(BaseScraper):
                 if data.get("ok") == -100:
                     raise RuntimeError(f"微博提示需要登录才能访问博主主页，请使用插件同步微博 Cookie 凭证！")
                 if data.get("ok") != 1:
-                    stop_reason = f"第 {page} 页接口拒答 (ok={data.get('ok')})"
-                    break
+                    # 深翻页的 ok=0 多为瞬时限流，退避重试同一页再决定是否收口
+                    recovered = False
+                    for attempt in range(2):
+                        await asyncio.sleep(5 * (attempt + 1) + random.uniform(0, 3))
+                        retry_data = await self._fetch_container_page(api_url, page)
+                        if retry_data and retry_data.get("ok") == 1:
+                            data = retry_data
+                            recovered = True
+                            break
+                    if not recovered:
+                        stop_reason = f"第 {page} 页接口拒答 (ok={data.get('ok')})"
+                        break
 
                 cards = data.get("data", {}).get("cards", [])
                 if not cards:
