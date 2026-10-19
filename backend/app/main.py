@@ -334,7 +334,8 @@ async def _do_extract_links(request: ExtractLinksRequest, job_id: Optional[str] 
             "articles": articles,
             "declared_count": getattr(scraper, "declared_count", None),
             "category_name": getattr(scraper, "category_name", None),
-            "explanation": getattr(scraper, "explanation", None)
+            "explanation": getattr(scraper, "explanation", None),
+            "truncated": bool(getattr(scraper, "list_truncated", False))
         }
     finally:
         await scraper.close()

@@ -38,31 +38,25 @@ class WeiboScraper(BaseScraper):
         api_url = f"https://m.weibo.cn/api/container/getIndex?type=uid&value={uid}"
         author_info = {"name": f"微博用户_{uid}", "avatar": "", "bio": "", "platform": "微博"}
         container_id = f"107603{uid}"
-        try:
-            resp = await self.client.get(api_url)
-            if resp.status_code == 432:
-                raise RuntimeError(f"微博官方对博主【微博用户_{uid}】主页开启了登录访问保护 (HTTP 432)。请在浏览器登录 weibo.com，使用插件一键同步 Cookie 或填入微博 Cookie 凭证！")
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get("ok") == -100:
-                    raise RuntimeError(f"微博提示需要登录才能访问博主【微博用户_{uid}】主页。请使用插件同步微博 Cookie 凭证！")
-                if data.get("ok") == 1:
-                    user_info = data.get("data", {}).get("userInfo", {})
-                    author_info["name"] = user_info.get("screen_name", author_info["name"])
-                    author_info["avatar"] = user_info.get("avatar_hd", "")
-                    author_info["bio"] = user_info.get("description", "")
-                    # 主页标称微博数：前端检索清单据此显示「标称 X / 实得 Y」缺口
-                    self.declared_count = user_info.get("statuses_count") or None
-                    
-                    tabs = data.get("data", {}).get("tabsInfo", {}).get("tabs", [])
-                    for tab in tabs:
-                        if tab.get("tab_type") == "weibo":
-                            container_id = tab.get("containerid", container_id)
-                            break
-        except RuntimeError:
-            raise
-        except Exception:
-            pass
+        # profile 调用复用带退避重试的翻页通道：瞬时风控若让这次调用失败，
+        # 标称数会丢失，前端「标称/实收」缺口提示与截断警告就全部失效
+        data = await self._fetch_container_page(api_url, 1)
+        if data is not None:
+            if data.get("ok") == -100:
+                raise RuntimeError(f"微博提示需要登录才能访问博主【微博用户_{uid}】主页。请使用插件同步微博 Cookie 凭证！")
+            if data.get("ok") == 1:
+                user_info = data.get("data", {}).get("userInfo", {})
+                author_info["name"] = user_info.get("screen_name", author_info["name"])
+                author_info["avatar"] = user_info.get("avatar_hd", "")
+                author_info["bio"] = user_info.get("description", "")
+                # 主页标称微博数：前端检索清单据此显示「标称 X / 实得 Y」缺口
+                self.declared_count = user_info.get("statuses_count") or None
+
+                tabs = data.get("data", {}).get("tabsInfo", {}).get("tabs", [])
+                for tab in tabs:
+                    if tab.get("tab_type") == "weibo":
+                        container_id = tab.get("containerid", container_id)
+                        break
         return container_id, author_info
 
     async def get_author_info(self) -> Dict[str, Any]:
@@ -94,8 +88,20 @@ class WeiboScraper(BaseScraper):
         return None
 
     def _report_count_gap(self, actual: int, stop_reason: str, reached_bottom: bool):
-        """把「主页标称 N 条 / 实收 M 条」的缺口和成因摊开说，避免用户以为静默漏抓。"""
+        """把「主页标称 N 条 / 实收 M 条」的缺口和成因摊开说，避免用户以为静默漏抓。
+
+        就算没拿到标称数（profile 调用被风控降级），只要不是干净翻到底，
+        也必须标记 list_truncated 并给出截断警告，绝不允许静默少抓。
+        """
+        if not reached_bottom:
+            self.list_truncated = True
         if not self.declared_count or actual >= self.declared_count:
+            if self.list_truncated:
+                self.explanation = (
+                    f"本次翻页在「{stop_reason}」处提前停止，已收录 <b>{actual}</b> 条，"
+                    f"清单可能不含全部历史微博。<br>"
+                    f"这通常是微博对当前账号/IP 的翻页风控，稍后重试或重新同步微博 Cookie 可继续向后翻取更早的微博。"
+                )
             return
         diff = self.declared_count - actual
         if reached_bottom:
@@ -231,8 +237,9 @@ class WeiboScraper(BaseScraper):
                         return articles
                         
                 if new_on_page == 0:
-                    stop_reason = f"第 {page} 页整页均为重复卡片，判定时间线到底"
-                    reached_bottom = True
+                    # 整页重复 ≠ 时间线到底：真到底的最后一页返回空 cards。
+                    # 深翻页被风控降级时微博会反复回填同页内容，按「未翻完」处理
+                    stop_reason = f"第 {page} 页整页均为重复卡片，疑似翻页被风控降级"
                     break
 
                 if progress_callback:

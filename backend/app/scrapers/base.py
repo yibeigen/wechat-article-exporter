@@ -19,6 +19,7 @@ class BaseScraper(ABC):
         self.declared_count: Optional[int] = None
         self.category_name: Optional[str] = None
         self.explanation: Optional[str] = None
+        self.list_truncated: bool = False
         self.client = httpx.AsyncClient(
             headers=DEFAULT_HEADERS,
             timeout=DEFAULT_TIMEOUT,
