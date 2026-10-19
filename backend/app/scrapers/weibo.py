@@ -162,77 +162,15 @@ class WeiboScraper(BaseScraper):
                     if not mblog:
                         continue
 
-                    mblog_id = str(mblog.get("id", ""))
-                    if mblog_id in seen_ids:
+                    # 单卡解析异常只跳过该卡：深翻页时常出现 page_info 为 null 等
+                    # 畸形卡片，绝不能让一张坏卡掐断整条时间线
+                    try:
+                        new_on_page += self._parse_timeline_card(
+                            card, mblog, seen_ids, articles, uid
+                        )
+                    except Exception:
                         continue
-                    seen_ids.add(mblog_id)
-                    new_on_page += 1
-                    bid = mblog.get("bid", mblog_id)
-                    raw_text = mblog.get("raw_text") or mblog.get("text", "")
-                    created_at = mblog.get("created_at", "")
-                    retweeted_status = mblog.get("retweeted_status")
-                    
-                    # ---------- 标题提取策略（2026-09-29 与用户对齐）----------
-                    # 微博分两类：头条文章有真标题；普通博文没有标题。
-                    # 旧逻辑无条件优先取 page_info.page_title（卡片标题），
-                    # 会产出“【超话】随笔”“xx的微博视频”这类噪音标题。
-                    # 新策略：
-                    #   1) 头条文章卡（type 含 article）→ 用作者起的真标题
-                    #   2) 普通博文 → 用正文第一行（即“取第一句”，最能代表内容）
-                    #   3) 正文为空（纯视频/纯图/超话打卡）→ 才退回卡片标题兜底
-                    page_info = mblog.get("page_info", {})
-                    page_title = str(page_info.get("page_title") or "")
-                    page_type = str(page_info.get("type") or "")
 
-                    # <br> 先转成真实换行再剥其余标签，否则多行正文会被拼成一行，
-                    # “第一句”就变成了“第一段全文”
-                    clean_preview = re.sub(r"<br\s*/?>", "\n", raw_text)
-                    clean_preview = re.sub(r"<[^>]+>", "", clean_preview).strip()
-                    # 取正文第一个非空行作为“第一句”（微博正文常用换行分段）
-                    first_line = ""
-                    for _ln in clean_preview.splitlines():
-                        if _ln.strip():
-                            first_line = _ln.strip()
-                            break
-
-                    if retweeted_status and isinstance(retweeted_status, dict):
-                        # 转发微博：保留“原博作者+摘要”的高辨识度格式
-                        retweet_user = retweeted_status.get("user", {}).get("screen_name", "原博主")
-                        retweet_page_title = retweeted_status.get("page_info", {}).get("page_title")
-                        retweet_text = retweeted_status.get("raw_text") or retweeted_status.get("text", "")
-                        retweet_clean = re.sub(r"<[^>]+>", "", retweet_text).strip()
-
-                        if retweet_page_title:
-                            title = f"转发@{retweet_user}: {retweet_page_title}"
-                        elif first_line and first_line != "转发微博":
-                            title = f"{first_line} // 转发@{retweet_user}: {retweet_clean[:22]}"
-                        else:
-                            title = f"转发@{retweet_user}: {retweet_clean[:25]}"
-                    elif "article" in page_type and page_title:
-                        # 头条文章：page_title 是作者自己起的标题，优先使用
-                        title = page_title
-                    elif first_line:
-                        # 普通博文：正文第一行（第一句）做标题
-                        title = first_line
-                    elif page_title:
-                        # 无正文的博文（纯视频/纯图/超话签到）：退回卡片标题
-                        title = page_title
-                    else:
-                        title = f"微博_{bid}"
-
-                    if len(title) > 40:
-                        title = title[:38] + "..."
-                        
-                    url = f"https://weibo.com/{uid}/{bid}"
-                    
-                    articles.append({
-                        "id": bid,
-                        "url": url,
-                        "title": title,
-                        "publish_time": created_at,
-                        "mblog": mblog
-                    })
-                    
                     if self.max_articles and len(articles) >= self.max_articles:
                         return articles
                         
@@ -256,6 +194,84 @@ class WeiboScraper(BaseScraper):
 
         self._report_count_gap(len(articles), stop_reason, reached_bottom)
         return articles
+
+    def _parse_timeline_card(self, card: Dict[str, Any], mblog: Dict[str, Any],
+                             seen_ids: set, articles: List[Dict[str, str]], uid: str) -> int:
+        """解析单张时间线卡片，新收录返回 1、重复返回 0。
+
+        m.weibo.cn 深翻页常出现 page_info/user 为 null 的畸形字段，
+        统一用 `or {}` 兜底，避免 AttributeError。
+        """
+        mblog_id = str(mblog.get("id", ""))
+        if mblog_id in seen_ids:
+            return 0
+        seen_ids.add(mblog_id)
+        bid = mblog.get("bid", mblog_id)
+        raw_text = mblog.get("raw_text") or mblog.get("text", "")
+        created_at = mblog.get("created_at", "")
+        retweeted_status = mblog.get("retweeted_status")
+
+        # ---------- 标题提取策略（2026-09-29 与用户对齐）----------
+        # 微博分两类：头条文章有真标题；普通博文没有标题。
+        # 旧逻辑无条件优先取 page_info.page_title（卡片标题），
+        # 会产出“【超话】随笔”“xx的微博视频”这类噪音标题。
+        # 新策略：
+        #   1) 头条文章卡（type 含 article）→ 用作者起的真标题
+        #   2) 普通博文 → 用正文第一行（即“取第一句”，最能代表内容）
+        #   3) 正文为空（纯视频/纯图/超话打卡）→ 才退回卡片标题兜底
+        page_info = mblog.get("page_info") or {}
+        page_title = str(page_info.get("page_title") or "")
+        page_type = str(page_info.get("type") or "")
+
+        # <br> 先转成真实换行再剥其余标签，否则多行正文会被拼成一行，
+        # “第一句”就变成了“第一段全文”
+        clean_preview = re.sub(r"<br\s*/?>", "\n", raw_text)
+        clean_preview = re.sub(r"<[^>]+>", "", clean_preview).strip()
+        # 取正文第一个非空行作为“第一句”（微博正文常用换行分段）
+        first_line = ""
+        for _ln in clean_preview.splitlines():
+            if _ln.strip():
+                first_line = _ln.strip()
+                break
+
+        if retweeted_status and isinstance(retweeted_status, dict):
+            # 转发微博：保留“原博作者+摘要”的高辨识度格式
+            retweet_user = (retweeted_status.get("user") or {}).get("screen_name", "原博主")
+            retweet_page_title = (retweeted_status.get("page_info") or {}).get("page_title")
+            retweet_text = retweeted_status.get("raw_text") or retweeted_status.get("text", "")
+            retweet_clean = re.sub(r"<[^>]+>", "", retweet_text).strip()
+
+            if retweet_page_title:
+                title = f"转发@{retweet_user}: {retweet_page_title}"
+            elif first_line and first_line != "转发微博":
+                title = f"{first_line} // 转发@{retweet_user}: {retweet_clean[:22]}"
+            else:
+                title = f"转发@{retweet_user}: {retweet_clean[:25]}"
+        elif "article" in page_type and page_title:
+            # 头条文章：page_title 是作者自己起的标题，优先使用
+            title = page_title
+        elif first_line:
+            # 普通博文：正文第一行（第一句）做标题
+            title = first_line
+        elif page_title:
+            # 无正文的博文（纯视频/纯图/超话签到）：退回卡片标题
+            title = page_title
+        else:
+            title = f"微博_{bid}"
+
+        if len(title) > 40:
+            title = title[:38] + "..."
+
+        url = f"https://weibo.com/{uid}/{bid}"
+
+        articles.append({
+            "id": bid,
+            "url": url,
+            "title": title,
+            "publish_time": created_at,
+            "mblog": mblog
+        })
+        return 1
 
     async def scrape_article_detail(self, article_meta: Dict[str, str]) -> ArticleItem:
         mblog = article_meta.get("mblog", {})
