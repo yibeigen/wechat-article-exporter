@@ -202,8 +202,112 @@ class WeiboScraper(BaseScraper):
                 stop_reason = f"第 {page} 页请求异常 ({type(e).__name__})"
                 break
 
+        # m 端 page 翻页存在深度硬限（实测约 270+ 页即 ok=0，重试也穿不过），
+        # 未验证到时间线底部时切换 weibo.com 桌面版 ajax 通道补抓更早的微博
+        if not reached_bottom:
+            stop_reason, reached_bottom = await self._fill_older_via_desktop(
+                uid, seen_ids, articles, stop_reason, progress_callback
+            )
+            if self.max_articles and len(articles) >= self.max_articles:
+                return articles
+
         self._report_count_gap(len(articles), stop_reason, reached_bottom)
         return articles
+
+    async def _fetch_desktop_page(self, api_url: str, uid: str) -> Optional[Dict[str, Any]]:
+        """请求 weibo.com 桌面版 ajax 接口，返回 JSON；连续失败返回 None。"""
+        headers = {
+            "Referer": f"https://weibo.com/u/{uid}/home",
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json, text/plain, */*",
+        }
+        for attempt in range(3):
+            try:
+                resp = await self.client.get(api_url, headers=headers)
+                if resp.status_code == 200:
+                    try:
+                        data = resp.json()
+                    except Exception:
+                        data = None
+                    if isinstance(data, dict) and "ok" in data:
+                        return data
+            except Exception:
+                pass
+            if attempt < 2:
+                await asyncio.sleep(5 * (attempt + 1) + random.uniform(0, 3))
+        return None
+
+    def _normalize_desktop_mblog(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """把 weibo.com ajax 博文对象归一成 m.weibo.cn 卡片结构，复用同一套解析。"""
+        pics = []
+        for p in (item.get("pic_infos") or {}).values():
+            u = (p.get("largest") or p.get("large") or p.get("original") or {}).get("url")
+            if u:
+                pics.append({"large": {"url": u}})
+        text_raw = item.get("text_raw") or item.get("text") or ""
+        mb = {
+            "id": str(item.get("id", "")),
+            "bid": item.get("mblogid") or str(item.get("id", "")),
+            "raw_text": text_raw,
+            "text": item.get("text") or text_raw,
+            "created_at": item.get("created_at", ""),
+            "isLongText": item.get("isLongText", False),
+            "page_info": item.get("page_info") or {},
+            "pics": pics,
+            "user": item.get("user") or {},
+        }
+        ret = item.get("retweeted_status")
+        if ret and isinstance(ret, dict):
+            mb["retweeted_status"] = self._normalize_desktop_mblog(ret)
+        return mb
+
+    async def _fill_older_via_desktop(self, uid: str, seen_ids: set, articles: List[Dict[str, str]],
+                                      m_stop_reason: str,
+                                      progress_callback: Optional[Callable[[str, int, int], None]]) -> Tuple[str, bool]:
+        """用 weibo.com 桌面版 ajax 时间线（/ajax/statuses/mymblog，每页 20 条）
+        从新到旧补抓，按 ID 去重后自动接续 m 端未翻到的更早微博。
+        返回 (最终中断原因, 是否已验证到底)。"""
+        max_page = 600
+        dup_run = 0
+        for page in range(1, max_page + 1):
+            api_url = f"https://weibo.com/ajax/statuses/mymblog?uid={uid}&page={page}&feature=0"
+            data = await self._fetch_desktop_page(api_url, uid)
+            if data is None:
+                return f"m端{m_stop_reason}；切换桌面通道补抓时第 {page} 页被拦截", False
+            if data.get("ok") != 1:
+                return (f"m端{m_stop_reason}；切换桌面通道补抓至第 {page} 页仍被接口拒答 "
+                        f"(ok={data.get('ok')})", False)
+            if not self.declared_count:
+                self.declared_count = (data.get("data") or {}).get("total") or None
+            items = (data.get("data") or {}).get("list") or []
+            if not items:
+                return f"桌面通道第 {page} 页已无更多内容，补抓到底", True
+
+            new_on_page = 0
+            for item in items:
+                if not isinstance(item, dict) or not item.get("id"):
+                    continue
+                try:
+                    mb = self._normalize_desktop_mblog(item)
+                    new_on_page += self._parse_timeline_card({"mblog": mb}, mb, seen_ids, articles, uid)
+                except Exception:
+                    continue
+                if self.max_articles and len(articles) >= self.max_articles:
+                    return "已达设定的篇数上限", True
+
+            if new_on_page == 0:
+                # 与 m 端已覆盖区间重叠属正常，继续向后翻；连续多页零新增才是回环
+                dup_run += 1
+                if dup_run >= 50:
+                    return f"桌面通道第 {page} 页前后连续多页均为重复内容，疑似翻页回环", False
+            else:
+                dup_run = 0
+
+            if progress_callback:
+                progress_callback(f"已发现微博内容 {len(articles)} 条 (m端+桌面通道补抓第 {page} 页)...",
+                                  len(articles), self.declared_count or 0)
+            await asyncio.sleep(0.6 + random.uniform(0, 0.9))
+        return f"桌面通道已达最大翻页数上限 {max_page} 页", False
 
     def _parse_timeline_card(self, card: Dict[str, Any], mblog: Dict[str, Any],
                              seen_ids: set, articles: List[Dict[str, str]], uid: str) -> int:
