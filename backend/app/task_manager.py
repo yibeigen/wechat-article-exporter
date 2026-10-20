@@ -56,6 +56,12 @@ class TaskManager:
         """快照正式文件路径 (存在即代表任务尚未跑完/被中断)"""
         return self._snap_dir / f"{task_id}.json"
 
+    def _request_file_path(self, task_id: str) -> Path:
+        """原始请求独立文件：request 在任务全程不变，只在启动时写一次。
+        旧方案把 10MB 级 request 塞进快照、每 20 篇全量重写一次，
+        缓存命中风暴时形成 2×10MB/秒的写盘风暴，既慢又容易被杀软行为检测误杀。"""
+        return self._snap_dir / f"{task_id}.request.json"
+
     def _snapshot_tmp_path(self, task_id: str) -> Path:
         """快照临时文件路径 (先写临时文件再原子改名，避免写一半读到损坏内容)"""
         return self._snap_dir / f"{task_id}.tmp"
@@ -63,14 +69,11 @@ class TaskManager:
     def _save_snapshot(self, task: TaskProgress):
         """把任务的续跑快照写入磁盘(原子替换)。
 
-        快照里存的是「原始请求 + 当前进度摘要」，服务重启后调用 resume 时，
-        用这份快照重建同一个任务继续跑。未到终态的快照会一直保留，
-        一旦任务正常结束(完成/失败/取消)就在 finally 里删除，不再当"残留任务"。
+        快照里只存「进度摘要」；重建任务所需的原始 request 在 _launch 时
+        一次性写入独立文件（任务全程不变，没必要每 20 篇重复序列化 10MB）。
+        未到终态的快照会一直保留，一旦任务正常结束(完成/失败/取消)就在
+        finally 里删除，不再当"残留任务"。
         """
-        req = self._serialized_requests.get(task.task_id)
-        if req is None:
-            # 没有存过原始请求(正常不会发生)，说明无法续跑，干脆不写快照
-            return
         snap = {
             "task_id": task.task_id,
             "client_id": task.client_id,
@@ -81,24 +84,48 @@ class TaskManager:
             "current_article_index": task.current_article_index,
             "message": task.message,
             "phase": task.status.value,  # 记录跑到哪个阶段，便于前端展示
-            "request": req,              # 重建任务所需的全部原始参数
             "created_at": task.created_at,
             "updated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
+        self._write_json_atomic(self._snapshot_path(task.task_id), snap)
+
+    def _save_request_file(self, task_id: str):
+        """把原始请求落盘（每次 _launch 写一次，任务全程内容不变）。"""
+        req = self._serialized_requests.get(task_id)
+        if req is None:
+            return
+        self._write_json_atomic(self._request_file_path(task_id), {"request": req})
+
+    def _write_json_atomic(self, path: Path, data: Dict[str, Any]):
+        """先写 .tmp 再原子替换，防止崩溃时留下半个 JSON；失败只告警不抛出。"""
         try:
             self._snap_dir.mkdir(parents=True, exist_ok=True)
-            # 惯例：先写 .tmp 再原子替换，防止崩溃时留下半个 JSON
-            tmp = self._snapshot_tmp_path(task.task_id)
-            final = self._snapshot_path(task.task_id)
-            tmp.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
-            tmp.replace(final)
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(path)
         except Exception as e:
             print(f"⚠️ 写入续跑快照失败: {e}")
+
+    def _read_request_file(self, task_id: str) -> Optional[Dict[str, Any]]:
+        p = self._request_file_path(task_id)
+        if not p.exists():
+            return None
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            return data.get("request") if isinstance(data, dict) else None
+        except Exception:
+            return None
 
     def _remove_snapshot(self, task_id: str):
         """删除续跑快照(任务到达终态，或用户选择"放弃续跑"时调用)。"""
         try:
-            for p in (self._snapshot_path(task_id), self._snapshot_tmp_path(task_id)):
+            for p in (
+                self._snapshot_path(task_id),
+                self._request_file_path(task_id),
+                self._snapshot_path(task_id).with_suffix(".json.tmp"),
+                self._request_file_path(task_id).with_suffix(".json.tmp"),
+                self._snapshot_tmp_path(task_id),  # 旧版快照的临时文件名，兼容清理
+            ):
                 if p.exists():
                     p.unlink()
         except Exception as e:
@@ -240,6 +267,8 @@ class TaskManager:
 
         # 序列化并缓存原始请求，供快照写盘与中断续跑重建使用 (mode="json" 让枚举转成字符串)
         self._serialized_requests[task_id] = request.model_dump(mode="json")
+        # 原始 request 全程不变，只在启动时落盘一次；周期快照只写 KB 级进度摘要
+        self._save_request_file(task_id)
         # 写一份初始快照：此刻快照存在 = 该任务尚未完成，重启后可作为"残留任务"提示续跑
         self._save_snapshot(progress)
 
@@ -316,7 +345,8 @@ class TaskManager:
         # 权限校验：只能续跑自己客户端的任务
         if client_id and snap.get("client_id") != client_id.strip():
             return None, "无权限续跑该任务"
-        req_data = snap.get("request")
+        # request 优先读独立文件（新格式）；旧版快照把 request 内嵌在快照里，兼容回退
+        req_data = self._read_request_file(task_id) or snap.get("request")
         if not req_data:
             return None, "快照缺少原始请求，无法续跑"
         # 冗余保护：如果该任务当前已在内存中正常运行，拒绝重复创建(避免双跑)
@@ -331,6 +361,16 @@ class TaskManager:
             return None, f"原始请求重建失败: {e}"
         # 复用同一个 task_id 继续跑，让前端看到连贯的进度
         self._launch(task_id, request)
+        # 断点续跑会从第 1 篇开始快速校验缓存（命中即秒过，不重复下载）；
+        # 不加说明，用户看到进度从 1 重新爬会误以为"又从头开始重新下载"
+        progress = self.tasks.get(task_id)
+        if progress is not None:
+            total = snap.get("total_articles") or progress.total_articles
+            progress.message = (
+                f"🔄 断点续跑：将快速校验共 {total} 篇，"
+                "已抓取成功的篇目命中缓存直接秒过，不会重复下载…"
+            )
+            asyncio.create_task(self._broadcast(task_id))
         return task_id, None
 
     def discard_incomplete_task(self, task_id: str, client_id: Optional[str] = None) -> bool:
