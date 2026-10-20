@@ -387,29 +387,94 @@ class WeiboScraper(BaseScraper):
         })
         return 1
 
+    # m 端 extend 接口有请求头指纹校验：桌面 UA 或缺 Referer/X-Requested-With
+    # 时不返回 JSON，而是固定弹「安全验证」HTML 页（2026-10-20 本机实测）。
+    _M_EXTEND_HEADERS = {
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+        "Referer": "https://m.weibo.cn/",
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept": "application/json, text/plain, */*",
+    }
+    _DESKTOP_LONGTEXT_HEADERS = {
+        "Referer": "https://weibo.com/",
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept": "application/json, text/plain, */*",
+    }
+    # 链接文字只含「全文/展开」及省略号、零宽字符才算截断锚点，
+    # 正文里正常链接标题恰好带“全文”二字的不算
+    _TRUNCATION_ANCHOR = re.compile(
+        r"<a[^>]*>[\s.。…·\u200b]*(?:全文|展开)[\s.。…\u200b]*</a>[\s\u200b\u200c\u200d\ufeff]*$"
+    )
+
+    @classmethod
+    def _has_truncation_anchor(cls, html: str) -> bool:
+        """识别列表接口截断文本尾部的「...全文 / ...展开」锚点（部分长微博 isLongText 标志会漏标）。"""
+        return bool(cls._TRUNCATION_ANCHOR.search(html or ""))
+
+    async def _fetch_long_text(self, mblog: Dict[str, Any]) -> Optional[str]:
+        """长微博展开全文：先走 m 端 extend（内容最全、含视频卡文案），失败退 weibo.com 桌面版 longtext。
+        两条通道都被拦截时返回 None，由调用方做显式降级与告警，绝不静默用截断文本冒充全文。"""
+        mblog_id = str(mblog.get("id", ""))
+        bid = mblog.get("bid") or mblog_id
+        if not mblog_id:
+            return None
+
+        # 1) m 端 extend：必须带手机 UA + m 站 Referer + XHR，否则命中安全验证页
+        for attempt in range(2):
+            try:
+                resp = await self.client.get(
+                    f"https://m.weibo.cn/statuses/extend?id={mblog_id}",
+                    headers=self._M_EXTEND_HEADERS,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("ok") == 1:
+                        content = (data.get("data") or {}).get("longTextContent")
+                        if content:
+                            return content
+            except Exception:
+                pass
+            if attempt < 1:
+                await asyncio.sleep(2 + random.uniform(0, 2))
+
+        # 2) 桌面版 longtext：与时间线补抓同源的 weibo.com 通道
+        for attempt in range(2):
+            try:
+                resp = await self.client.get(
+                    f"https://weibo.com/ajax/statuses/longtext?id={bid}",
+                    headers=self._DESKTOP_LONGTEXT_HEADERS,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = (data.get("data") or {}).get("longTextContent")
+                    if content:
+                        return content
+            except Exception:
+                pass
+            if attempt < 1:
+                await asyncio.sleep(2 + random.uniform(0, 2))
+        return None
+
     async def scrape_article_detail(self, article_meta: Dict[str, str]) -> ArticleItem:
         mblog = article_meta.get("mblog", {})
         url = article_meta["url"]
         title = article_meta.get("title", "无标题")
         publish_time = article_meta.get("publish_time", "")
         author = mblog.get("user", {}).get("screen_name", "微博用户")
-        
+
         # 1. 解析当前博主发表的正文
-        is_long = mblog.get("isLongText", False)
-        raw_html = mblog.get("text", "")
-        
+        raw_html = mblog.get("text", "") or mblog.get("raw_text", "")
+        is_long = bool(mblog.get("isLongText", False)) or self._has_truncation_anchor(raw_html)
+
+        truncation_warned = False
         if is_long:
-            # 抓取展开全文 API
-            mblog_id = str(mblog.get("id", ""))
-            long_url = f"https://m.weibo.cn/statuses/extend?id={mblog_id}"
-            try:
-                resp = await self.client.get(long_url)
-                if resp.status_code == 200:
-                    long_data = resp.json()
-                    if long_data.get("ok") == 1:
-                        raw_html = long_data.get("data", {}).get("longTextContent", raw_html)
-            except Exception:
-                pass
+            full_html = await self._fetch_long_text(mblog)
+            if full_html:
+                raw_html = full_html
+            else:
+                # 两条展开全文通道均被拦截：剥掉截断锚点 + 显式警告，绝不静默冒充全文
+                raw_html = self._TRUNCATION_ANCHOR.sub("", raw_html).strip()
+                truncation_warned = True
                 
         # 提取当前微博自带图片
         images = []
@@ -426,7 +491,15 @@ class WeiboScraper(BaseScraper):
                 images.append(page_pic)
                 
         cleaned_html, md_content, _ = clean_html_content(raw_html, self.enable_noise_filter, remove_watermark=self.remove_image_watermark)
-        
+
+        if truncation_warned:
+            warn_md = ("\n\n> ⚠️ 本条为长微博，两条「展开全文」接口均被微博拦截，"
+                       "本次仅保存到可见部分的摘要。稍后重新抓取本条可获取全文。")
+            md_content += warn_md
+            cleaned_html += ('<p style="color:#b45309; background:#fffbeb; border:1px solid #fcd34d; '
+                             'border-radius:6px; padding:8px 12px; font-size:13px;">⚠️ 本条为长微博，'
+                             '两条「展开全文」接口均被微博拦截，本次仅保存到可见部分的摘要。</p>')
+
         # 拼装当前微博图片到 Markdown 与 HTML 中
         if images:
             img_md = "\n\n" + "\n\n".join([f"![]({img})" for img in images])
@@ -438,20 +511,18 @@ class WeiboScraper(BaseScraper):
         retweeted_status = mblog.get("retweeted_status")
         if retweeted_status and isinstance(retweeted_status, dict):
             retweet_user = retweeted_status.get("user", {}).get("screen_name", "原博主")
-            retweet_raw_html = retweeted_status.get("text", "")
-            retweet_is_long = retweeted_status.get("isLongText", False)
-            
+            retweet_raw_html = retweeted_status.get("text", "") or retweeted_status.get("raw_text", "")
+            retweet_is_long = (bool(retweeted_status.get("isLongText", False))
+                               or self._has_truncation_anchor(retweet_raw_html))
+
+            retweet_truncation_warned = False
             if retweet_is_long:
-                retweet_id = str(retweeted_status.get("id", ""))
-                long_url = f"https://m.weibo.cn/statuses/extend?id={retweet_id}"
-                try:
-                    resp = await self.client.get(long_url)
-                    if resp.status_code == 200:
-                        long_data = resp.json()
-                        if long_data.get("ok") == 1:
-                            retweet_raw_html = long_data.get("data", {}).get("longTextContent", retweet_raw_html)
-                except Exception:
-                    pass
+                retweet_full = await self._fetch_long_text(retweeted_status)
+                if retweet_full:
+                    retweet_raw_html = retweet_full
+                else:
+                    retweet_raw_html = self._TRUNCATION_ANCHOR.sub("", retweet_raw_html).strip()
+                    retweet_truncation_warned = True
 
             retweet_images = []
             for pic in retweeted_status.get("pics", []):
@@ -483,6 +554,12 @@ class WeiboScraper(BaseScraper):
                         media_card_html = f'<p style="margin-top: 8px; color: #475569;">▶️ {rt_card_title}</p>'
 
             retweet_cleaned_html, retweet_md, _ = clean_html_content(retweet_raw_html, self.enable_noise_filter, remove_watermark=self.remove_image_watermark)
+
+            if retweet_truncation_warned:
+                retweet_md += ("\n\n> ⚠️ 被转发的原博为长微博，「展开全文」接口被微博拦截，"
+                               "本次仅保存到可见部分的摘要。")
+                retweet_cleaned_html += ('<p style="color:#b45309; font-size:13px;">⚠️ 原博长微博展开全文被拦截，'
+                                         '仅保存到可见部分摘要。</p>')
 
             if media_card_md:
                 retweet_md += media_card_md
