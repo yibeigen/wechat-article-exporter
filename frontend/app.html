@@ -1361,11 +1361,11 @@
             </div>
         </div>
 
-        <!-- ⚠️ 维护公告横幅（微信桌面端暂不可用 · 其他平台正常） -->
-        <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.07)); border: 1px solid rgba(217, 119, 6, 0.4); border-radius: 12px; padding: 12px 18px; margin-bottom: 14px; box-shadow: 0 4px 14px -3px rgba(217, 119, 6, 0.12);">
+        <!-- ✅ 公告横幅（微信公众号全量导出已恢复 · 其他平台正常） -->
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.07)); border: 1px solid rgba(5, 150, 105, 0.4); border-radius: 12px; padding: 12px 18px; margin-bottom: 14px; box-shadow: 0 4px 14px -3px rgba(5, 150, 105, 0.12);">
             <div style="display: flex; align-items: flex-start; gap: 10px; font-size: 0.88rem; color: var(--text-primary); line-height: 1.65;">
-                <span style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 9999px; letter-spacing: 0.5px; flex-shrink: 0; margin-top: 2px;">公告</span>
-                <span>⚠️ 微信公众号<b>全量历史导出通道</b>因微信官方调整接口暂时不可用；<b>单篇推文与合集导出免登录可用</b>，并已新增：粘贴单篇链接自动探测所属合集、勾选即可合并导出。全量方案修复后会第一时间在交流群通知大家，感谢理解！🙏<br>
+                <span style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 9999px; letter-spacing: 0.5px; flex-shrink: 0; margin-top: 2px;">已恢复</span>
+                <span>✅ 微信公众号<b>全量历史导出通道已恢复可用</b>：新方案改用<b>微信读书通道</b>实现整号历史文章全量归档，已沉淀为独立工具 <b>博萃 · 微信公众号文章出版归档</b>（Windows / macOS 双平台）👉 <a href="https://github.com/yibeigen/WeChat-Publisher" target="_blank" rel="noopener noreferrer" style="color: #059669; font-weight: 700; text-decoration: underline;">github.com/yibeigen/WeChat-Publisher</a>。本工作台仍支持<b>单篇推文与合集导出（免登录）</b>、粘贴单篇链接自动探测所属合集、勾选即可合并导出。<br>
                 <span style="font-size: 0.82rem; color: var(--text-secondary);">🌐 其他平台网站端均可正常使用；各平台会不定期更新，如遇解析失败或导出异常，请<b>加交流群</b>或加作者微信 <b>peace-83</b> 反馈，我们会尽快修复。</span></span>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
@@ -3991,6 +3991,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     declared_count: data.declared_count,
                     category_name: data.category_name,
                     explanation: data.explanation,
+                    truncated: data.truncated,
                     platform: currentPlatform
                 });
             } catch (e) {
@@ -4301,6 +4302,26 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                             exp += rangeNoticeHtml;
                         }
                         noticeContent.innerHTML = exp;
+                    }
+                } else if (!declaredCount && meta.truncated && meta.explanation) {
+                    // 标称数缺失（profile 被风控降级）但翻页确已提前中断：
+                    // 此前这种场景会静默给出一个看似完整的清单，用户无从发现少抓
+                    noticeBox.style.display = 'block';
+                    noticeBox.style.background = 'rgba(245, 158, 11, 0.08)';
+                    noticeBox.style.border = '1px solid rgba(245, 158, 11, 0.28)';
+
+                    if (noticeIcon) noticeIcon.innerText = '⚠️';
+                    if (noticeTitle) {
+                        noticeTitle.style.color = '#d97706';
+                        noticeTitle.innerText = `本次检索提前停止，清单可能不含全部历史博文（已收录 ${actualCount} 篇）`;
+                    }
+                    if (noticeTag) {
+                        noticeTag.style.background = 'rgba(245, 158, 11, 0.15)';
+                        noticeTag.style.color = '#d97706';
+                        noticeTag.innerText = `本次未翻完 · 可稍后重试`;
+                    }
+                    if (noticeContent) {
+                        noticeContent.innerHTML = `${escapeHtml(meta.explanation).replace(/\n/g, '<br>')}${rangeNoticeHtml}`;
                     }
                 } else if (rangeNoticeHtml) {
                     noticeBox.style.display = 'block';
