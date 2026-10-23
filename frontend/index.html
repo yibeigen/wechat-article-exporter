@@ -1062,7 +1062,7 @@
         <!-- 客户端核心架构特性卡片 -->
         <div class="bento-grid" style="margin-bottom: 32px;">
             <!-- 卡片 1: Windows 10/11 现代标准版 -->
-            <div class="bento-card col-6" id="clientCardStandard" style="border: 2px solid var(--accent-emerald); position: relative; overflow: hidden; background: linear-gradient(to bottom, var(--bg-surface), var(--bg-subtle));">
+            <div class="bento-card col-4" id="clientCardStandard" style="border: 2px solid var(--accent-emerald); position: relative; overflow: hidden; background: linear-gradient(to bottom, var(--bg-surface), var(--bg-subtle));">
                 <div style="position: absolute; top: 16px; right: 16px; background: var(--accent-emerald); color: #fff; font-size: 0.72rem; font-weight: 800; padding: 4px 12px; border-radius: 9999px; letter-spacing: 0.05em;" id="standardBadge">
                     ⭐ 官方强烈推荐 (95% 用户)
                 </div>
@@ -1114,7 +1114,7 @@
             </div>
 
             <!-- 卡片 2: Windows 7 / 8.1 兼容典藏版 -->
-            <div class="bento-card col-6" id="clientCardWin7" style="border: 1px solid var(--border-main); position: relative; background: var(--bg-surface);">
+            <div class="bento-card col-4" id="clientCardWin7" style="border: 1px solid var(--border-main); position: relative; background: var(--bg-surface);">
                 <div style="position: absolute; top: 16px; right: 16px; background: var(--bg-subtle); color: var(--text-secondary); border: 1px solid var(--border-main); font-size: 0.72rem; font-weight: 700; padding: 4px 12px; border-radius: 9999px;" id="win7Badge">
                     💻 老旧政企机房适配
                 </div>
@@ -1161,6 +1161,52 @@
                     <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 8px;">
                         适用于 Windows 7 SP1 / Windows 8 / Windows 8.1 (64位)<br>
                         GitHub 打不开或下载太慢？直接用上方<b style="color: var(--text-secondary);">本站下载</b>即可
+                    </div>
+                </div>
+            </div>
+
+            <!-- 卡片 3: macOS 原生版（Apple Silicon / Intel 双架构） -->
+            <div class="bento-card col-4" id="clientCardMac" style="border: 1px solid var(--border-main); position: relative; background: var(--bg-surface);">
+                <div style="position: absolute; top: 16px; right: 16px; background: var(--bg-subtle); color: var(--text-secondary); border: 1px solid var(--border-main); font-size: 0.72rem; font-weight: 700; padding: 4px 12px; border-radius: 9999px;">
+                    🍎 macOS 原生适配
+                </div>
+                <div>
+                    <div class="bento-icon-box" style="background: var(--bg-subtle); color: var(--text-secondary);">
+                        <svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2"></rect><line x1="9" y1="22" x2="15" y2="22"></line></svg>
+                    </div>
+                    <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px;">
+                        <h3 class="bento-title" style="font-size: 1.35rem; margin-bottom: 0;">macOS 版</h3>
+                        <span style="font-size: 0.78rem; font-family: 'JetBrains Mono', monospace; color: var(--text-muted);">Apple Silicon · Intel · v1.2.9</span>
+                    </div>
+                    <div style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600; margin-bottom: 16px;">
+                        云端 Mac 机构建 · 原生 .dmg 安装包 · 内置完整 Python 内核
+                    </div>
+                    <ul style="list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 24px;">
+                        <li style="display: flex; align-items: flex-start; gap: 8px;">
+                            <span style="color: var(--text-primary); font-weight: 800;">✓</span>
+                            <span><b>双架构全覆盖</b>：M1/M2/M3/M4 与 Intel 芯片 Mac 各有专属安装包，原生运行不吃性能</span>
+                        </li>
+                        <li style="display: flex; align-items: flex-start; gap: 8px;">
+                            <span style="color: var(--text-primary); font-weight: 800;">✓</span>
+                            <span><b>内置 Python 内核</b>：随包附带完整运行环境，零等待零配置，打开即用</span>
+                        </li>
+                        <li style="display: flex; align-items: flex-start; gap: 8px;">
+                            <span style="color: var(--text-primary); font-weight: 800;">✓</span>
+                            <span><b>功能全量对齐</b>：9 大平台抓取与导出能力与 Windows 版完全一致，本地 IP 更安全</span>
+                        </li>
+                    </ul>
+                </div>
+                <div>
+                    <a href="/api/client/download/mac" class="btn-secondary" style="width: 100%; justify-content: center; padding: 13px; font-size: 0.95rem;">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        <span>下载 macOS 版安装包 (M 系列芯片)</span>
+                    </a>
+                    <a href="/api/client/download/mac-x64" class="btn-secondary" style="width: 100%; justify-content: center; padding: 11px; font-size: 0.85rem; margin-top: 10px;">
+                        <span>Intel 芯片老款 Mac 请点这里下载</span>
+                    </a>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: 8px;">
+                        适用于 macOS 11 Big Sur 及以上版本<br>
+                        首次打开请<b style="color: var(--text-secondary);">右键 App → 打开</b>放行（未签名公证，详见发布页说明）
                     </div>
                 </div>
             </div>

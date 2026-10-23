@@ -15,6 +15,7 @@ REPO = "yibeigen/wechat-article-exporter"
 TAG = "v1.2.9"
 TITLE = "BlogDistiller (博萃) 文章导出助手 v1.2.9 官方正式版"
 DIST_DIR = Path(r"E:\Tools\Web\下载各个平台\dist_1.2.9_final")
+DIST_MAC_DIR = Path(r"E:\Tools\Web\下载各个平台\dist\mac")   # mac 包目录（GitHub Actions artifacts 解压后）
 API_BASE = f"https://api.github.com/repos/{REPO}"
 
 # 发布说明（全中文）。注意：GitHub 附件名只保留英文/数字/点/横线，
@@ -45,6 +46,10 @@ BlogDistiller 是一款多平台博主文章批量抓取、去广告清洗与多
 
 - **Windows 10 / 11 用户**：下载附件 `BlogDistiller-Setup-1.2.9.exe` 双击安装；
 - **Windows 7 / 8.1 用户**：下载附件 `BlogDistiller-Win7-Setup-x64.exe` 双击安装（基于 Electron 22 + Python 3.8.10 稳定技术链构建）。
+- **macOS 用户（M1/M2/M3/M4 芯片）**：下载附件 `BlogDistiller-macOS-1.2.9-arm64.dmg`，双击打开后把 App 拖入「应用程序」；
+- **macOS 用户（Intel 芯片）**：下载附件 `BlogDistiller-macOS-1.2.9-x64.dmg`。
+
+> ⚠️ **macOS 首次打开指引**：安装包未购买 Apple 开发者证书签名，首次打开若提示「无法验证开发者」，请**右键 App 图标 → 打开 → 再点打开**（只需一次）；或在「系统设置 → 隐私与安全性」中点击「仍要打开」。内置完整 Python 内核，开箱即用无需配置环境。
 
 > 💡 首次启动会显示初始化进度页（下载/部署本地内核，约 3~10 分钟，视网速而定），请保持网络畅通耐心等待；完成后自动进入工作台，以后启动无需再等。已安装旧版的用户直接覆盖安装即可，客户端启动时会自动静默热更新到最新功能。
 """
@@ -53,6 +58,9 @@ BlogDistiller 是一款多平台博主文章批量抓取、去广告清洗与多
 ASSETS = [
     (DIST_DIR / "BlogDistiller 文章导出助手 Setup 1.2.9.exe", "BlogDistiller-Setup-1.2.9.exe"),
     (DIST_DIR / "win7/BlogDistiller 文章导出助手 Setup 1.2.9.exe", "BlogDistiller-Win7-Setup-x64.exe"),
+    # macOS 版（GitHub Actions 云端构建，本地下载 artifacts 解压到 dist/mac/ 后按英文名归位）
+    (DIST_MAC_DIR / "BlogDistiller-macOS-arm64.dmg", "BlogDistiller-macOS-1.2.9-arm64.dmg"),
+    (DIST_MAC_DIR / "BlogDistiller-macOS-x64.dmg", "BlogDistiller-macOS-1.2.9-x64.dmg"),
 ]
 
 
@@ -63,7 +71,10 @@ def publish_github_release(token: str):
         "User-Agent": "BlogDistiller-Release-Bot"
     }
 
-    with httpx.Client(timeout=httpx.Timeout(600.0, write=600.0)) as client:
+    # 代理支持：本机直连 GitHub 不稳定时，通过 GITHUB_PROXY 环境变量指定本地代理
+    #（如 http://127.0.0.1:7897），不设置则直连
+    proxy = os.environ.get("GITHUB_PROXY") or os.environ.get("HTTPS_PROXY")
+    with httpx.Client(timeout=httpx.Timeout(600.0, write=600.0), proxy=proxy) as client:
         # 第一步：幂等获取 Release——已存在就复用，不存在才创建（脚本可安全重跑）
         print(f"🚀 正在查询 Release: {TAG} ...")
         resp = client.get(f"{API_BASE}/releases/tags/{TAG}", headers=headers)

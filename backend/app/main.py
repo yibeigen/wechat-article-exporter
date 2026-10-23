@@ -1580,6 +1580,7 @@ async def get_client_version():
         "release_notes": "知乎检索支持按内容类型勾选（文章/回答/想法独立提速）并修复大博主滚动采集假死；微博显示标称/实得数缺口；缓存与断点容错降级；检索清单新增时间与点赞排序。",
         "standard_download_url": "/api/client/download",
         "win7_download_url": "/api/client/download/win7",
+        "mac_download_url": "/api/client/download/mac",
         "mandatory": False,
     }
 
@@ -1621,6 +1622,48 @@ async def download_client_win7():
         if exes:
             return FileResponse(exes[0], filename="BlogDistiller-Win7-Setup-x64.exe", media_type="application/octet-stream")
     raise HTTPException(status_code=404, detail="Win7 兼容版安装包正在打包中，敬请期待")
+
+
+@app.get("/api/client/download/mac")
+async def download_client_mac_arm64():
+    """下载 macOS 版桌面客户端 (Apple Silicon M1/M2/M3/M4，当前 Mac 主流机型)
+
+    mac 包由 GitHub Actions 云端 mac 机构建（electron-builder dmg，未签名），
+    上传到服务器时统一改名为纯英文文件（BlogDistiller-macOS-arm64.dmg），
+    避免 URL 里的中文名在部分浏览器/CDN 上出现编码问题。
+    """
+    dist_dir = BASE_DIR / "dist" / "mac"
+    candidates = [
+        dist_dir / "BlogDistiller-macOS-arm64.dmg",
+        dist_dir / "BlogDistiller-macOS-arm64.zip",
+    ]
+    for p in candidates:
+        if p.exists():
+            return FileResponse(p, filename=p.name, media_type="application/octet-stream")
+    # 兜底：dist/mac/ 下按修改时间最新的 arm64 包（electron-builder 原始名含中文产品名）
+    if dist_dir.exists():
+        pkgs = sorted(dist_dir.glob("*arm64*.dmg"), key=lambda f: f.stat().st_mtime, reverse=True)
+        if pkgs:
+            return FileResponse(pkgs[0], filename="BlogDistiller-macOS-arm64.dmg", media_type="application/octet-stream")
+    raise HTTPException(status_code=404, detail="macOS 版安装包尚未就绪，请前往 GitHub Releases 页面下载")
+
+
+@app.get("/api/client/download/mac-x64")
+async def download_client_mac_x64():
+    """下载 macOS 版桌面客户端 (Intel 芯片老款 Mac)"""
+    dist_dir = BASE_DIR / "dist" / "mac"
+    candidates = [
+        dist_dir / "BlogDistiller-macOS-x64.dmg",
+        dist_dir / "BlogDistiller-macOS-x64.zip",
+    ]
+    for p in candidates:
+        if p.exists():
+            return FileResponse(p, filename=p.name, media_type="application/octet-stream")
+    if dist_dir.exists():
+        pkgs = sorted(dist_dir.glob("*x64*.dmg"), key=lambda f: f.stat().st_mtime, reverse=True)
+        if pkgs:
+            return FileResponse(pkgs[0], filename="BlogDistiller-macOS-x64.dmg", media_type="application/octet-stream")
+    raise HTTPException(status_code=404, detail="macOS Intel 版安装包尚未就绪，请前往 GitHub Releases 页面下载")
 
 
 # =========================================================================
