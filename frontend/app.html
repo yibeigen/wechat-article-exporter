@@ -3956,7 +3956,12 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 extractedArticlesList = data.articles || [];
                 if (extractedArticlesList.length === 0) {
                     closeStreamProgressModal();
-                    alert(`已成功连接博主【${data.author || target}】，但该博主主页尚未公开检索到任何文章。`);
+                    // 0 结果绝不等于"博主没文章"：后端在列表被登录墙/风控截断时
+                    // 会把真实原因写进 explanation，必须原样透出给用户，
+                    // 否则用户只会看到误导性的"未检索到任何文章"而无从排查
+                    const why = String(data.explanation || '').trim();
+                    alert(`已成功连接博主【${data.author || target}】，但该博主主页尚未公开检索到任何文章。`
+                        + (why ? `\n\n${why}` : '\n\n可能原因：知乎游客状态会被登录墙拦截。请先在工作台「设置」中完成知乎扫码登录（或同步 Cookie），再重新检索。'));
                     return;
                 }
 
