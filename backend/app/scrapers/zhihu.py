@@ -368,22 +368,43 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
             # 注意：必须放在 _detect_wall 等闭包函数定义之后，否则会触发
             # "referenced before assignment" 作用域错误
             main_wall = _detect_wall()
+            # 是否携带了有效登录态：决定墙类警告的文案方向（引导登录 vs 引导换网/重试）
+            has_zc0 = bool(cookies and cookies.get("z_c0"))
             if main_wall in ("captcha", "login"):
+                # 提示必须区分登录态：用户明明已扫码登录时，"请去登录"的旧文案
+                # 会把排查方向带偏（真实原因是知乎对无头浏览器/IP 的风控）
+                has_zc0 = bool(cookies and cookies.get("z_c0"))
                 if main_wall == "captcha":
-                    warnings.append(
-                        "⚠️ 当前 IP 被知乎安全验证/风控拦截，游客通道无法继续。"
-                        "请在工作台「设置」中通过浏览器扩展同步已在浏览器登录的知乎 Cookie，或直接扫码登录知乎后重试。"
-                    )
-                    if progress_callback:
-                        progress_callback("⚠️ 当前 IP 被知乎风控拦截，请在设置中同步 Cookie 或扫码登录后重试", 0, 0)
+                    if has_zc0:
+                        warnings.append(
+                            "⚠️ 已携带你的知乎登录态抓取，但仍被知乎安全验证拦截（知乎识别出了自动化浏览器或当前 IP 风控等级高）。"
+                            "建议：稍等 10 分钟后再试；或重启软件换个时间段抓；若反复出现请更换网络（如手机热点）后重试。"
+                        )
+                        if progress_callback:
+                            progress_callback("⚠️ 登录态已传入但仍被知乎风控拦截，请稍后重试或更换网络", 0, 0)
+                    else:
+                        warnings.append(
+                            "⚠️ 当前 IP 被知乎安全验证/风控拦截，游客通道无法继续。"
+                            "请在工作台「设置」中通过浏览器扩展同步已在浏览器登录的知乎 Cookie，或直接扫码登录知乎后重试。"
+                        )
+                        if progress_callback:
+                            progress_callback("⚠️ 当前 IP 被知乎风控拦截，请在设置中同步 Cookie 或扫码登录后重试", 0, 0)
                 else:
-                    warnings.append(
-                        "⚠️ 当前未检测到有效的知乎登录凭证 (z_c0)，知乎拒绝了主页访问。"
-                        "如果你已安装同步扩展，请确认在同一浏览器里已登录 zhihu.com 且扩展正常同步；"
-                        "也可以在工作台「设置」中扫码登录或手动粘贴 Cookie 后重试。"
-                    )
-                    if progress_callback:
-                        progress_callback("⚠️ 知乎登录凭证缺失，请在设置中同步/扫码/手动 Cookie 后重试", 0, 0)
+                    if has_zc0:
+                        warnings.append(
+                            "⚠️ 已携带你的知乎登录态抓取，但知乎仍要求安全验证（登录态可能已过期或被风控）。"
+                            "请退出知乎登录后重新扫码，或稍后再试。"
+                        )
+                        if progress_callback:
+                            progress_callback("⚠️ 登录态疑似失效/被风控，请重新扫码登录后重试", 0, 0)
+                    else:
+                        warnings.append(
+                            "⚠️ 当前未检测到有效的知乎登录凭证 (z_c0)，知乎拒绝了主页访问。"
+                            "如果你已安装同步扩展，请确认在同一浏览器里已登录 zhihu.com 且扩展正常同步；"
+                            "也可以在工作台「设置」中扫码登录或手动粘贴 Cookie 后重试。"
+                        )
+                        if progress_callback:
+                            progress_callback("⚠️ 知乎登录凭证缺失，请在设置中同步/扫码/手动 Cookie 后重试", 0, 0)
                 print(f"[知乎] 主页阶段即检测到{'安全验证(风控)' if main_wall == 'captcha' else '登录墙'}，快速失败跳过滚动抓取")
                 browser.close()
                 return all_articles, warnings, None
@@ -400,7 +421,8 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
             if wall_posts:
                 # 被登录墙/风控截断：如实告知用户列表不完整，而不是静默导出一部分
                 wall_label = "登录墙（知乎要求登录）" if wall_posts == "login" else "安全验证（知乎风控）"
-                wall_hint = "建议在设置中同步/扫码知乎 Cookie 后重试" if wall_posts == "login" else "建议稍后重试，或降低抓取频率"
+                wall_hint = ("登录态可能已过期或被风控，请退出后重新扫码登录再试" if has_zc0
+                             else "建议在设置中同步/扫码知乎 Cookie 后重试") if wall_posts == "login" else "建议稍后重试，或降低抓取频率"
                 warnings.append(f"⚠️ 文章列表被知乎{wall_label}截断，只加载到 {len(posts_items)} 篇，{wall_hint}")
                 if progress_callback:
                     progress_callback(f"⚠️ 文章列表被知乎{wall_label}截断，只加载到 {len(posts_items)} 篇...", len(all_articles), 0)
@@ -438,7 +460,8 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
             if wall_answers:
                 # 被登录墙/风控截断：如实告知用户列表不完整，而不是静默导出一部分
                 wall_label = "登录墙（知乎要求登录）" if wall_answers == "login" else "安全验证（知乎风控）"
-                wall_hint = "建议在设置中同步/扫码知乎 Cookie 后重试" if wall_answers == "login" else "建议稍后重试，或降低抓取频率"
+                wall_hint = ("登录态可能已过期或被风控，请退出后重新扫码登录再试" if has_zc0
+                             else "建议在设置中同步/扫码知乎 Cookie 后重试") if wall_answers == "login" else "建议稍后重试，或降低抓取频率"
                 warnings.append(f"⚠️ 回答列表被知乎{wall_label}截断，只加载到 {len(answer_items)} 篇，{wall_hint}")
                 if progress_callback:
                     progress_callback(f"⚠️ 回答列表被知乎{wall_label}截断，只加载到 {len(answer_items)} 篇...", len(all_articles), 0)
@@ -477,7 +500,8 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
             if wall_pins:
                 # 被登录墙/风控截断：如实告知用户列表不完整，而不是静默导出一部分
                 wall_label = "登录墙（知乎要求登录）" if wall_pins == "login" else "安全验证（知乎风控）"
-                wall_hint = "建议在设置中同步/扫码知乎 Cookie 后重试" if wall_pins == "login" else "建议稍后重试，或降低抓取频率"
+                wall_hint = ("登录态可能已过期或被风控，请退出后重新扫码登录再试" if has_zc0
+                             else "建议在设置中同步/扫码知乎 Cookie 后重试") if wall_pins == "login" else "建议稍后重试，或降低抓取频率"
                 warnings.append(f"⚠️ 想法列表被知乎{wall_label}截断，只加载到 {len(pin_items)} 条，{wall_hint}")
                 if progress_callback:
                     progress_callback(f"⚠️ 想法列表被知乎{wall_label}截断，只加载到 {len(pin_items)} 条...", len(all_articles), 0)
@@ -688,6 +712,14 @@ def _scrape_user_all_content_sync(url_token: str, author_name: str, cookies: Opt
             browser.close()
     except Exception as e:
         print(f"Playwright 同步抓取异常: {e}")
+        # 引擎级崩溃（杀软误杀无头浏览器、Edge/Chromium 缺失、内存不足等）绝不能
+        # 静默归零：必须把异常原样写进警告，否则用户只会看到"没检索到文章"，
+        # 排查方向被彻底带偏（2026-10-25 用户已登录仍 0 结果报障的嫌疑根因之一）
+        warnings.append(
+            f"⚠️ 抓取引擎在本机运行异常：{type(e).__name__}: {e}。"
+            "常见原因：杀毒软件（360/电脑管家）拦截了内置无头浏览器、系统缺少 Edge/Chromium，或内存不足。"
+            "请将抓取引擎加入杀软白名单后重启软件再试；若反复出现请把本提示截图反馈给开发者。"
+        )
 
     # ==============================================================
     # 完整性校验：把实际抓到的篇数与博主主页声明的总篇数比对，
@@ -967,6 +999,15 @@ class ZhihuScraper(BaseScraper):
         url_token = author_info.get("target_id", self._extract_id())
         author_name = author_info.get("name", url_token)
 
+        # 单篇回答/文章链接溯源作者失败时，url_token 会退化成回答 ID（无效主页），
+        # 后续抓取必然 0 结果。必须提前亮明，否则用户看到的是莫名其妙的"没有文章"
+        if self._is_direct_article_url() and not author_info.get("sourced_from_article"):
+            self.explanation = (
+                f"⚠️ 无法从该回答/文章链接溯源出博主主页（可能被杀毒软件拦截无头浏览器，或页面加载失败），"
+                f"退回目标 ID「{url_token}」抓取必然为空。请直接粘贴博主主页链接重试；"
+                f"若反复出现请把抓取引擎加入杀软白名单后重启软件。"
+            )
+
         if progress_callback:
             _labels = {"articles": "文章", "answers": "回答", "pins": "想法"}
             scope = "、".join(_labels[t] for t in ("articles", "answers", "pins") if t in self.content_types)
@@ -985,9 +1026,10 @@ class ZhihuScraper(BaseScraper):
             self.content_types
         )
         # 完整性警告（列表可能没抓全）写入 explanation，
-        # task_manager 会自动透传到前端任务详情中展示
+        # task_manager 会自动透传到前端任务详情中展示；
+        # 若此前已写入溯源失败等前置说明，合并而非覆盖
         if warnings:
-            self.explanation = "\n".join(warnings)
+            self.explanation = "\n".join(filter(None, [self.explanation, "\n".join(warnings)]))
         # 声明总数（回答+文章）上报：前端检索清单弹窗会显示「标称 X 篇 vs 收录 Y 篇」
         if declared_total:
             self.declared_count = declared_total
