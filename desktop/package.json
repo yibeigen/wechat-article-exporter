@@ -62,6 +62,14 @@
       {
         "from": "../requirements.txt",
         "to": "requirements.txt"
+      },
+      {
+        "from": "python-win",
+        "to": "python"
+      },
+      {
+        "from": "browsers-win",
+        "to": "browsers"
       }
     ],
     "nsis": {

@@ -1,4 +1,7 @@
+# -*- coding: utf-8 -*-
 # BlogDistiller · 核心运行依赖清单
+# 首行编码声明不可删：pip 读 -r 文件默认按系统区域编码解码，
+# 中文 Windows 是 cp936，下方中文注释会直接抛 UnicodeDecodeError 使装依赖失败
 fastapi>=0.110.0
 uvicorn[standard]>=0.28.0
 httpx>=0.27.0

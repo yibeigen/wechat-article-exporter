@@ -2920,6 +2920,34 @@ class LocalPythonManager {
         try { fs.rmSync(this.getDepsCacheFile(), { force: true }); } catch (_) {}
     }
 
+    // ===== 干净退出哨兵 =====
+    // 每次启动都跑 PowerShell 全进程扫描（实测 2.3~2.7 秒，且同步阻塞主线程）只为清孤儿后端，
+    // 而孤儿只可能来自上次被强杀/断电——正常退出时 cleanup() 已经杀干净了子进程。
+    // 用一枚哨兵文件区分两种情况：cleanup() 写入、start() 消费即删；
+    // 读到哨兵 = 上次正常退出，跳过扫描；读不到 = 异常退出，照旧全量扫描。
+    getCleanExitFlagFile() {
+        return path.join(this.app.getPath("userData"), "clean_exit.flag");
+    }
+
+    consumeCleanExitFlag() {
+        const flag = this.getCleanExitFlagFile();
+        if (!fs.existsSync(flag)) return false;
+        try { fs.unlinkSync(flag); } catch (_) {}
+        return true;
+    }
+
+    // 启动失败等异常路径上主动抹掉哨兵，逼下次启动走全量扫描自愈
+    clearCleanExitFlag() {
+        try { fs.rmSync(this.getCleanExitFlagFile(), { force: true }); } catch (_) {}
+    }
+
+    writeCleanExitFlag() {
+        try {
+            fs.mkdirSync(path.dirname(this.getCleanExitFlagFile()), { recursive: true });
+            fs.writeFileSync(this.getCleanExitFlagFile(), String(Date.now()));
+        } catch (_) {}
+    }
+
     // 首次运行内核自动部署：在用户目录创建独立 venv 并安装后端依赖（与 start.bat 本地包逻辑一致）
     // 成功返回可用的解释器 { cmd, prefix }，失败返回 null
     async ensureKernel(cmd, prefix, projectRoot) {
@@ -2965,8 +2993,6 @@ class LocalPythonManager {
             return null;
         }
 
-        // Playwright 渲染内核（知乎专栏等动态页面需要）放到服务就绪后后台安装，不阻塞进工作台
-        this.needPlaywrightSetup = true;
         return { cmd: venvPy, prefix: [] };
     }
 
@@ -2975,19 +3001,27 @@ class LocalPythonManager {
         return cmd.includes(path.join("BlogDistillerKernel", "python"));
     }
 
+    // 判断是否为随安装包交付的内置内核（extraResources 的 Resources/python，
+    // 由 scripts/build_win_kernel.py 在构建期装齐依赖，用户侧首启零联网）
+    isBundledKernel(cmd) {
+        return cmd.startsWith(path.join(process.resourcesPath, "python") + path.sep);
+    }
+
     // 带进度地下载文件，返回 Buffer；失败抛异常由调用方兜底
+    // timeoutMs：整体超时（含读流）。不传时保持原有的宽松行为——下载几百 MB 的内核不能被短超时掐断。
     // 兼容性：全局 fetch 需要 Node 18+（Electron 24+）。Win7 版用 Electron 22（Node 16.17，
     // 无全局 fetch），必须走 https 模块兜底，否则裸机下载内核与热更新在 Win7 上会静默失效。
-    async downloadFile(url) {
+    async downloadFile(url, timeoutMs) {
         if (typeof fetch === "function") {
-            return await this._downloadViaFetch(url);
+            return await this._downloadViaFetch(url, timeoutMs);
         }
-        return await this._downloadViaHttps(url);
+        return await this._downloadViaHttps(url, 5, timeoutMs);
     }
 
     // Electron 24+ / Node 18+ 主路径：fetch 流式读取
-    async _downloadViaFetch(url) {
-        const resp = await fetch(url, { redirect: "follow" });
+    async _downloadViaFetch(url, timeoutMs) {
+        const signal = timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined;
+        const resp = await fetch(url, { redirect: "follow", signal });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const total = Number(resp.headers.get("content-length") || 0);
         const reader = resp.body.getReader();
@@ -3011,15 +3045,15 @@ class LocalPythonManager {
     }
 
     // Electron 22 / Node 16 兜底：https 模块手动跟随重定向（最多 5 跳），进度上报与 fetch 版一致
-    _downloadViaHttps(url, redirectsLeft = 5) {
+    _downloadViaHttps(url, redirectsLeft = 5, timeoutMs = 30000) {
         return new Promise((resolve, reject) => {
             const mod = url.startsWith("https:") ? require("https") : require("http");
-            const req = mod.get(url, { timeout: 30000 }, (res) => {
+            const req = mod.get(url, { timeout: timeoutMs }, (res) => {
                 if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
                     res.resume();
                     if (redirectsLeft <= 0) { reject(new Error("重定向次数过多")); return; }
                     const next = new URL(res.headers.location, url).toString();
-                    resolve(this._downloadViaHttps(next, redirectsLeft - 1));
+                    resolve(this._downloadViaHttps(next, redirectsLeft - 1, timeoutMs));
                     return;
                 }
                 if (res.statusCode !== 200) {
@@ -3166,8 +3200,7 @@ class LocalPythonManager {
             this.setDeployDetail("内嵌内核依赖安装失败(官方源与清华镜像均失败)", r.stderr);
             return null;
         }
-        // Playwright 渲染内核放到服务就绪后后台安装
-        this.needPlaywrightSetup = true;
+        // Playwright 渲染内核由 start() 按"包内是否内置 browsers"统一决定是否补装
         return { cmd: pyExe, prefix: [] };
     }
 
@@ -3252,10 +3285,13 @@ class LocalPythonManager {
             return;
         }
         try {
+            // 只杀"本实例自己那份"残留：命令行必须含 <本项目根>\run.py --port。
+            // 早先按 BlogDistillerKernel|下载各个平台 这类宽口径匹配，会把同机另一个实例
+            // （源码跑的开发版 / 另一个安装目录）活着的后端当孤儿杀掉，好端端的软件被打成死壳。
+            const rootRe = this.getProjectRoot().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             const psCmd =
                 "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | " +
-                "Where-Object { $_.CommandLine -match 'run\\.py --port' -and " +
-                "$_.CommandLine -match 'BlogDistillerKernel|blogdistiller-desktop|下载各个平台' } | " +
+                "Where-Object { $_.CommandLine -match '" + rootRe + '\\\\run\\\\.py --port' + "' } | " +
                 "Select-Object -ExpandProperty ProcessId";
             const out = execSync(
                 `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCmd.replace(/"/g, '\\"')}"`,
@@ -3291,7 +3327,11 @@ class LocalPythonManager {
         // 会留下"进程活着但不再监听端口"的孤儿后端。它们轻则占住端口让新服务
         // bind 到幽灵位（Windows SO_REUSEADDR 双绑定时新 socket 收不到任何连接），
         // 重则文件锁/内存白耗。这里按命令行特征精准识别本项目后端并强杀，不误伤无关 Python。
-        this.killOrphanPythonServers();
+        if (this.consumeCleanExitFlag()) {
+            console.log("[LocalPython] 上次正常退出，跳过孤儿进程扫描");
+        } else {
+            this.killOrphanPythonServers();
+        }
 
         const port = await this.findFreePort(8000, 8050);
         this.port = port;
@@ -3311,9 +3351,19 @@ class LocalPythonManager {
 
         try {
             // ===== Python 解释器解析 + 首次运行内核自动部署 =====
-            setBootStatus("正在检测本地 Python 运行环境…");
+            setBootStatus("正在启动本地服务引擎…");
             this.lastDeployDetail = null; // 每次启动重置，避免上一次失败的旧原因串到本次报错里
             const resolved = this.resolvePython();
+            // 打包态只认随包内置内核。走系统 Python 或联网自装正是过去"给别人装不上"的主源头：
+            // 32 位解释器静默死亡、依赖装不动、下载被杀软拦截，且每台机器行为都不一样。
+            // 内核缺失即视为安装包损坏，明确报错让用户重装，不再静默联网重试。
+            if (app.isPackaged && !(resolved && this.isBundledKernel(resolved.cmd))) {
+                const err = "安装包内置的 Python 内核缺失或不可用（可能被安全软件删除），请重新下载安装包";
+                console.error(`[LocalPython] ${err}`);
+                this.lastError = err;
+                setBootStatus("❌ " + err);
+                return this.getStatus();
+            }
             let pythonCmd = null;
             let pyPrefix = [];
 
@@ -3380,6 +3430,10 @@ class LocalPythonManager {
                 ...process.env,
                 PYTHONUNBUFFERED: "1"
             };
+            // 随包内置的 Chromium 渲染内核（scripts/build_win_kernel.py 产出）：
+            // 置此变量后 playwright 直接用包内浏览器，省去首启约 170MB 联网下载
+            const bundledBrowsers = path.join(process.resourcesPath, "browsers");
+            if (fs.existsSync(bundledBrowsers)) childEnv.PLAYWRIGHT_BROWSERS_PATH = bundledBrowsers;
 
             this.child = spawn(pythonCmd, args, {
                 cwd: projectRoot,
@@ -3421,8 +3475,9 @@ class LocalPythonManager {
                 this.lastError = null;
                 // 后台静默安装 Playwright Chromium 渲染内核（知乎专栏等动态页面通道用）
                 // 不阻塞工作台加载；未装完前相关通道会提示重试，其余功能不受影响
-                if (this.needPlaywrightSetup) {
-                    this.needPlaywrightSetup = false;
+                // 包内已内置 browsers 时无需再装；否则（mac 版现状与开发态）后台补装一次，
+                // playwright 检测到浏览器已存在会秒退，不必额外记账
+                if (!childEnv.PLAYWRIGHT_BROWSERS_PATH) {
                     try {
                         const pwChild = spawn(pythonCmd, [...pyPrefix, "-m", "playwright", "install", "chromium"], {
                             cwd: projectRoot, stdio: "ignore", windowsHide: true, detached: true
@@ -3438,6 +3493,8 @@ class LocalPythonManager {
                 console.warn(`[LocalPython] 服务未在预期时间内响应健康检查，正在清理卡死进程并重试一次...`);
                 // 服务 9 秒内没起来，有可能是依赖损坏（此时缓存不可信），清掉体检缓存强制下次重新体检
                 this.clearDepsCache();
+                // 本次启动没成功，说不清有没有留下卡死的子进程，抹掉哨兵逼下次启动做全量孤儿扫描
+                this.clearCleanExitFlag();
                 // 关键防御：健康检查失败的子进程大概率已卡死（如 stdout 管道阻塞、文件锁等待）。
                 // 若不杀掉，它会永久残留：占端口、耗内存，且下次启动时误导复用判定。
                 if (this.child && this.child.pid) {
@@ -3479,6 +3536,9 @@ class LocalPythonManager {
         }
         this.child = null;
         this.running = false;
+        // 自己拉起的子进程树已确认杀干净：落哨兵，下次启动跳过孤儿扫描。
+        // 注意上面 child 为空的早退分支不写——那种情况本实例没验证过清场，下次必须扫。
+        this.writeCleanExitFlag();
     }
 
     async restart() {
@@ -3532,6 +3592,8 @@ function setBootStatus(text) {
 const HOTFIX_MANIFEST_URL = "https://doc.305758.xyz/api/client/hotfix/manifest";
 const HOTFIX_FILE_URL = "https://doc.305758.xyz/api/client/hotfix/file?path=";
 const HOTFIX_DEADLINE_MS = 8000;   // 总时间预算：超时即停，剩余差异下次启动续齐
+// 清单拉取压在初始化页上，单独设 3 秒硬超时（无超时的 fetch 遇服务器抽风会让用户干等）
+const HOTFIX_MANIFEST_TIMEOUT_MS = 3000;
 let pendingHotfixNotice = null;    // 更新结果暂存，工作台加载成功后通知前端弹 toast
 
 function hotfixAllowed(relPath) {
@@ -3555,7 +3617,7 @@ async function checkAndApplyHotfix(manager, projectRoot) {
     // 1. 拉取清单（失败 = 离线 / 服务器不可达，静默跳过）
     let manifest;
     try {
-        const buf = await manager.downloadFile(HOTFIX_MANIFEST_URL);
+        const buf = await manager.downloadFile(HOTFIX_MANIFEST_URL, HOTFIX_MANIFEST_TIMEOUT_MS);
         manifest = JSON.parse(buf.toString("utf8"));
     } catch (e) {
         console.log("[Hotfix] 清单拉取失败，跳过热更新:", e.message);
@@ -3654,7 +3716,7 @@ function navigateMainWindowToWorkbench(port) {
     const healthUrl = `http://127.0.0.1:${port}/api/health`;
     console.log(`[BlogDistiller] 准备加载本地桌面界面: ${localUrl}`);
 
-    const POLL_INTERVAL_MS = 2000;
+    const POLL_INTERVAL_MS = 300;
     const MAX_POLL_MS = 3 * 60 * 1000; // 首次启动要部署 Python 内核依赖，最长等 3 分钟
     const pollStart = Date.now();
 
@@ -3669,10 +3731,14 @@ function navigateMainWindowToWorkbench(port) {
 
     const enterWorkbench = async () => {
         let serviceReady = false;
+        let lastStatusSec = -1;
         while (Date.now() - pollStart < MAX_POLL_MS) {
             if (await pollHealthOnce()) { serviceReady = true; break; }
             const elapsedSec = Math.round((Date.now() - pollStart) / 1000);
-            setBootStatus(`正在等待本地服务就绪…（已等待 ${elapsedSec} 秒，首次启动部署依赖可能需要数分钟）`);
+            if (elapsedSec !== lastStatusSec) {
+                lastStatusSec = elapsedSec;
+                setBootStatus(`正在等待本地服务就绪…（已等待 ${elapsedSec} 秒，首次启动部署依赖可能需要数分钟）`);
+            }
             await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
         }
 
@@ -3746,7 +3812,7 @@ function createMainWindow(port = null) {
     // 未传 port：先展示初始化进度页，等内核部署完成后由 navigateMainWindowToWorkbench 切入工作台
     if (!port) {
         bootPageActive = true;
-        const bootHtml = `<!doctype html><html><head><meta charset="utf-8"><title>BlogDistiller 初始化中</title><style>body{font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif;background:#f7f6f2;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{text-align:center;max-width:560px;padding:40px}.spin{width:44px;height:44px;border:4px solid #d1d5db;border-top-color:#059669;border-radius:50%;margin:0 auto 22px;animation:s 1s linear infinite}@keyframes s{to{transform:rotate(360deg)}}h1{font-size:1.25rem;color:#111827;margin:0 0 10px}p{color:#6b7280;font-size:.92rem;line-height:1.7;margin:0}#st{margin-top:18px;color:#059669;font-weight:600;min-height:1.4em}</style></head><body><div class="card"><div class="spin"></div><h1>BlogDistiller · 博萃 正在初始化</h1><p>正在启动本地服务引擎并同步最新更新（每次打开软件都需重新拉起后台引擎）；首次启动需额外部署运行环境，耗时较长，完成后将自动进入工作台。</p><div id="st">正在启动…</div></div></body></html>`;
+        const bootHtml = `<!doctype html><html><head><meta charset="utf-8"><title>BlogDistiller 初始化中</title><style>body{font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif;background:#f7f6f2;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{text-align:center;max-width:560px;padding:40px}.spin{width:44px;height:44px;border:4px solid #d1d5db;border-top-color:#059669;border-radius:50%;margin:0 auto 22px;animation:s 1s linear infinite}@keyframes s{to{transform:rotate(360deg)}}h1{font-size:1.25rem;color:#111827;margin:0 0 10px}p{color:#6b7280;font-size:.92rem;line-height:1.7;margin:0}#st{margin-top:18px;color:#059669;font-weight:600;min-height:1.4em}</style></head><body><div class="card"><div class="spin"></div><h1>BlogDistiller · 博萃 正在初始化</h1><p>正在启动本地服务引擎（每次打开软件都要重新拉起后台引擎，通常几秒完成）；首次运行会多花一点时间准备运行环境，完成后自动进入工作台。</p><div id="st">正在启动…</div></div></body></html>`;
         mainWindow.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(bootHtml)).catch(() => {});
         return;
     }
@@ -3786,10 +3852,14 @@ app.on("second-instance", () => {
 // 若不加锁，用户双击两次图标会拉起两个 GUI 实例，各自 spawn 一套 Python 后端，
 // 互相抢端口/抢文件，产生"进程活着但服务不可用"的僵尸态。
 // 拿不到锁说明已有实例在跑：通知其窗口置前，然后本实例立即退出。
+// 必须 app.exit + 顶层 return 硬退：app.quit() 只是"排期"退出，whenReady 照样 resolve，
+// 第二实例会跑完整个启动流程——开头那步孤儿清理会 taskkill 掉第一实例活着的服务，
+// 用户多点一次图标就把正在用的软件打成了死壳。
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
-    console.log("[BlogDistiller] 检测到应用已在运行，本实例将退出并唤起已运行的窗口。");
-    app.quit();
+    console.log("[BlogDistiller] 检测到应用已在运行，本实例退出并唤起已运行的窗口。");
+    app.exit(0);
+    return;
 }
 
 app.whenReady().then(async () => {

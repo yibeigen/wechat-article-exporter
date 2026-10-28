@@ -53,14 +53,22 @@ jobs:
           chmod +x desktop/python-mac/bin/*
           ./desktop/python-mac/bin/python3 --version
 
-      # 冒烟测试：把「内置内核 → venv → 装依赖 → 起服务 → 健康检查」完整链路真跑一遍，
-      # 这是 mac 版最核心的自部署链路，等价于用户新机首启发生的事
-      - name: 冒烟测试（与客户端相同的 venv 内核链路）
+      # 依赖预装进内置内核：只打解释器不打依赖，用户首启仍要联网 pip，
+      # 与 Windows 版同一个病根。装齐后客户端 checkDeps 直接通过，首启零网络。
+      - name: 向内核预装后端依赖
+        run: |
+          ./desktop/python-mac/bin/python3 -m pip install --no-cache-dir \
+            -r requirements.txt --disable-pip-version-check \
+            -i https://pypi.org/simple
+          ./desktop/python-mac/bin/python3 -c \
+            "import fastapi,uvicorn,httpx,bs4,markdownify,lxml,docx,jinja2,pydantic,PIL;print('内核依赖自检 OK')"
+
+      # 冒烟测试：直接以「安装包内那一个内核」起服务，与用户首启发生的事完全等价。
+      # 早先这里另建 venv 装依赖，测的并不是发布产物真正会走的链路。
+      - name: 冒烟测试（与客户端相同的内置内核链路）
         run: |
           set -e
-          desktop/python-mac/bin/python3 -m venv /tmp/bd_smoke_venv
-          /tmp/bd_smoke_venv/bin/pip install -q -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-          nohup /tmp/bd_smoke_venv/bin/python run.py --port 8060 --host 127.0.0.1 --no-reload > smoke.log 2>&1 &
+          nohup ./desktop/python-mac/bin/python3 run.py --port 8060 --host 127.0.0.1 --no-reload > smoke.log 2>&1 &
           SMOKE_PID=$!
           OK=0
           for i in $(seq 1 60); do

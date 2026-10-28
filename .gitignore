@@ -75,6 +75,12 @@ desktop/node_modules/
 desktop/out/
 package-lock.json
 
+# 构建期生成的内置内核（scripts/build_win_kernel.py 产物，随包交付，不入版本库）
+desktop/python-win/
+desktop/browsers-win/
+desktop/.kernel_cache/
+desktop/.kernel_extract/
+
 # ----------------------------------------------
 # 7. IDE 与操作系统生成文件
 # ----------------------------------------------
