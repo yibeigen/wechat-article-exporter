@@ -1312,8 +1312,8 @@
                 <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
                 <span>GitHub</span>
             </a>
-            <!-- 刷新界面 -->
-            <button type="button" class="nav-btn" id="pageReloadBtn" title="刷新页面 (快捷键: F5 或 Ctrl+R)" onclick="window.location.reload()" style="font-weight: 600; color: var(--text-secondary);">
+            <!-- 刷新界面（先查 GitHub 有无新版，有则弹更新提示；没有才直接重载页面） -->
+            <button type="button" class="nav-btn" id="pageReloadBtn" title="检查 GitHub 新版本并刷新页面 (快捷键: F5 或 Ctrl+R)" onclick="onRefreshWithUpdateCheck()" style="font-weight: 600; color: var(--text-secondary);">
                 <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
                 <span>刷新</span>
             </button>
@@ -2661,6 +2661,29 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
         </div>
     </div>
 
+    <!-- GitHub 新版本提示弹窗：点顶栏「刷新」时检查，确认有新版才弹出 -->
+    <div id="updateModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card" style="max-width: 620px;">
+            <div class="modal-header">
+                <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
+                    <svg class="icon" viewBox="0 0 24 24" style="color: #10b981;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    <span>发现新版本</span>
+                    <span id="updateModalTag" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 9999px; background: rgba(16, 185, 129, 0.14); color: #059669; font-weight: 800; font-family: monospace;">-</span>
+                </div>
+                <button class="modal-close-btn" onclick="closeUpdateModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 16px 22px;">
+                <div id="updateModalMeta" style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 10px;"></div>
+                <!-- GitHub Release 正文属于远端内容，一律按纯文本渲染，绝不注入 HTML -->
+                <div id="updateModalNotes" style="max-height: 240px; overflow-y: auto; white-space: pre-wrap; font-size: 0.78rem; line-height: 1.7; color: var(--text-primary); background: var(--bg-subtle); border: 1px solid var(--border-main); border-radius: 8px; padding: 12px 14px;"></div>
+            </div>
+            <div class="modal-footer" style="padding: 12px 22px; border-top: 1px solid var(--border-main); display: flex; justify-content: flex-end; gap: 10px; background: var(--bg-subtle);">
+                <button type="button" class="nav-btn" onclick="closeUpdateModal()" style="padding: 6px 16px;">以后再说</button>
+                <a id="updateModalLink" href="#" target="_blank" rel="noopener noreferrer" class="btn-confirm" style="padding: 6px 18px; text-decoration: none; display: inline-flex; align-items: center;">前往下载更新 ↗</a>
+            </div>
+        </div>
+    </div>
+
     <!-- 3. 官方社群与公众号关注交流通知弹窗 (每日频控自动弹出 1 次) -->
     <div id="communityModal" class="modal-overlay" style="display: none;">
         <div class="modal-card" style="max-width: 480px; text-align: center;">
@@ -2922,6 +2945,109 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 }
             } catch (e) { /* 版本号显示失败不影响任何功能 */ }
         })();
+
+        // ===== 顶栏「刷新」：先查 GitHub 最新 Release，有新版弹窗引导下载，没有才重载页面 =====
+        // 只做「提示 + 跳转官方发布页」，不在客户端内自动下载安装——安装包 400MB+，
+        // 静默替换正在运行的自身既不可靠也容易与安全软件冲突，交给用户显式下载最稳。
+        const GH_REPO = 'yibeigen/wechat-article-exporter';
+        const GH_LATEST_API = `https://api.github.com/repos/${GH_REPO}/releases/latest`;
+        const GH_RELEASE_TTL_MS = 10 * 60 * 1000;  // 结果缓存 10 分钟：GitHub 未登录限流 60 次/小时/IP，连点刷新不该反复打
+        let updateCheckBusy = false;
+
+        function getClientVersion() {
+            return new URLSearchParams(location.search).get('v') || '';
+        }
+
+        // 语义化版本比较：a>b 返回 1，相等 0，a<b 返回 -1（非数字段按 0 处理）
+        function compareVersions(a, b) {
+            const parse = (s) => String(s || '').replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+            const pa = parse(a), pb = parse(b);
+            for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+                const x = pa[i] || 0, y = pb[i] || 0;
+                if (x !== y) return x > y ? 1 : -1;
+            }
+            return 0;
+        }
+
+        function readReleaseCache() {
+            try {
+                const o = JSON.parse(sessionStorage.getItem('bd_latest_release') || 'null');
+                return o && (Date.now() - o.at < GH_RELEASE_TTL_MS) ? o.info : null;
+            } catch (e) { return null; }
+        }
+
+        async function fetchLatestRelease() {
+            const cached = readReleaseCache();
+            if (cached) return cached;
+            // 6 秒硬超时：GitHub 在国内直连不稳，绝不能让「刷新」按钮变成无限转圈
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 6000);
+            try {
+                const resp = await fetch(GH_LATEST_API, { signal: ctrl.signal });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const data = await resp.json();
+                if (!data.tag_name) throw new Error('返回内容异常（缺少 tag_name）');
+                const info = {
+                    tag: String(data.tag_name),
+                    url: data.html_url || `https://github.com/${GH_REPO}/releases`,
+                    date: String(data.published_at || '').slice(0, 10),
+                    notes: String(data.body || '').replace(/^#+\s*/gm, '').replace(/\*\*/g, '').trim()
+                };
+                try { sessionStorage.setItem('bd_latest_release', JSON.stringify({ at: Date.now(), info })); } catch (e) {}
+                return info;
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        function openUpdateModal(info, curVer) {
+            const modal = document.getElementById('updateModal');
+            if (!modal) return;
+            document.getElementById('updateModalTag').innerText = info.tag;
+            document.getElementById('updateModalMeta').innerText =
+                (curVer ? `当前版本 v${curVer} → 最新版 ${info.tag}` : `最新版本 ${info.tag}`)
+                + (info.date ? ` · 发布于 ${info.date}` : '');
+            document.getElementById('updateModalNotes').textContent = info.notes || '（该版本未填写更新说明）';
+            document.getElementById('updateModalLink').href = info.url;
+            modal.style.display = 'flex';
+        }
+
+        function closeUpdateModal() {
+            const modal = document.getElementById('updateModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function onRefreshWithUpdateCheck() {
+            // 仅桌面客户端查更新：网页版没有"客户端版本"可比，保持原来的刷新语义，F5 也照常可用
+            if (new URLSearchParams(location.search).get('client_mode') !== '1') {
+                window.location.reload();
+                return;
+            }
+            if (updateCheckBusy) return;
+            updateCheckBusy = true;
+            showToast('正在检查 GitHub 是否有新版本…');
+            const curVer = getClientVersion();
+            let info = null, failMsg = '';
+            try {
+                info = await fetchLatestRelease();
+            } catch (e) {
+                failMsg = e && e.name === 'AbortError' ? '检查超时' : ('检查失败：' + (e && e.message ? e.message : e));
+            } finally {
+                updateCheckBusy = false;
+            }
+            // 旧版桌面壳（1.2.8 及更早）的启动 URL 不带 v 参数，拿不到当前版本就没法比较，
+            // 直接把最新版告诉用户，让他自己去发布页核对
+            if (info && (!curVer || compareVersions(info.tag, curVer) > 0)) {
+                openUpdateModal(info, curVer);
+                return;
+            }
+            if (failMsg) {
+                showToast(`⚠️ ${failMsg}（网络或 GitHub 访问受限），已直接刷新页面`);
+            } else {
+                showToast(`✓ 已是最新版本 v${curVer}，正在刷新页面`);
+            }
+            setTimeout(() => window.location.reload(), 1800);
+        }
 
         let currentPlatform = 'wechat';
         let platformsData = [];
