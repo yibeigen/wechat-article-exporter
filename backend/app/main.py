@@ -1576,8 +1576,8 @@ async def api_admin_update_contributor(contributor_id: str, data: dict = Body(..
 async def get_client_version():
     """获取最新客户端版本信息与下载链接"""
     return {
-        "version": "1.2.9",
-        "release_notes": "知乎检索支持按内容类型勾选（文章/回答/想法独立提速）并修复大博主滚动采集假死；微博显示标称/实得数缺口；缓存与断点容错降级；检索清单新增时间与点赞排序。",
+        "version": "1.3.0",
+        "release_notes": "顶栏「刷新」新增 GitHub 新版本检查，发现新版一键前往下载；安装包自带 Python 运行环境与浏览器内核，首启不再联网部署；修复多点图标把运行中软件打成空壳；启动提速（二次启动实测 9.2 秒降至 6.6 秒）。",
         "standard_download_url": "/api/client/download",
         "win7_download_url": "/api/client/download/win7",
         "mac_download_url": "/api/client/download/mac",

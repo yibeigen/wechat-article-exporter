@@ -2554,7 +2554,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
                     <svg class="icon" viewBox="0 0 24 24" style="color: #6366f1;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                     <span>BlogDistiller 版本更新日志</span>
-                    <span style="font-size: 0.68rem; padding: 2px 8px; border-radius: 9999px; background: rgba(0, 102, 255, 0.12); color: #0066ff; font-weight: 800; font-family: monospace;">v1.2.9</span>
+                    <span style="font-size: 0.68rem; padding: 2px 8px; border-radius: 9999px; background: rgba(0, 102, 255, 0.12); color: #0066ff; font-weight: 800; font-family: monospace;">v1.3.0</span>
                 </div>
                 <button class="modal-close-btn" onclick="closeChangelogModal()">&times;</button>
             </div>
@@ -2566,10 +2566,25 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     </div>
 
                     <div style="display: flex; flex-direction: column; gap: 14px;">
-                        <!-- v1.2.9 最新版本：蓝色高亮卡 -->
+                        <!-- v1.3.0 最新版本：蓝色高亮卡 -->
                         <div style="background: var(--bg-surface); border: 1px solid rgba(0, 102, 255, 0.35); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow-sm);">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <span style="background: #0066ff; color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; font-family: monospace;">v1.2.9</span>
+                                <span style="background: #0066ff; color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; font-family: monospace;">v1.3.0</span>
+                                <span style="font-size: 0.74rem; color: var(--text-muted);">2026-10-28</span>
+                            </div>
+                            <ul style="margin: 0; padding-left: 18px; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.7;">
+                                <li><strong>顶栏「刷新」会先查 GitHub 有没有新版本</strong>：有新版弹窗显示当前版本/最新版与更新说明，一键前往下载；没新版才刷新页面；</li>
+                                <li><strong>安装包自带 Python 运行环境与浏览器内核</strong>：首次打开不再联网下载环境，没装过 Python、网络受限的电脑也能直接用；</li>
+                                <li>修复「多点一次图标就把正在运行的软件打成空壳」：检测到已运行只唤起窗口，不再误杀后台服务；</li>
+                                <li>启动提速（实测二次启动 9.2 秒 → 6.6 秒）：热更清单拉取加 3 秒超时，服务器抽风不再无限干等；正常退出后下次启动跳过孤儿进程扫描；</li>
+                                <li>启动页文案讲实话：暖启动不再显示"正在检测本地 Python 运行环境"。</li>
+                            </ul>
+                        </div>
+
+                        <!-- v1.2.9 -->
+                        <div style="background: var(--bg-subtle); border: 1px solid var(--border-main); border-radius: 10px; padding: 14px 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="background: var(--text-muted); color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; font-family: monospace;">v1.2.9</span>
                                 <span style="font-size: 0.74rem; color: var(--text-muted);">2026-10-18</span>
                             </div>
                             <ul style="margin: 0; padding-left: 18px; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.7;">
