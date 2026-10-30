@@ -100,7 +100,7 @@ jobs:
         run: |
           APP="$(find dist/mac -type d -name '*.app' -print -quit)"
           test -n "$APP"
-          test "$(defaults read "$APP/Contents/Info.plist" CFBundleShortVersionString)" = "1.3.0"
+          node -e "const a=require('./desktop/node_modules/@electron/asar');const p=JSON.parse(a.extractFile(process.argv[1],'package.json'));if(p.version!=='1.3.0')throw new Error('版本不符: '+p.version);console.log('App 版本:',p.version)" "$APP/Contents/Resources/app.asar"
           test -x "$APP/Contents/Resources/python/bin/python3"
           CHROMIUM_DIR="$(find "$APP/Contents/Resources/browsers" -maxdepth 1 -type d -name 'chromium-*' -print -quit)"
           test -n "$CHROMIUM_DIR"
