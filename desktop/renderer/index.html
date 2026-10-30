@@ -18,6 +18,7 @@
         h1 { font-size: 1.3rem; margin: 0 0 14px; }
         p  { color: #6b7280; font-size: .93rem; line-height: 1.75; margin: 0 0 10px; }
         #detail { color: #b91c1c; font-size: .84rem; word-break: break-all; min-height: 1.3em; }
+        #logPath { color: #9ca3af; font-size: .78rem; word-break: break-all; margin-top: 12px; }
         #status { color: #059669; font-weight: 600; min-height: 1.4em; margin-top: 10px; }
         button {
             margin: 16px 6px 0; padding: 10px 28px; border: none; border-radius: 8px;
@@ -33,23 +34,38 @@
         <p>新版工作台由本地 Python 服务驱动。当前服务没有成功启动，<br>
            可能是首次部署未完成、网络受限，或被安全软件拦截。</p>
         <p id="detail"></p>
+        <p id="logPath"></p>
         <div id="status"></div>
         <div>
             <button id="retryBtn" onclick="retryStart()">重试启动</button>
+            <button id="logBtn" class="ghost" style="display:none" onclick="openLog()">查看启动日志</button>
             <button class="ghost" onclick="window.close()">关闭应用</button>
         </div>
     </div>
     <script>
         var api = window.electronAPI || null;
         var detailEl = document.getElementById('detail');
+        var logPathEl = document.getElementById('logPath');
+        var logBtn = document.getElementById('logBtn');
         var statusEl = document.getElementById('status');
         var retryBtn = document.getElementById('retryBtn');
+        var currentLogPath = '';
 
-        // 展示主进程记录的失败原因（若有）
+        // 展示主进程记录的失败原因与日志位置（若有）
         if (api && api.getLocalServiceStatus) {
             api.getLocalServiceStatus().then(function (st) {
                 if (st && st.error) detailEl.textContent = '失败原因：' + st.error;
+                if (st && st.logPath) {
+                    currentLogPath = st.logPath;
+                    logPathEl.textContent = '启动日志：' + st.logPath;
+                    logBtn.style.display = 'inline-block';
+                }
             }).catch(function () {});
+        }
+
+        function openLog() {
+            if (currentLogPath && api && api.revealFile) api.revealFile(currentLogPath);
+            else if (currentLogPath) api.openExternal('file:///' + currentLogPath.replace(/\\/g, '/'));
         }
 
         function pollHealth(port, maxSeconds) {
@@ -74,6 +90,14 @@
             else if (api && api.startLocalService) begin = api.startLocalService();
 
             Promise.resolve(begin).then(function (st) {
+                if (st && st.error) {
+                    detailEl.textContent = '失败原因：' + st.error;
+                    if (st.logPath) {
+                        currentLogPath = st.logPath;
+                        logPathEl.textContent = '启动日志：' + st.logPath;
+                        logBtn.style.display = 'inline-block';
+                    }
+                }
                 var port = st && st.port;
                 if (!port) {
                     statusEl.textContent = '未能获取本地服务端口，请关闭应用后重新打开。';

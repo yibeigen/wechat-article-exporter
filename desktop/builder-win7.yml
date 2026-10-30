@@ -57,6 +57,10 @@ extraResources:
     to: "requirements.txt"
   - from: "python-win7"
     to: "python"
+  # Win7 未装 KB2999226 时 Python 3.8 会因缺 UCRT 直接静默退出。
+  # 这份 app-local 运行库单独受版本管理，避免重建内核时丢失。
+  - from: "win7-ucrt"
+    to: "python"
   - from: "browsers-win7"
     to: "browsers"
 

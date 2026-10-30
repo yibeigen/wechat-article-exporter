@@ -122,6 +122,23 @@ def install_deps():
     raise SystemExit("[kernel] 依赖安装失败：阿里云与清华镜像均不可用")
 
 
+def deploy_win7_runtime():
+    """把 UCRT/VC 运行库放进内核目录（Win7 未装 KB2999226 时 Python 3.8 起不来）。
+
+    源目录 desktop/win7-ucrt 受版本管理，重建内核后必须重新部署，
+    否则包里的 python.exe 会在 Win7 上因缺少 api-ms-win-crt-* 直接退出。
+    """
+    if not WIN7:
+        return
+    src = DESKTOP / "win7-ucrt"
+    dlls = sorted(src.glob("*.dll")) if src.is_dir() else []
+    if not dlls:
+        raise SystemExit("[kernel] 缺少 desktop/win7-ucrt 运行库，Win7 版打包后 Python 将无法启动")
+    for f in dlls:
+        shutil.copy2(f, KERNEL / f.name)
+    log(f"已部署 {len(dlls)} 个 Win7 运行库（UCRT + msvcp140）到内核目录")
+
+
 def install_browsers():
     env = {**os.environ, "PLAYWRIGHT_BROWSERS_PATH": str(BROWSERS)}
     if BROWSERS.exists():
@@ -163,6 +180,7 @@ def main():
     tar_path = fetch_kernel()
     extract(tar_path)
     install_deps()
+    deploy_win7_runtime()
     install_browsers()
     verify()
     write_lock(tar_path)

@@ -2759,6 +2759,41 @@ class LocalPythonManager {
         // 替代笼统的"请检查网络"——很多部署失败根本不是网络问题（如假 Python、依赖不兼容）
         this.lastDeployDetail = null;
         this.stdoutLogs = [];
+        this.stderrLogs = [];
+        this.lastExit = null;
+        // 启动期持久化日志：Win7 等目标机没有控制台可看，出错时这是唯一可追溯的证据
+        this.logDir = path.join(this.app.getPath("userData"), "logs");
+        this.logFile = path.join(this.logDir, "boot.log");
+    }
+
+    bootLog(msg) {
+        const line = `[${new Date().toISOString()}] ${msg}`;
+        console.log(`[Boot] ${msg}`);
+        try {
+            fs.mkdirSync(this.logDir, { recursive: true });
+            if (fs.existsSync(this.logFile) && fs.statSync(this.logFile).size > 2 * 1024 * 1024) {
+                fs.renameSync(this.logFile, this.logFile + ".old");
+            }
+            fs.appendFileSync(this.logFile, line + "\r\n");
+        } catch (_) { /* 日志写失败绝不影响启动 */ }
+    }
+
+    // 把"Python 为什么没起来"拼成人话：退出码 + 最后几行 stderr。
+    // 0xC0000135(-1073741515/3221225781) 是 Windows 找不到运行库，Win7 未装 KB2999226 的典型表现
+    describeStartFailure() {
+        const exit = this.lastExit
+            ? `Python 进程退出码 ${this.lastExit.code}${this.lastExit.signal ? " / " + this.lastExit.signal : ""}`
+            : "等待健康检查超时";
+        const tail = this.stderrLogs.join("").trim().split(/\r?\n/).filter(Boolean).slice(-8).join(" | ").slice(-400);
+        let why;
+        if (this.lastExit && (this.lastExit.code === -1073741515 || this.lastExit.code === 3221225781)) {
+            why = "系统缺少 Python 运行库（UCRT），请检查安装包是否完整或系统更新是否缺失";
+        } else if (tail) {
+            why = tail;
+        } else {
+            why = "Python 进程没有任何输出即退出，常见原因是缺少系统运行库，或被安全软件拦截";
+        }
+        return `本地服务未能启动：${exit}。${why}`;
     }
 
     // 记录一次部署失败的真实原因：取 stderr 末尾两行压成单行（错误摘要都在末尾），
@@ -3315,6 +3350,10 @@ class LocalPythonManager {
     }
 
     async start({ retryOnFail = false } = {}) {
+        this.lastError = null;
+        this.lastExit = null;
+        this.stdoutLogs = [];
+        this.stderrLogs = [];
         if (this.running && this.child) {
             const ok = await this.checkHealth(this.port);
             if (ok) {
@@ -3341,11 +3380,14 @@ class LocalPythonManager {
         console.log(`[LocalPython] 正在启动本地 Python 服务...`);
         console.log(`[LocalPython] 项目根目录: ${projectRoot}`);
         console.log(`[LocalPython] 启动脚本: ${runScript}, 监听端口: ${port}`);
+        this.bootLog(`启动尝试${retryOnFail ? "（重试）" : ""} | 系统=${typeof process.getSystemVersion === "function" ? process.getSystemVersion() : process.platform} | Electron=${process.versions.electron} | Chromium=${process.versions.chrome}`);
+        this.bootLog(`端口=${port} | 项目根=${projectRoot} | 启动脚本=${runScript}`);
 
         if (!fs.existsSync(runScript)) {
             const err = `未找到 run.py 启动脚本: ${runScript}`;
             console.error(`[LocalPython] ${err}`);
             this.lastError = err;
+            this.bootLog(err);
             return this.getStatus();
         }
 
@@ -3361,6 +3403,7 @@ class LocalPythonManager {
                 const err = "安装包内置的 Python 内核缺失或不可用（可能被安全软件删除），请重新下载安装包";
                 console.error(`[LocalPython] ${err}`);
                 this.lastError = err;
+                this.bootLog(err);
                 setBootStatus("❌ " + err);
                 return this.getStatus();
             }
@@ -3380,6 +3423,7 @@ class LocalPythonManager {
                     const err = `Python 内核自动下载失败${detail}，请检查网络后重启应用，或到 python.org 手动安装 Python`;
                     console.error(`[LocalPython] ${err}`);
                     this.lastError = err;
+                    this.bootLog(err);
                     setBootStatus("❌ " + err);
                     return this.getStatus();
                 }
@@ -3415,6 +3459,7 @@ class LocalPythonManager {
                     const err = `本地 Python 内核自动部署失败${detail}，请检查网络后重启应用重试`;
                     console.error(`[LocalPython] ${err}`);
                     this.lastError = err;
+                    this.bootLog(err);
                     setBootStatus("❌ " + err);
                     return this.getStatus();
                 }
@@ -3425,6 +3470,7 @@ class LocalPythonManager {
             }
             // ===== 内核部署逻辑结束 =====
 
+            this.bootLog(`Python 解释器: ${pythonCmd} ${pyPrefix.join(" ")}${path.isAbsolute(pythonCmd) ? `（存在=${fs.existsSync(pythonCmd)}）` : ""}`);
             const args = [...pyPrefix, runScript, "--port", String(port), "--host", "127.0.0.1", "--no-reload"];
             const childEnv = {
                 ...process.env,
@@ -3434,6 +3480,8 @@ class LocalPythonManager {
             // 置此变量后 playwright 直接用包内浏览器，省去首启约 170MB 联网下载
             const bundledBrowsers = path.join(process.resourcesPath, "browsers");
             if (fs.existsSync(bundledBrowsers)) childEnv.PLAYWRIGHT_BROWSERS_PATH = bundledBrowsers;
+
+            this.bootLog(`spawn: ${pythonCmd} ${args.join(" ")}`);
 
             this.child = spawn(pythonCmd, args, {
                 cwd: projectRoot,
@@ -3451,17 +3499,24 @@ class LocalPythonManager {
 
             this.child.stderr.on("data", (data) => {
                 const text = data.toString();
+                this.stderrLogs.push(text);
+                if (this.stderrLogs.length > 120) this.stderrLogs.shift();
                 process.stderr.write(`[LocalPython STDERR] ${text}`);
+                const line = text.trim();
+                if (line) this.bootLog(`[stderr] ${line.slice(0, 2000)}`);
             });
 
             this.child.on("error", (err) => {
                 console.error(`[LocalPython] 进程发生错误:`, err);
+                this.bootLog(`子进程错误: ${err.message}`);
                 this.lastError = err.message;
                 this.running = false;
             });
 
             this.child.on("exit", (code, signal) => {
                 console.log(`[LocalPython] 进程退出 code=${code}, signal=${signal}`);
+                this.lastExit = { code, signal };
+                this.bootLog(`Python 进程退出 code=${code} signal=${signal}`);
                 this.running = false;
                 this.child = null;
             });
@@ -3491,6 +3546,7 @@ class LocalPythonManager {
                 }
             } else {
                 console.warn(`[LocalPython] 服务未在预期时间内响应健康检查，正在清理卡死进程并重试一次...`);
+                this.bootLog(`健康检查超时（端口 ${port}）${retryOnFail ? "，重试仍失败" : "，清理后重试一次"}`);
                 // 服务 9 秒内没起来，有可能是依赖损坏（此时缓存不可信），清掉体检缓存强制下次重新体检
                 this.clearDepsCache();
                 // 本次启动没成功，说不清有没有留下卡死的子进程，抹掉哨兵逼下次启动做全量孤儿扫描
@@ -3508,10 +3564,14 @@ class LocalPythonManager {
                     this.stop();
                     return await this.start({ retryOnFail: true });
                 }
+                // 两次都没起来：把真实原因留给错误页，别再让用户看到空白
+                this.lastError = this.describeStartFailure();
+                this.bootLog(`启动失败: ${this.lastError}`);
             }
         } catch (err) {
             console.error(`[LocalPython] 启动失败:`, err);
             this.lastError = err.message;
+            this.bootLog(`启动异常: ${err.message}`);
             this.running = false;
         }
 
@@ -3553,6 +3613,7 @@ class LocalPythonManager {
             port: this.port,
             pid: this.child ? this.child.pid : null,
             error: this.lastError,
+            logPath: this.logFile,
             url: `http://127.0.0.1:${this.port}`
         };
     }
@@ -3730,6 +3791,16 @@ function navigateMainWindowToWorkbench(port) {
     });
 
     const enterWorkbench = async () => {
+        // start() 已明确失败（进程退出/两次健康检查都不通）：立刻展示错误页和真实原因，
+        // 不再让用户对着转圈空等 3 分钟——这正是 Win7 真机故障时"什么都看不到"的来源
+        const mgrStatus = localPythonManager ? localPythonManager.getStatus() : null;
+        if (mgrStatus && !mgrStatus.running && mgrStatus.error) {
+            console.error(`[BlogDistiller] 本地服务启动失败，直接展示错误页: ${mgrStatus.error}`);
+            setBootStatus("❌ " + mgrStatus.error);
+            mainWindow.loadFile(path.join(__dirname, "renderer", "index.html")).catch(() => {});
+            return;
+        }
+
         let serviceReady = false;
         let lastStatusSec = -1;
         while (Date.now() - pollStart < MAX_POLL_MS) {
