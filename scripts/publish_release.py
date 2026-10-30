@@ -54,6 +54,7 @@ BlogDistiller 是一款多平台博主文章批量抓取、去广告清洗与多
 - **Windows 7 / 8.1 用户**：下载附件 `BlogDistiller-Win7-Setup-1.3.0-x64.exe` 双击安装（Electron 22 + Python 3.8.20 + Chromium 109 兼容技术链）；
 - **macOS 用户（M1/M2/M3/M4 芯片）**：下载附件 `BlogDistiller-macOS-1.3.0-arm64.dmg`，双击打开后把 App 拖入「应用程序」；
 - **macOS 用户（Intel 芯片）**：下载附件 `BlogDistiller-macOS-1.3.0-x64.dmg`。
+- **macOS 系统要求**：macOS 13 Ventura 及以上（安装包内核为 Electron 44，低于 13 的系统无法启动）。
 
 > ⚠️ **macOS 首次打开指引**：安装包未购买 Apple 开发者证书签名，首次打开若提示「无法验证开发者」，请**右键 App 图标 → 打开 → 再点打开**（只需一次）；或在「系统设置 → 隐私与安全性」中点击「仍要打开」。
 
