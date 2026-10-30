@@ -67,12 +67,17 @@ jobs:
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/desktop/browsers-mac
         run: |
-          # macos-latest 是 Apple Silicon 机器：即使 Python 是 x64，Playwright 的 driver
-          # 也可能以原生 arm64 运行并下载 arm64 内核，打出的 Intel 包在真机上无法启动浏览器。
-          # 用 arch -x86_64 强制整条链路按 x64 运行，确保下载 x64 版 Chromium。
-          if [ "${{ matrix.arch }}" = "x64" ]; then ARCH_PREFIX="arch -x86_64"; WANT="x86_64"; else ARCH_PREFIX=""; WANT="arm64"; fi
-          $ARCH_PREFIX ./desktop/python-mac/bin/python3 -m playwright install chromium
-          $ARCH_PREFIX ./desktop/python-mac/bin/python3 -c \
+          # macos-latest 是 Apple Silicon 机器：Playwright 的 driver 是 universal2，
+          # 即使 Python 是 x64 也会以原生 arm64 运行，从而下载 arm64 内核。
+          # 用官方支持的 PLAYWRIGHT_HOST_PLATFORM_OVERRIDE 强制按 Intel 平台安装。
+          if [ "${{ matrix.arch }}" = "x64" ]; then
+            export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=mac14
+            WANT="x86_64"
+          else
+            WANT="arm64"
+          fi
+          ./desktop/python-mac/bin/python3 -m playwright install chromium
+          ./desktop/python-mac/bin/python3 -c \
             "from playwright.sync_api import sync_playwright;p=sync_playwright().start();b=p.chromium.launch(headless=True);print('Chromium 自检 OK:',b.version);b.close();p.stop()"
           CHROME_BIN="$(find "$PLAYWRIGHT_BROWSERS_PATH" -type f -path '*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' -print -quit)"
           GOT="$(lipo -archs "$CHROME_BIN")"
@@ -115,7 +120,8 @@ jobs:
           # 防止再次打出「App 是 x64、浏览器内核却是 arm64」的坏包：
           # 逐项核对 Mach-O 架构，并直接拉起包内 Chromium 做一次真实自检。
           if [ "${{ matrix.arch }}" = "x64" ]; then
-            WANT="x86_64"; CHROME_DIR_NAME="chrome-mac"; HEADLESS_DIR_NAME="chrome-headless-shell-mac"
+            export PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=mac14
+            WANT="x86_64"; CHROME_DIR_NAME="chrome-mac-x64"; HEADLESS_DIR_NAME="chrome-headless-shell-mac-x64"
           else
             WANT="arm64"; CHROME_DIR_NAME="chrome-mac-arm64"; HEADLESS_DIR_NAME="chrome-headless-shell-mac-arm64"
           fi
