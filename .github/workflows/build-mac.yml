@@ -63,13 +63,21 @@ jobs:
           ./desktop/python-mac/bin/python3 -c \
             "import fastapi,uvicorn,httpx,bs4,markdownify,lxml,docx,jinja2,pydantic,PIL;print('内核依赖自检 OK')"
 
-      - name: 预装并冒烟测试 Chromium
+      - name: 预装并冒烟测试 Chromium（按目标架构）
         env:
           PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/desktop/browsers-mac
         run: |
-          ./desktop/python-mac/bin/python3 -m playwright install chromium
-          ./desktop/python-mac/bin/python3 -c \
+          # macos-latest 是 Apple Silicon 机器：即使 Python 是 x64，Playwright 的 driver
+          # 也可能以原生 arm64 运行并下载 arm64 内核，打出的 Intel 包在真机上无法启动浏览器。
+          # 用 arch -x86_64 强制整条链路按 x64 运行，确保下载 x64 版 Chromium。
+          if [ "${{ matrix.arch }}" = "x64" ]; then ARCH_PREFIX="arch -x86_64"; WANT="x86_64"; else ARCH_PREFIX=""; WANT="arm64"; fi
+          $ARCH_PREFIX ./desktop/python-mac/bin/python3 -m playwright install chromium
+          $ARCH_PREFIX ./desktop/python-mac/bin/python3 -c \
             "from playwright.sync_api import sync_playwright;p=sync_playwright().start();b=p.chromium.launch(headless=True);print('Chromium 自检 OK:',b.version);b.close();p.stop()"
+          CHROME_BIN="$(find "$PLAYWRIGHT_BROWSERS_PATH" -type f -path '*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' -print -quit)"
+          GOT="$(lipo -archs "$CHROME_BIN")"
+          echo "Chromium 架构: $GOT (期望 $WANT)"
+          echo "$GOT" | grep -qw "$WANT" || { echo "❌ Chromium 架构不符，继续打包会产出不可用安装包"; exit 1; }
 
       # 冒烟测试：直接以「安装包内那一个内核」起服务，与用户首启发生的事完全等价。
       # 早先这里另建 venv 装依赖，测的并不是发布产物真正会走的链路。
@@ -104,6 +112,26 @@ jobs:
           test -x "$APP/Contents/Resources/python/bin/python3"
           CHROMIUM_DIR="$(find "$APP/Contents/Resources/browsers" -maxdepth 1 -type d -name 'chromium-*' -print -quit)"
           test -n "$CHROMIUM_DIR"
+          # 防止再次打出「App 是 x64、浏览器内核却是 arm64」的坏包：
+          # 逐项核对 Mach-O 架构，并直接拉起包内 Chromium 做一次真实自检。
+          if [ "${{ matrix.arch }}" = "x64" ]; then
+            WANT="x86_64"; CHROME_DIR_NAME="chrome-mac"; HEADLESS_DIR_NAME="chrome-headless-shell-mac"
+          else
+            WANT="arm64"; CHROME_DIR_NAME="chrome-mac-arm64"; HEADLESS_DIR_NAME="chrome-headless-shell-mac-arm64"
+          fi
+          ELECTRON_BIN="$APP/Contents/MacOS/BlogDistiller 文章导出助手"
+          PYTHON_BIN="$APP/Contents/Resources/python/bin/python3.12"
+          CHROME_BIN="$(find "$APP/Contents/Resources/browsers" -type f -path "*/$CHROME_DIR_NAME/*Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing" -print -quit)"
+          HEADLESS_BIN="$(find "$APP/Contents/Resources/browsers" -type f -path "*/$HEADLESS_DIR_NAME/chrome-headless-shell" -print -quit)"
+          FFMPEG_BIN="$(find "$APP/Contents/Resources/browsers" -type f -name 'ffmpeg-mac' -print -quit)"
+          for BIN in "$ELECTRON_BIN" "$PYTHON_BIN" "$CHROME_BIN" "$HEADLESS_BIN" "$FFMPEG_BIN"; do
+            test -f "$BIN" || { echo "❌ 内置组件缺失: $BIN"; exit 1; }
+            GOT="$(lipo -archs "$BIN")"
+            echo "架构核验: $GOT (期望 $WANT) <- ${BIN#"$APP"/}"
+            echo "$GOT" | grep -qw "$WANT" || { echo "❌ 架构不符: $BIN"; exit 1; }
+          done
+          PLAYWRIGHT_BROWSERS_PATH="$APP/Contents/Resources/browsers" "$PYTHON_BIN" -c \
+            "from playwright.sync_api import sync_playwright;p=sync_playwright().start();b=p.chromium.launch(headless=True);print('包内 Chromium 启动 OK:',b.version);b.close();p.stop()"
           "$APP/Contents/MacOS/BlogDistiller 文章导出助手" > app-smoke.log 2>&1 &
           APP_PID=$!
           OK=0
