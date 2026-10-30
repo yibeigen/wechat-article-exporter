@@ -55,6 +55,10 @@ extraResources:
     to: "run.py"
   - from: "../requirements-win7.txt"
     to: "requirements.txt"
+  - from: "python-win7"
+    to: "python"
+  - from: "browsers-win7"
+    to: "browsers"
 
 nsis:
   oneClick: false

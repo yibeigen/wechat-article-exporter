@@ -78,6 +78,8 @@ package-lock.json
 # 构建期生成的内置内核（scripts/build_win_kernel.py 产物，随包交付，不入版本库）
 desktop/python-win/
 desktop/browsers-win/
+desktop/python-win7/
+desktop/browsers-win7/
 desktop/.kernel_cache/
 desktop/.kernel_extract/
 

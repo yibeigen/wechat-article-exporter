@@ -1,9 +1,9 @@
 # BlogDistiller · Windows 内置 Python 内核构建脚本
 #
-# 用法：python scripts/build_win_kernel.py
-# 产物：desktop/python-win/    独立 CPython + 预装全部后端依赖
-#       desktop/browsers-win/  Playwright Chromium 渲染内核
-#       desktop/python-win/kernel.lock.json  构建指纹（运行时自检用）
+# 用法：python scripts/build_win_kernel.py [--win7]
+# 产物：desktop/python-win*/    独立 CPython + 预装全部后端依赖
+#       desktop/browsers-win*/  Playwright Chromium 渲染内核
+#       desktop/python-win*/kernel.lock.json  构建指纹（运行时自检用）
 #
 # 为什么要这个脚本：客户端原先在用户首次启动时才联网下载 Python、装 pip、
 # 装依赖、装 Chromium，四段远程链路任一段失败就卡在"本地服务未能启动"。
@@ -22,16 +22,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DESKTOP = ROOT / "desktop"
-KERNEL = DESKTOP / "python-win"
-BROWSERS = DESKTOP / "browsers-win"
+WIN7 = "--win7" in sys.argv[1:]
+KERNEL = DESKTOP / ("python-win7" if WIN7 else "python-win")
+BROWSERS = DESKTOP / ("browsers-win7" if WIN7 else "browsers-win")
 CACHE = DESKTOP / ".kernel_cache"
 PY_EXE = KERNEL / "python.exe"
+REQUIREMENTS = ROOT / ("requirements-win7.txt" if WIN7 else "requirements.txt")
 
-PS_RELEASE = "20241016"
-PY_VERSION = "3.12.7"
+PS_RELEASE = "20241002" if WIN7 else "20241016"
+PY_VERSION = "3.8.20" if WIN7 else "3.12.7"
 ASSET = f"cpython-{PY_VERSION}+{PS_RELEASE}-x86_64-pc-windows-msvc-install_only.tar.gz"
 # 摘要固定写死：从同一镜像取 .sha256 无从发现镜像被投毒，只有内建期望值才是真校验
-ASSET_SHA256 = "f05531bff16fa77b53be0776587b97b466070e768e6d5920894de988bdcd547a"
+ASSET_SHA256 = ("41b6709fec9c56419b7de1940d1f87fa62045aff81734480672dcb807eedc47e" if WIN7
+                else "f05531bff16fa77b53be0776587b97b466070e768e6d5920894de988bdcd547a")
 DOWNLOAD_URLS = [
     f"https://registry.npmmirror.com/-/binary/python-build-standalone/{PS_RELEASE}/{urllib.parse.quote(ASSET)}",
     f"https://github.com/astral-sh/python-build-standalone/releases/download/{PS_RELEASE}/{ASSET}",
@@ -108,7 +111,7 @@ def run_python(args, env=None, timeout=1800):
 
 
 def install_deps():
-    req = ROOT / "requirements.txt"
+    req = REQUIREMENTS
     for index in PIP_INDEXES:
         log(f"安装后端依赖（{index[1]}）")
         code = run_python(["-m", "pip", "install", "--no-cache-dir", "-r", str(req),
@@ -133,15 +136,15 @@ def verify():
     log("按客户端 checkDeps 清单做导入自检")
     if run_python(["-c", IMPORT_PROBE]).returncode != 0:
         raise SystemExit("[kernel] 内置依赖自检未通过，不要使用该内核发包")
-    # 两套都要查：headless=True 走 chromium_headless_shell（抓取/PDF），
-    # headless=False 走完整 chromium（知乎/微博/微信读书在系统无 Edge 时的登录兜底）
-    for pattern in ("chromium_headless_shell-*", "chromium-*"):
+    # 新版 headless 与完整 Chromium 分包；Win7 的 Playwright 1.29 只有完整 Chromium。
+    patterns = ("chromium-*",) if WIN7 else ("chromium_headless_shell-*", "chromium-*")
+    for pattern in patterns:
         if not any(BROWSERS.glob(pattern)):
             raise SystemExit(f"[kernel] {BROWSERS} 下缺少 {pattern}，部分渲染通道将不可用")
 
 
 def write_lock(tar_path):
-    req = ROOT / "requirements.txt"
+    req = REQUIREMENTS
     frozen = subprocess.run([str(PY_EXE), "-m", "pip", "freeze", "--disable-pip-version-check"],
                             capture_output=True, text=True, check=True).stdout
     (KERNEL / "kernel.lock.json").write_text(json.dumps({

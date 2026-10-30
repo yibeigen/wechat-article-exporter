@@ -15,6 +15,7 @@ REPO = "yibeigen/wechat-article-exporter"
 TAG = "v1.3.0"
 TITLE = "BlogDistiller (博萃) 文章导出助手 v1.3.0 官方正式版"
 DIST_DIR = Path(r"E:\Tools\Web\下载各个平台\dist_1.3.0_final")
+DIST_WIN7_DIR = Path(r"E:\Tools\Web\下载各个平台\dist\win7")
 DIST_MAC_DIR = Path(r"E:\Tools\Web\下载各个平台\dist\mac")   # mac 包目录（GitHub Actions artifacts 解压后）
 API_BASE = f"https://api.github.com/repos/{REPO}"
 
@@ -40,14 +41,12 @@ BlogDistiller 是一款多平台博主文章批量抓取、去广告清洗与多
   - 服务就绪探测间隔 2 秒 → 0.3 秒，不再白等。
 - **启动页文案讲实话**：暖启动不再显示"正在检测本地 Python 运行环境"，只在真正体检时才出现。
 
-> 📌 Win7 版与 macOS 版本次未重新打包（沿用 v1.2.9 的安装包），但前端与后端修复会通过热更新自动同步，功能不受影响。
-
 ## 📥 下载与使用指引（见下方 Assets 附件）
 
 - **Windows 10 / 11 用户**：下载附件 `BlogDistiller-Setup-1.3.0.exe` 双击安装；
-- **Windows 7 / 8.1 用户**：下载附件 `BlogDistiller-Win7-Setup-x64.exe` 双击安装（Electron 22 + Python 3.8.10 稳定技术链，本次未更新）；
-- **macOS 用户（M1/M2/M3/M4 芯片）**：下载附件 `BlogDistiller-macOS-1.2.9-arm64.dmg`，双击打开后把 App 拖入「应用程序」（本次未更新）；
-- **macOS 用户（Intel 芯片）**：下载附件 `BlogDistiller-macOS-1.2.9-x64.dmg`。
+- **Windows 7 / 8.1 用户**：下载附件 `BlogDistiller-Win7-Setup-1.3.0-x64.exe` 双击安装（Electron 22 + Python 3.8.20 + Chromium 109 兼容技术链）；
+- **macOS 用户（M1/M2/M3/M4 芯片）**：下载附件 `BlogDistiller-macOS-1.3.0-arm64.dmg`，双击打开后把 App 拖入「应用程序」；
+- **macOS 用户（Intel 芯片）**：下载附件 `BlogDistiller-macOS-1.3.0-x64.dmg`。
 
 > ⚠️ **macOS 首次打开指引**：安装包未购买 Apple 开发者证书签名，首次打开若提示「无法验证开发者」，请**右键 App 图标 → 打开 → 再点打开**（只需一次）；或在「系统设置 → 隐私与安全性」中点击「仍要打开」。
 
@@ -57,10 +56,10 @@ BlogDistiller 是一款多平台博主文章批量抓取、去广告清洗与多
 # 附件清单：(本地文件路径, GitHub 附件名)。附件名必须全英文，否则会被 GitHub 改写
 ASSETS = [
     (DIST_DIR / "BlogDistiller 文章导出助手 Setup 1.3.0.exe", "BlogDistiller-Setup-1.3.0.exe"),
-    (DIST_DIR / "win7/BlogDistiller 文章导出助手 Setup 1.2.9.exe", "BlogDistiller-Win7-Setup-x64.exe"),
+    (DIST_WIN7_DIR / "BlogDistiller 文章导出助手 Setup 1.3.0.exe", "BlogDistiller-Win7-Setup-1.3.0-x64.exe"),
     # macOS 版（GitHub Actions 云端构建，本地下载 artifacts 解压到 dist/mac/ 后按英文名归位）
-    (DIST_MAC_DIR / "BlogDistiller-macOS-arm64.dmg", "BlogDistiller-macOS-1.2.9-arm64.dmg"),
-    (DIST_MAC_DIR / "BlogDistiller-macOS-x64.dmg", "BlogDistiller-macOS-1.2.9-x64.dmg"),
+    (DIST_MAC_DIR / "BlogDistiller-macOS-arm64.dmg", "BlogDistiller-macOS-1.3.0-arm64.dmg"),
+    (DIST_MAC_DIR / "BlogDistiller-macOS-x64.dmg", "BlogDistiller-macOS-1.3.0-x64.dmg"),
 ]
 
 

@@ -35,7 +35,7 @@ jobs:
       - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22.12.0'
 
       - name: 安装桌面端依赖
         working-directory: desktop
@@ -63,6 +63,14 @@ jobs:
           ./desktop/python-mac/bin/python3 -c \
             "import fastapi,uvicorn,httpx,bs4,markdownify,lxml,docx,jinja2,pydantic,PIL;print('内核依赖自检 OK')"
 
+      - name: 预装并冒烟测试 Chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/desktop/browsers-mac
+        run: |
+          ./desktop/python-mac/bin/python3 -m playwright install chromium
+          ./desktop/python-mac/bin/python3 -c \
+            "from playwright.sync_api import sync_playwright;p=sync_playwright().start();b=p.chromium.launch(headless=True);print('Chromium 自检 OK:',b.version);b.close();p.stop()"
+
       # 冒烟测试：直接以「安装包内那一个内核」起服务，与用户首启发生的事完全等价。
       # 早先这里另建 venv 装依赖，测的并不是发布产物真正会走的链路。
       - name: 冒烟测试（与客户端相同的内置内核链路）
@@ -87,6 +95,29 @@ jobs:
       - name: 构建 dmg / zip（未签名）
         working-directory: desktop
         run: npx electron-builder --mac --config builder-mac.yml --${{ matrix.arch }} --publish never
+
+      - name: 核验 App 版本与内置资源
+        run: |
+          APP="$(find dist/mac -type d -name '*.app' -print -quit)"
+          test -n "$APP"
+          test "$(defaults read "$APP/Contents/Info.plist" CFBundleShortVersionString)" = "1.3.0"
+          test -x "$APP/Contents/Resources/python/bin/python3"
+          CHROMIUM_DIR="$(find "$APP/Contents/Resources/browsers" -maxdepth 1 -type d -name 'chromium-*' -print -quit)"
+          test -n "$CHROMIUM_DIR"
+          "$APP/Contents/MacOS/BlogDistiller 文章导出助手" > app-smoke.log 2>&1 &
+          APP_PID=$!
+          OK=0
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8000/api/health > /dev/null; then OK=1; break; fi
+            sleep 2
+          done
+          if [ "$OK" != "1" ]; then
+            cat app-smoke.log
+            kill $APP_PID 2>/dev/null || true
+            exit 1
+          fi
+          kill $APP_PID 2>/dev/null || true
+          echo "App 真实启动与健康检查通过: $APP"
 
       - name: 收集构建产物
         uses: actions/upload-artifact@v4

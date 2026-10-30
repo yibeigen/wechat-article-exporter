@@ -60,3 +60,5 @@ extraResources:
     to: "requirements.txt"
   - from: "python-mac"      # CI 预先解压好的 python-build-standalone（bin/python3 布局，main.js 已识别）
     to: "python"
+  - from: "browsers-mac"
+    to: "browsers"

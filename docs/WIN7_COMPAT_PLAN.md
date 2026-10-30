@@ -19,8 +19,8 @@
 | 组件 | Win10/11 版用 | Win7 版必须用 | 冲突原因 |
 |---|---|---|---|
 | Electron | 44（新版） | **22.x** | Electron 23+ 强制要求 Win10 1809+，44 在 Win7 上装不上 |
-| Python | 3.10+ | **3.8.10** | Python 官方 3.9 起放弃 Win7 |
-| Chromium(Playwright) | 最新 | **1.37.x 内置的 Chromium 109** | Chromium 110+ 不再支持 Win7 |
+| Python | 3.10+ | **3.8.20** | Python 官方 3.9 起放弃 Win7 |
+| Chromium(Playwright) | 最新 | **1.29.1 内置的 Chromium 109** | Chromium 110+ 不再支持 Win7 |
 
 三者缺一不可，**不能只靠"最新版 + 兼容模式"**——这是系统级限制。
 
@@ -30,7 +30,7 @@
 |---|---|
 | 后端 Python 语法 | ✅ 无 `list[int]` 泛型、无 `match` 语句；唯一 3.9+ 语法是 `backend/app/scrapers/cto51.py` 两处 `removesuffix()`（需改为切片写法，行为等价） |
 | Electron 主进程 desktop/main.js | ✅ 用了 `replaceAll`，Electron 22 的 Chromium 108 / Node 16.17 均支持；无 `node:` 新前缀模块 |
-| Playwright 用法 | ✅ 全是基础 API（launch / new_context / new_page），1.37 通用 |
+| Playwright 用法 | ✅ 全是基础 API（launch / new_context / new_page），1.29.1 通用 |
 | 前端 app.html | ✅ 无 `Object.groupBy` / `toSorted` / `structuredClone` 等新语法，Chromium 108 全兼容 |
 | 微信扫码登录 | ✅ 后端 sync_playwright，与系统无关 |
 
@@ -57,7 +57,7 @@
 
 1. **双栈测试成本**：以后每次改功能，需在 Win10/11 和 Win7 两套环境各测一遍（改的是同一份代码）。
 2. **Electron 22 已 EOL**：有已知安全漏洞，官方停止维护——对个人工具可接受，不适合公开发布。
-3. **Win7 用户首次安装较重**：要装 Python 3.8 + Chromium 109 内核（约 150MB）。
+3. **Win7 安装包体积较大**：Python 3.8 + Chromium 109 已随包内置，用户无需另行安装运行环境。
 4. **依赖冻结**：Win7 版依赖锁死后，未来的依赖升级只服务 Win10/11 版——这是可控的取舍。
 5. **动手前先 git commit 存档**：任何实施改动前必须先在 `main` 分支提交一次当前状态，保证可随时回退。
 
