@@ -43,7 +43,7 @@ class WeiboScraper(BaseScraper):
         data = await self._fetch_container_page(api_url, 1)
         if data is not None:
             if data.get("ok") == -100:
-                raise RuntimeError(f"微博提示需要登录才能访问博主【微博用户_{uid}】主页。请使用插件同步微博 Cookie 凭证！")
+                raise RuntimeError(f"微博要求登录后才能访问博主【微博用户_{uid}】主页。{await self._blocked_reason()}")
             if data.get("ok") == 1:
                 user_info = data.get("data", {}).get("userInfo", {})
                 author_info["name"] = user_info.get("screen_name", author_info["name"])
@@ -118,6 +118,23 @@ class WeiboScraper(BaseScraper):
                 f"稍后重试或重新同步微博 Cookie 可继续向后翻取更早的微博。"
             )
 
+    async def _blocked_reason(self) -> str:
+        """时间线被拦时，单独用 api/config 探测登录态，把两种完全不同的成因分开报。
+
+        「本地没同步到有效 SUB」和「登录态好好的但 IP/账号被风控」在时间线接口上
+        长得一模一样（都是 432/拒答），只报「风控拦下」会让用户去盲试换网络。
+        """
+        from app.core.weibo_auth import check_weibo_auth_status
+        try:
+            st = await check_weibo_auth_status()
+        except Exception:
+            return "登录态探测失败，请重启客户端后重试。"
+        if st.get("authenticated"):
+            return (f"本机登录态有效（账号【{st.get('username')}】），微博仍拒绝返回时间线，"
+                    "属于当前 IP 或该账号被微博限流。建议换网络（如手机热点）或稍后再试。")
+        return (f"本机没有可用的微博登录态：{st.get('message')}"
+                "。注意：在自己浏览器里登录微博 ≠ 客户端拿到了凭证，抓取只认「设置」里同步/扫码保存的那份。")
+
     async def get_article_list(self, progress_callback: Optional[Callable[[str, int, int], None]] = None) -> List[Dict[str, str]]:
         if "weibo.com/detail/" in self.target or "m.weibo.cn/status/" in self.target or "/status/" in self.target or re.search(r"weibo\.com/\d+/[a-zA-Z0-9]+", self.target):
             m_single = re.search(r"weibo\.com/(?:detail/|\d+/)?([a-zA-Z0-9]+)", self.target)
@@ -141,11 +158,11 @@ class WeiboScraper(BaseScraper):
                 data = await self._fetch_container_page(api_url, page)
                 if data is None:
                     if page == 1:
-                        raise RuntimeError("微博第 1 页即被风控拦下，请重新同步微博 Cookie 或稍后再试。")
+                        raise RuntimeError(f"微博第 1 页即被拦下（接口返回 432 风控页或空响应）。{await self._blocked_reason()}")
                     stop_reason = f"第 {page} 页起被微博风控连续拦截"
                     break
                 if data.get("ok") == -100:
-                    raise RuntimeError(f"微博提示需要登录才能访问博主主页，请使用插件同步微博 Cookie 凭证！")
+                    raise RuntimeError(f"微博要求登录后才能访问该博主主页。{await self._blocked_reason()}")
                 if data.get("ok") != 1:
                     # 深翻页的 ok=0 多为瞬时限流，退避重试同一页再决定是否收口
                     recovered = False
