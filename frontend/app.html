@@ -4101,8 +4101,12 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     // 会把真实原因写进 explanation，必须原样透出给用户，
                     // 否则用户只会看到误导性的"未检索到任何文章"而无从排查
                     const why = String(data.explanation || '').trim();
+                    // 兜底提示必须跟着平台走：给 CSDN/微博用户念知乎登录墙只会误导排查
+                    const hint = currentPlatform === 'zhihu'
+                        ? '可能原因：知乎游客状态会被登录墙拦截。请先在工作台「设置」中完成知乎扫码登录（或同步 Cookie），再重新检索。'
+                        : `可能原因：${platLabel} 反爬风控拦截了本次目录检索，或该主页确实没有公开内容。请稍后重试，或改用「自定义链接」逐篇导入。`;
                     alert(`已成功连接博主【${data.author || target}】，但该博主主页尚未公开检索到任何文章。`
-                        + (why ? `\n\n${why}` : '\n\n可能原因：知乎游客状态会被登录墙拦截。请先在工作台「设置」中完成知乎扫码登录（或同步 Cookie），再重新检索。'));
+                        + (why ? `\n\n${why}` : `\n\n${hint}`));
                     return;
                 }
 
