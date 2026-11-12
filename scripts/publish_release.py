@@ -255,11 +255,13 @@ def publish_github_release(token: str):
             for attempt in range(1, 4):
                 try:
                     with open(path, "rb") as f:
-                        # 中文/空格文件名必须经 params 让 httpx 自动 URL 编码，不能手拼 URL
+                        # 中文/空格文件名必须经 params 让 httpx 自动 URL 编码，不能手拼 URL。
+                        # content 直接传文件对象：httpx 按 64KB 分块流式上传并用 fstat 设 Content-Length，
+                        # 避免 f.read() 把 500MB 级 mac dmg 整个读进内存（本机内存吃紧时会 OOM/重度换页）。
                         upload_resp = client.post(
                             upload_url,
                             params={"name": asset_name},
-                            content=f.read(),
+                            content=f,
                             headers=upload_headers,
                         )
                     if upload_resp.status_code in (200, 201):
