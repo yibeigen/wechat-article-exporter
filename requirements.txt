@@ -14,5 +14,7 @@ pydantic>=2.6.0
 playwright>=1.42.0
 pillow>=10.2.0
 # 知乎/微博「一键同步本机浏览器」要用 AES-GCM 解 Chrome v10 加密 Cookie，
-# 漏登记会让重建出来的内核少这个包，同步时直接 ImportError
-cryptography>=42.0.0
+# 漏登记会让重建出来的内核少这个包，同步时直接 ImportError。
+# 上限 <49：cryptography 49 起 mac 只发 arm64 轮子，Intel mac 会退回源码编译
+# （需 Rust+OpenSSL）而在云端构建机上失败；48.0.1 仍发 universal2，两种芯片通用。
+cryptography>=42.0.0,<49
