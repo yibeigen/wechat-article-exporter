@@ -186,9 +186,12 @@ def publish_github_release(token: str):
     }
 
     # 代理支持：本机直连 GitHub 不稳定时，通过 GITHUB_PROXY 环境变量指定本地代理
-    #（如 http://127.0.0.1:7897），不设置则直连
+    #（如 http://127.0.0.1:7897），不设置则直连。
+    # trust_env=False：本机 NO_PROXY 含 IPv6 回环 [::1]，httpx 默认继承环境代理时
+    # 会把它当 URL 解析抛 Invalid port: ':1]'（与 51CTO 检索恒 0 篇同一病根）；
+    # 关掉环境继承，只认上面显式传入的 proxy，未设代理即直连。
     proxy = os.environ.get("GITHUB_PROXY") or os.environ.get("HTTPS_PROXY")
-    with httpx.Client(timeout=httpx.Timeout(600.0, write=600.0), proxy=proxy) as client:
+    with httpx.Client(timeout=httpx.Timeout(600.0, write=600.0), proxy=proxy, trust_env=False) as client:
         # 第一步：幂等获取 Release——已存在就复用，不存在才创建（脚本可安全重跑）
         print(f"🚀 正在查询 Release: {TAG} ...")
         resp = client.get(f"{API_BASE}/releases/tags/{TAG}", headers=headers)
