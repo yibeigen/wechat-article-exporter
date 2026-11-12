@@ -14,13 +14,19 @@
 # ============================================================
 
 fastapi==0.110.0
-uvicorn[standard]==0.30.6
+# 不带 [standard]：其 watchfiles 的 _rust_notify.pyd 静态依赖 Win8+ 的
+# GetSystemTimePreciseAsFileTime，且客户端恒为 --no-reload、后端不用 websockets/httptools，
+# 装了只会给 Win7 多埋一颗雷。
+uvicorn==0.30.6
 httpx==0.27.2
 beautifulsoup4==4.12.3
 markdownify==0.13.0
 lxml==5.2.2
 python-docx==1.1.2
 jinja2==3.1.4
-pydantic==2.7.4
+# 2.6.4 而非 2.7.4：pydantic-core 从 2.18 起静态导入 kernel32!GetSystemTimePreciseAsFileTime
+# （Win8+ 才有），Win7 上 import pydantic 即以 STATUS_ENTRYPOINT_NOT_FOUND 失败，
+# 表现为本地服务无声启动不了。用 scripts/check_win7_compat.py 可复验。
+pydantic==2.6.4
 playwright==1.29.1
 pillow==10.4.0

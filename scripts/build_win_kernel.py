@@ -139,22 +139,85 @@ def deploy_win7_runtime():
     log(f"已部署 {len(dlls)} 个 Win7 运行库（UCRT + msvcp140）到内核目录")
 
 
+def prune_win7_arm_binaries():
+    """剔除 pip/setuptools 自带的 ARM64 启动器 exe。
+
+    这些文件对 x64 客户端无用，却是「安装后随包缺失」的 4 个文件：
+    Win7 安装后 resources 树与构建树相比恰好少这 4 个，导致真机哈希门禁对不上。
+    直接从内核源树剔除，保证「构建树 = 安装树」，也减掉约 370KB。
+    """
+    if not WIN7:
+        return
+    removed = []
+    for pattern in ("Lib/site-packages/pip/_vendor/distlib/*arm*.exe",
+                    "Lib/site-packages/setuptools/*arm64*.exe"):
+        for f in KERNEL.glob(pattern):
+            f.unlink()
+            removed.append(f.name)
+    if removed:
+        log(f"已剔除 ARM64 启动器 {len(removed)} 个: {', '.join(sorted(removed))}")
+
+
 def install_browsers():
     env = {**os.environ, "PLAYWRIGHT_BROWSERS_PATH": str(BROWSERS)}
     if BROWSERS.exists():
         shutil.rmtree(BROWSERS)
     BROWSERS.mkdir(parents=True)
-    log("安装 Playwright Chromium（约 170MB）")
-    if run_python(["-m", "playwright", "install", "chromium"], env=env, timeout=3600).returncode != 0:
+    # Win10/11 只装 headless shell：抓取与 PDF 全部走 headless=True，三条扫码登录走系统
+    # Edge/Chrome，完整 Chromium（437MB）没有任何调用方。Win7 的 Playwright 1.29 不分包，
+    # headless 也依赖完整 Chromium，必须整份保留。
+    args = ["-m", "playwright", "install", "chromium"] + ([] if WIN7 else ["--only-shell"])
+    log("安装 Playwright Chromium（约 170MB）" if WIN7 else "安装 Playwright headless shell（约 280MB）")
+    if run_python(args, env=env, timeout=3600).returncode != 0:
         raise SystemExit("[kernel] Chromium 安装失败，知乎专栏等动态页面通道将不可用")
+
+
+def prune():
+    """剔除 Win10/11 内核与浏览器里运行期永不加载的部分。
+
+    PDB 是调试符号；include/libs 只在编译 C 扩展时用，而依赖全是预编译 wheel；
+    tkinter/idlelib/tcl 是 GUI 工具链，后端零引用；语言包只留中英文，
+    Chromium 找不到对应语言包时回落 en-US。Win7 内核一律不动，避免碰真机哈希门禁。
+    """
+    if WIN7:
+        return
+    freed = 0
+
+    def drop_file(f):
+        nonlocal freed
+        freed += f.stat().st_size
+        f.unlink()
+
+    for f in KERNEL.rglob("*.pdb"):
+        drop_file(f)
+    for rel in ("include", "libs", "tcl", "Lib/tkinter", "Lib/idlelib", "Lib/turtledemo"):
+        d = KERNEL / rel
+        if d.is_dir():
+            freed += sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+            shutil.rmtree(d)
+    for name in ("_tkinter.pyd", "tcl86t.dll", "tk86t.dll"):
+        f = KERNEL / "DLLs" / name
+        if f.exists():
+            drop_file(f)
+    keep_locales = {"en-US.pak", "zh-CN.pak", "zh-TW.pak"}
+    for loc in BROWSERS.glob("chromium*/**/locales"):
+        for pak in loc.iterdir():
+            if pak.name not in keep_locales:
+                drop_file(pak)
+    # 旧构建残留的完整 Chromium 也一并清掉，保证 prune 单独重跑就能收敛到目标形态
+    for d in BROWSERS.glob("chromium-*"):
+        if d.is_dir():
+            freed += sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+            shutil.rmtree(d)
+    log(f"已剔除完整 Chromium/调试符号/GUI 工具链/多余语言包，省下 {freed / 1048576:.0f} MB")
 
 
 def verify():
     log("按客户端 checkDeps 清单做导入自检")
     if run_python(["-c", IMPORT_PROBE]).returncode != 0:
         raise SystemExit("[kernel] 内置依赖自检未通过，不要使用该内核发包")
-    # 新版 headless 与完整 Chromium 分包；Win7 的 Playwright 1.29 只有完整 Chromium。
-    patterns = ("chromium-*",) if WIN7 else ("chromium_headless_shell-*", "chromium-*")
+    # Win10/11 只交付 headless shell；Win7 的 Playwright 1.29 只有完整 Chromium。
+    patterns = ("chromium-*",) if WIN7 else ("chromium_headless_shell-*",)
     for pattern in patterns:
         if not any(BROWSERS.glob(pattern)):
             raise SystemExit(f"[kernel] {BROWSERS} 下缺少 {pattern}，部分渲染通道将不可用")
@@ -174,6 +237,121 @@ def write_lock(tar_path):
     }, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def patch_win7_pyd_loader():
+    """CPython 3.8 的 dynload 用 LOAD_LIBRARY_SEARCH_DEFAULT_DIRS|DLL_LOAD_DIR 加载 .pyd。
+    Win7 未装 KB2533623 时这两个标志位不被识别，LoadLibraryExW 直接返回 87（「参数错误」），
+    所有扩展模块都导不进来，后端服务起不来。改成 3.7 时代的
+    LOAD_WITH_ALTERED_SEARCH_PATH（0x8）：Win7 认识，且仍然优先搜索 pyd 自身目录。"""
+    dll = KERNEL / "python38.dll"
+    data = bytearray(dll.read_bytes())
+    old = b"\x41\xb8\x00\x11\x00\x00"  # mov r8d, 0x1100
+    hits = []
+    start = 0
+    while True:
+        i = data.find(old, start)
+        if i < 0:
+            break
+        hits.append(i)
+        start = i + 1
+    if not hits:
+        if data.count(b"\x33\xd2\x41\xb8\x08\x00\x00\x00") == 1:
+            log("python38.dll 加载标志位已是 Win7 兼容值，跳过")
+            return
+        raise SystemExit("[kernel] python38.dll 里找不到扩展模块加载标志位，拒绝继续")
+    if len(hits) != 1 or data[hits[0] - 2:hits[0]] != b"\x33\xd2":
+        raise SystemExit(f"[kernel] python38.dll 加载标志位定位不唯一/上下文不符：{hits}")
+    data[hits[0] + 2:hits[0] + 6] = b"\x08\x00\x00\x00"
+    dll.write_bytes(bytes(data))
+    log("已把 python38.dll 扩展模块加载改为 Win7 兼容的 ALTERED_SEARCH")
+
+
+def _pe_imports(path):
+    """只读 PE 导入表里的 DLL 名（纯标准库，避免构建脚本依赖 pefile）。"""
+    data = path.read_bytes()
+    if data[:2] != b"MZ":
+        return []
+    pe_off = int.from_bytes(data[0x3c:0x40], "little")
+    if data[pe_off:pe_off + 4] != b"PE\x00\x00":
+        return []
+    coff = pe_off + 4
+    n_sec = int.from_bytes(data[coff + 2:coff + 4], "little")
+    opt_size = int.from_bytes(data[coff + 16:coff + 18], "little")
+    opt = coff + 20
+    dd = opt + (112 if int.from_bytes(data[opt:opt + 2], "little") == 0x20b else 96)
+    imp_rva = int.from_bytes(data[dd + 8:dd + 12], "little")
+    if not imp_rva:
+        return []
+    sections = []
+    for i in range(n_sec):
+        s = opt + opt_size + i * 40
+        sections.append((int.from_bytes(data[s + 12:s + 16], "little"),
+                         max(int.from_bytes(data[s + 8:s + 12], "little"),
+                             int.from_bytes(data[s + 16:s + 20], "little")),
+                         int.from_bytes(data[s + 20:s + 24], "little")))
+
+    def rva2off(rva):
+        for vaddr, size, raw in sections:
+            if vaddr <= rva < vaddr + size:
+                return raw + (rva - vaddr)
+        return None
+
+    off = rva2off(imp_rva)
+    names = []
+    while off is not None:
+        desc = data[off:off + 20]
+        if len(desc) < 20 or desc == b"\x00" * 20:
+            break
+        name_off = rva2off(int.from_bytes(desc[12:16], "little"))
+        if name_off is not None:
+            names.append(data[name_off:data.find(b"\x00", name_off)].decode("ascii", "ignore").lower())
+        off += 20
+    return names
+
+
+def _is_runtime_lib(name):
+    return (name.startswith("api-ms-win-") or name in ("ucrtbase.dll", "vcruntime140.dll", "vcruntime140_1.dll")
+            or name.startswith("msvcp140"))
+
+
+def place_applocal_deps():
+    """Win7 侧 .pyd 只按「自身目录优先」搜索依赖，内核根目录不再参与搜索。
+    根目录里的 api-ms-win-crt-*、msvcp140、vcruntime140_1 等必须复制到用到它们的扩展模块旁边，
+    否则 import 报「找不到指定的模块」。解释器本体 python38.dll 已随 python.exe 常驻，不复制。"""
+    root_dlls = {p.name.lower(): p for p in KERNEL.glob("*.dll") if _is_runtime_lib(p.name.lower())}
+    targets = [KERNEL / "DLLs"]
+    targets += [p.parent for p in (KERNEL / "Lib" / "site-packages").rglob("*.pyd")]
+    copied = 0
+    for d in dict.fromkeys(targets):
+        for _ in range(3):
+            present = {p.name.lower() for p in d.iterdir()}
+            missing = set()
+            for f in d.iterdir():
+                if f.suffix.lower() in (".pyd", ".dll"):
+                    missing.update(n for n in _pe_imports(f) if n in root_dlls and n not in present)
+            if not missing:
+                break
+            for name in missing:
+                shutil.copy2(root_dlls[name], d / name)
+                copied += 1
+    log(f"已把 {copied} 个根目录运行库复制到扩展模块目录（Win7 依赖搜索）")
+
+
+def patch_ctypes_loader():
+    """ctypes.CDLL 在 Windows 上默认给 LoadLibraryExW 传 LOAD_LIBRARY_SEARCH_* 标志，
+    Win7 未装 KB2533623 时同样直接报 87（参数错误）——ctypes.windll.kernel32 都会失败。
+    Win7 版把默认标志改回 0（Python 3.7 语义），显式传 winmode 的调用方不受影响。"""
+    f = KERNEL / "Lib" / "ctypes" / "__init__.py"
+    src = f.read_text(encoding="utf-8")
+    old1 = "mode = nt._LOAD_LIBRARY_SEARCH_DEFAULT_DIRS"
+    old2 = "mode |= nt._LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR"
+    if src.count(old1) != 1 or src.count(old2) != 1:
+        raise SystemExit("[kernel] ctypes/__init__.py 结构与预期不符，拒绝改标准库")
+    src = src.replace(old1, "mode = 0  # Win7 无 LOAD_LIBRARY_SEARCH_*（KB2533623），退回旧搜索语义")
+    src = src.replace(old2, "mode |= 0")
+    f.write_text(src, encoding="utf-8")
+    log("已把 ctypes 默认 DLL 加载标志改为 Win7 兼容（0）")
+
+
 def main():
     if sys.version_info < (3, 8):
         raise SystemExit("[kernel] 构建脚本需要 Python 3.8+")
@@ -181,7 +359,13 @@ def main():
     extract(tar_path)
     install_deps()
     deploy_win7_runtime()
+    if WIN7:
+        patch_win7_pyd_loader()
+        patch_ctypes_loader()
+        place_applocal_deps()
+        prune_win7_arm_binaries()
     install_browsers()
+    prune()
     verify()
     write_lock(tar_path)
     size = sum(f.stat().st_size for f in KERNEL.rglob("*") if f.is_file()) / 1048576

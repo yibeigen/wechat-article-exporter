@@ -21,6 +21,8 @@ from app.scrapers.weibo import WeiboScraper
 from app.scrapers.wechat import WeChatScraper
 from app.scrapers.sina_blog import SinaBlogScraper
 from app.scrapers.jianshu import JianshuScraper
+from app.scrapers.sohu import SohuScraper
+from app.scrapers.baijiahao import BaijiahaoScraper
 from app.scrapers.custom_urls import CustomURLsScraper
 
 from app.exporters.md_exporter import MarkdownExporter
@@ -154,7 +156,9 @@ class TaskManager:
     async def subscribe(self, task_id: str) -> asyncio.Queue:
         if task_id not in self.subscribers:
             self.subscribers[task_id] = []
-        queue = asyncio.Queue()
+        # 容量 1：进度帧是全量快照，前端消费慢时丢旧帧留新帧即可，
+        # 无界队列会在万篇级任务里堆出数千个大帧直接 MemoryError
+        queue = asyncio.Queue(maxsize=1)
         self.subscribers[task_id].append(queue)
         # 立即发送当前状态
         if task_id in self.tasks:
@@ -169,9 +173,15 @@ class TaskManager:
         if task_id in self.tasks and task_id in self.subscribers:
             data = self.tasks[task_id].model_dump_json()
             for q in list(self.subscribers[task_id]):
+                # 最新帧覆盖旧帧：永不阻塞、永不堆积（帧是全量快照，丢中间帧不丢信息）
+                if q.full():
+                    try:
+                        q.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
                 try:
-                    await q.put(data)
-                except Exception:
+                    q.put_nowait(data)
+                except asyncio.QueueFull:
                     pass
 
     def cancel_task(self, task_id: str) -> bool:
@@ -385,6 +395,89 @@ class TaskManager:
             self.cancel_task(task_id)
         return True
 
+    @staticmethod
+    def _parse_publish_date(raw: Any) -> Optional[datetime.date]:
+        """把各平台五花八门的发布时间尽量解析成日期；解析不出返回 None（调用方保留该篇并提示）。
+        覆盖：YYYY-MM-DD[ HH:MM[:SS]] / YYYY年M月D日 / 10位秒时间戳 / 13位毫秒时间戳 /
+        微博英文格式 (Sun Sep 08 ... 2026) / 相对时间 (刚刚/X分钟前/X小时前/昨天/前天/X天前)。"""
+        s = str(raw or "").strip()
+        if not s:
+            return None
+        m = re.search(r"(\d{4})[-/年.](\d{1,2})[-/月.](\d{1,2})", s)
+        if m:
+            try:
+                return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            except ValueError:
+                return None
+        if re.fullmatch(r"\d{13}", s):
+            try:
+                return datetime.datetime.fromtimestamp(int(s) / 1000).date()
+            except (ValueError, OSError, OverflowError):
+                return None
+        if re.fullmatch(r"\d{10}", s):
+            try:
+                return datetime.datetime.fromtimestamp(int(s)).date()
+            except (ValueError, OSError, OverflowError):
+                return None
+        # 「11月7日」这类无年份格式（搜狐/百家号列表常见）：按今年推算，未来日期回退一年
+        m = re.search(r"(\d{1,2})月(\d{1,2})日", s)
+        if m:
+            try:
+                d = datetime.date(datetime.date.today().year, int(m.group(1)), int(m.group(2)))
+                if d > datetime.date.today():
+                    d = datetime.date(d.year - 1, d.month, d.day)
+                return d
+            except ValueError:
+                return None
+        try:
+            from email.utils import parsedate_to_datetime
+            return parsedate_to_datetime(s).date()
+        except Exception:
+            pass
+        now = datetime.datetime.now()
+        if s in ("刚刚", "刚才"):
+            return now.date()
+        if s.startswith("昨天"):
+            return (now - datetime.timedelta(days=1)).date()
+        if s.startswith("前天"):
+            return (now - datetime.timedelta(days=2)).date()
+        m = re.match(r"(\d+)\s*(分钟|小时|天)前", s)
+        if m:
+            n = int(m.group(1))
+            unit = m.group(2)
+            delta = datetime.timedelta(minutes=n) if unit == "分钟" else (
+                datetime.timedelta(hours=n) if unit == "小时" else datetime.timedelta(days=n))
+            return (now - delta).date()
+        return None
+
+    def filter_articles_by_date(
+        self, article_list: List[Dict], date_from: Optional[str], date_to: Optional[str]
+    ) -> Tuple[List[Dict], int, int]:
+        """按发布时间过滤文章元数据列表，返回 (保留列表, 范围外剔除数, 无时间保留数)。
+        无法解析发布时间的篇目一律保留（宁可多抓不可静默丢文章），由调用方把数量提示给用户。"""
+        lo = hi = None
+        try:
+            if date_from:
+                lo = datetime.date.fromisoformat(str(date_from).strip()[:10])
+            if date_to:
+                hi = datetime.date.fromisoformat(str(date_to).strip()[:10])
+        except ValueError:
+            return article_list, 0, 0
+        if not lo and not hi:
+            return article_list, 0, 0
+        kept: List[Dict] = []
+        removed = unknown = 0
+        for meta in article_list:
+            d = self._parse_publish_date(meta.get("publish_time"))
+            if d is None:
+                unknown += 1
+                kept.append(meta)
+            elif (lo and d < lo) or (hi and d > hi):
+                removed += 1
+            else:
+                kept.append(meta)
+        return kept, removed, unknown
+
     def _detect_platform(self, target: str, fallback: PlatformEnum) -> PlatformEnum:
         """根据 URL 规则智能识别平台 (若包含多条 URL 则自动转为自定义聚合模式)"""
         urls = re.findall(r'https?://[^\s,"\'<>]+', target)
@@ -414,6 +507,10 @@ class TaskManager:
             return PlatformEnum.SINA_BLOG
         elif "jianshu.com" in t:
             return PlatformEnum.JIANSHU
+        elif "sohu.com" in t:
+            return PlatformEnum.SOHU
+        elif "baijiahao.baidu.com" in t or "author.baidu.com" in t:
+            return PlatformEnum.BAIJIAHAO
         elif "weixin.qq.com" in t:
             return PlatformEnum.WECHAT
         return fallback
@@ -436,6 +533,10 @@ class TaskManager:
             return SinaBlogScraper(request.target, request.enable_noise_filter, request.max_articles, remove_image_watermark=request.remove_image_watermark)
         elif platform == PlatformEnum.JIANSHU:
             return JianshuScraper(request.target, request.enable_noise_filter, request.max_articles, remove_image_watermark=request.remove_image_watermark)
+        elif platform == PlatformEnum.SOHU:
+            return SohuScraper(request.target, request.enable_noise_filter, request.max_articles, remove_image_watermark=request.remove_image_watermark)
+        elif platform == PlatformEnum.BAIJIAHAO:
+            return BaijiahaoScraper(request.target, request.enable_noise_filter, request.max_articles, remove_image_watermark=request.remove_image_watermark)
         elif platform == PlatformEnum.WECHAT:
             return WeChatScraper(
                 request.target,
@@ -675,6 +776,23 @@ class TaskManager:
                 return
 
             total_discovered = len(article_list)
+            # 时间范围过滤：仅对全量检索路径生效；两阶段导出里用户已逐篇勾选，严禁再截断
+            date_filter_note = ""
+            if not request.articles_meta and (request.date_from or request.date_to):
+                article_list, removed, unknown = self.filter_articles_by_date(
+                    article_list, request.date_from, request.date_to)
+                if removed or unknown:
+                    date_filter_note = f"⏱ 时间范围过滤：剔除范围外 {removed} 篇"
+                    if unknown:
+                        date_filter_note += f"，{unknown} 篇无发布时间已保留"
+                    date_filter_note += "。"
+                if not article_list:
+                    task.status = TaskStatusEnum.FAILED
+                    task.error_message = "指定时间范围内没有文章"
+                    task.message = f"❌ 检索到 {total_discovered} 篇文章，但都不在所选发布时间范围内（{request.date_from or '不限'} ~ {request.date_to or '不限'}），请调整时间范围重试。"
+                    await self._broadcast(task_id)
+                    await scraper.close()
+                    return
             # 切片处理指定范围 (例如第 10 篇 到 第 30 篇)
             start_idx = max(1, request.start_index or 1)
             end_idx = min(total_discovered, request.end_index) if request.end_index else total_discovered
@@ -690,7 +808,7 @@ class TaskManager:
 
             task.total_articles = len(article_list)
             task.status = TaskStatusEnum.SCRAPING_ARTICLES
-            task.message = f"共选定 {len(article_list)} 篇目标文章 (全量检索到 {total_discovered} 篇)，开始抓取..."
+            task.message = f"{date_filter_note}共选定 {len(article_list)} 篇目标文章 (全量检索到 {total_discovered} 篇)，开始抓取..."
             await self._broadcast(task_id)
             # 抓到列表后落一次快照，便于中断恢复时展示"共几篇、已到第几篇"
             self._save_snapshot(task)
@@ -1036,10 +1154,21 @@ class TaskManager:
                 elif top_platform in ["简书", "jianshu"]:
                     platform_str = "简书"
                     task.platform = "简书"
+                elif top_platform in ["搜狐号", "sohu"]:
+                    platform_str = "搜狐号"
+                elif top_platform in ["百家号", "baijiahao"]:
+                    platform_str = "百家号"
 
             # 如果当前是自定义 URL 模式，scraper 本身没有 category_name，
             # 则从每篇文章的 category 字段里统计最常见的真实分类/专栏名（如“西游正解”）
-            if not task.category_name:
+            # 例外：新浪博客主页全量模式（有栏目菜单但无单一栏目名）是整站导出，
+            # 不能把某个栏目名当成整批的前缀，栏目归属由各篇 category 与分栏打包体现。
+            is_sina_homepage = (
+                task.platform in ("sina_blog", "新浪博客")
+                and getattr(scraper, "categories", None)
+                and not getattr(scraper, "category_name", None)
+            )
+            if not task.category_name and not is_sina_homepage:
                 valid_categories = [
                     a.category for a in scraped_articles
                     if a.category and a.category.strip()
@@ -1065,6 +1194,33 @@ class TaskManager:
             else:
                 filename_prefix = f"{safe_author}_{safe_platform}"
 
+            # ===== 按专栏/栏目分组打包（知乎专栏 / 新浪博客栏目）=====
+            # 每个分组一个独立 ZIP 归档包；知乎一篇文章可能属于多个专栏（column_title 用 、 分隔），
+            # 归入首个专栏避免重复打包；无归属文章归入「未分组/未分类」。
+            # 只有一个分组时不启用（退化为普通导出，不产生意义不大的单包）。
+            column_groups: Optional[List[Tuple[str, List[ArticleItem]]]] = None
+            group_label = "专栏"
+            if request.group_by_column and task.platform in ("zhihu", "知乎", "sina_blog", "新浪博客"):
+                is_sina = task.platform in ("sina_blog", "新浪博客")
+                group_label = "栏目" if is_sina else "专栏"
+                _groups: Dict[str, List[ArticleItem]] = {}
+                for a in scraped_articles:
+                    if is_sina:
+                        col = (a.category or "").strip() or "未分类"
+                    else:
+                        col = (a.column_title or "").split("、")[0].strip() or "未分组"
+                    _groups.setdefault(col, []).append(a)
+                if len(_groups) > 1:
+                    column_groups = list(_groups.items())
+                    if is_sina:
+                        # 按源站侧栏栏目顺序排列，未分类置末，压缩包序号与源站栏目次序一致
+                        menu_order = {
+                            c["name"]: i for i, c in enumerate(getattr(scraper, "categories", None) or [])
+                        }
+                        column_groups.sort(
+                            key=lambda kv: (kv[0] == "未分类", menu_order.get(kv[0], len(menu_order)), kv[0])
+                        )
+
             # ===== 自动分批导出编排 =====
             # 大规模导出 (如九千篇) 一次性渲染合并 PDF/Word 会把内存与浏览器压垮 (用户反馈的「卡在 96%」)。
             # 策略：未显式指定 batch_size 且总数超过 800 篇时，自动按 500 篇/批拆分；
@@ -1073,7 +1229,7 @@ class TaskManager:
             total_selected = len(scraped_articles)
             batch_size = request.batch_size
             auto_batched = False
-            if not batch_size and total_selected > 800:
+            if not column_groups and not batch_size and total_selected > 800:
                 batch_size = 500
                 auto_batched = True
             if batch_size:
@@ -1083,10 +1239,46 @@ class TaskManager:
                     batch_size = 500
             num_batches = math.ceil(total_selected / batch_size) if (batch_size and total_selected > batch_size) else 1
 
+            # 导出单元：分组模式按专栏/栏目切（超大分组再按批拆，防千篇级合并渲染爆内存），
+            # 否则按篇数切。单元 = (文章列表, 文件名前缀, 进度标签)
+            export_units: List[Tuple[List[ArticleItem], str, str]] = []
+            if column_groups:
+                # 分组模式：文件名用「栏目名_作者_平台」，不再叠加博主级分类前缀，
+                # 否则会出现「全部博文_全部博文_作者」这类重复前缀。
+                group_base_prefix = f"{safe_author}_{safe_platform}"
+                for gi, (col_name, g_articles) in enumerate(column_groups, 1):
+                    safe_col = re.sub(r'[\/:*?"<>|]', '_', col_name).strip() or f"{group_label}{gi}"
+                    g_batch = batch_size or (500 if len(g_articles) > 800 else 0)
+                    if g_batch and len(g_articles) > g_batch:
+                        n_sub = math.ceil(len(g_articles) / g_batch)
+                        for si in range(n_sub):
+                            chunk = g_articles[si * g_batch:(si + 1) * g_batch]
+                            export_units.append((
+                                chunk,
+                                f"{safe_col}_{group_base_prefix}_第{si + 1}批",
+                                f"[{group_label} {gi}/{len(column_groups)} · {col_name} · 第{si + 1}/{n_sub}批] "
+                            ))
+                    else:
+                        export_units.append((
+                            g_articles,
+                            f"{safe_col}_{group_base_prefix}",
+                            f"[{group_label} {gi}/{len(column_groups)} · {col_name}] "
+                        ))
+                num_batches = len(export_units)
+            elif num_batches > 1:
+                for b_idx in range(num_batches):
+                    b_start = b_idx * batch_size
+                    b_articles = scraped_articles[b_start:b_start + batch_size]
+                    export_units.append((
+                        b_articles,
+                        f"{filename_prefix}_第{b_idx + 1}批_{b_start + 1}-{b_start + len(b_articles)}篇",
+                        f"[第 {b_idx + 1}/{num_batches} 批] "
+                    ))
+
             export_files: Dict[str, str] = {}
             export_errors: List[str] = []
 
-            if num_batches <= 1:
+            if not column_groups and num_batches <= 1:
                 # ---------- 单批：保持原有导出行为 ----------
                 result_files, result_errors = await self._export_batch(
                     task, request, scraped_articles, filename_prefix, author_name, platform_str,
@@ -1104,7 +1296,9 @@ class TaskManager:
                     raise RuntimeError("; ".join(export_errors))
             else:
                 # ---------- 多批：轻量合并格式全量一份 + 每批独立 ZIP ----------
-                if auto_batched:
+                if column_groups:
+                    task.message = f"📦 已按{group_label}分组打包 (共 {len(column_groups)} 个{group_label} · {num_batches} 个归档包)，正在逐组导出..."
+                elif auto_batched:
                     task.message = f"📦 检测到 {total_selected} 篇大规模导出，已自动启用分批备份 (每批 {batch_size} 篇 · 共 {num_batches} 批)，告别内存爆炸与末尾卡死..."
                 else:
                     task.message = f"📦 已启用分批备份 (每批 {batch_size} 篇 · 共 {num_batches} 批)，正在逐批导出..."
@@ -1114,6 +1308,9 @@ class TaskManager:
                 # 1. 轻量合并格式 (md/txt/html/original_html) 全量合并单文件，进度 80 -> 86
                 light_format_set = {ExportFormatEnum.MARKDOWN, ExportFormatEnum.TXT, ExportFormatEnum.HTML, ExportFormatEnum.ORIGINAL_HTML}
                 light_formats = [f for f in request.export_formats if f in light_format_set]
+                # 分组模式下全量合并文件单独命名：新浪博客默认栏目就叫「全部博文」，
+                # 会与某个分组 ZIP 的文件名前缀完全相同，导致逐组导出把全量合并文件覆盖成单组内容。
+                merged_prefix = f"{safe_author}_{safe_platform}_全量合并" if column_groups else filename_prefix
                 if light_formats:
                     light_total = len(light_formats)
                     for l_idx, fmt in enumerate(light_formats, 1):
@@ -1127,19 +1324,19 @@ class TaskManager:
                         try:
                             if fmt == ExportFormatEnum.MARKDOWN:
                                 exporter = MarkdownExporter(author_name, platform_str, OUTPUT_DIR)
-                                out_path = await exporter.export(scraped_articles, filename_prefix)
+                                out_path = await exporter.export(scraped_articles, merged_prefix)
                                 export_files["md"] = f"/api/download/{out_path.name}"
                             elif fmt == ExportFormatEnum.TXT:
                                 exporter = TxtExporter(author_name, platform_str, OUTPUT_DIR)
-                                out_path = await exporter.export(scraped_articles, filename_prefix)
+                                out_path = await exporter.export(scraped_articles, merged_prefix)
                                 export_files["txt"] = f"/api/download/{out_path.name}"
                             elif fmt == ExportFormatEnum.HTML:
                                 exporter = HTMLExporter(author_name, platform_str, OUTPUT_DIR)
-                                out_path = await exporter.export(scraped_articles, filename_prefix, download_images=request.image_mode != "none")
+                                out_path = await exporter.export(scraped_articles, merged_prefix, download_images=request.image_mode != "none")
                                 export_files["html"] = f"/api/download/{out_path.name}"
                             elif fmt == ExportFormatEnum.ORIGINAL_HTML:
                                 exporter = OriginalHTMLExporter(author_name, platform_str, OUTPUT_DIR)
-                                out_path = await exporter.export(scraped_articles, filename_prefix, download_images=request.image_mode != "none")
+                                out_path = await exporter.export(scraped_articles, merged_prefix, download_images=request.image_mode != "none")
                                 export_files["original_html"] = f"/api/download/{out_path.name}"
                         except Exception as light_err:
                             err_msg = f"全量合并格式 {fmt.value} 导出失败: {light_err}"
@@ -1148,17 +1345,13 @@ class TaskManager:
                     # 轻量格式生成完毕，释放图片缓存
                     clear_image_caches()
 
-                # 2. 逐批导出全部勾选格式并打独立 ZIP，进度 86 -> 99
-                batch_span = 13.0 / num_batches
-                for b_idx in range(num_batches):
+                # 2. 逐批导出全部勾选格式并打独立 ZIP，进度 86 -> 99（export_units 已在前面构建）
+                batch_span = 13.0 / len(export_units)
+                for b_idx, (b_articles, b_prefix, b_tag) in enumerate(export_units):
                     if task.is_cancelled:
                         task.status = TaskStatusEnum.CANCELLED
                         await self._broadcast(task_id)
                         return
-                    b_start = b_idx * batch_size
-                    b_articles = scraped_articles[b_start:b_start + batch_size]
-                    b_prefix = f"{filename_prefix}_第{b_idx + 1}批_{b_start + 1}-{b_start + len(b_articles)}篇"
-                    b_tag = f"[第 {b_idx + 1}/{num_batches} 批] "
 
                     result_files, result_errors = await self._export_batch(
                         task, request, b_articles, b_prefix, author_name, platform_str,
@@ -1188,10 +1381,16 @@ class TaskManager:
             task.progress_percent = 100.0
             task.export_files = export_files
             task.completed_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            if num_batches > 1:
+            if column_groups:
+                task.message = f"🎉 按{group_label}分组打包全部完成！共 {len(scraped_articles)} 篇有效文章，已按{group_label}拆分为 {num_batches} 个 ZIP 归档包，可逐个下载。"
+            elif num_batches > 1:
                 task.message = f"🎉 分批备份全部完成！共 {len(scraped_articles)} 篇有效文章，已拆分为 {num_batches} 个 ZIP 归档包，可逐批下载。"
             else:
                 task.message = f"🎉 抓取与导出全部完成！共合并 {len(scraped_articles)} 篇有效文章。"
+            # 只要有格式没生成就必须说出来：以前 md 成功、pdf 失败时照样显示「全部完成」，
+            # 用户拿不到 PDF 也看不到原因（1103 行只在全部格式都失败时才报错）
+            if export_errors:
+                task.message += f" ⚠ 其中 {len(export_errors)} 项未生成：" + "；".join(export_errors)
             await self._broadcast(task_id)
 
         except Exception as e:

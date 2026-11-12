@@ -50,11 +50,12 @@ def init_db():
                     tags_json TEXT,
                     content_type TEXT,
                     column_title TEXT,
+                    category TEXT,
                     cached_at TEXT
                 )
             """)
-            # 兼容旧缓存表：如不存在 content_type / column_title 列则动态添加（避免清空已有缓存）
-            for col_name in ["content_type", "column_title"]:
+            # 兼容旧缓存表：如不存在 content_type / column_title / category 列则动态添加（避免清空已有缓存）
+            for col_name in ["content_type", "column_title", "category"]:
                 try:
                     conn.execute(f"ALTER TABLE article_cache ADD COLUMN {col_name} TEXT")
                 except Exception:
@@ -81,7 +82,9 @@ def get_cached_article(url: str) -> Optional[ArticleItem]:
             if row:
                 images = json.loads(row["images_json"]) if row["images_json"] else []
                 tags = json.loads(row["tags_json"]) if row["tags_json"] else []
-                category = tags[0] if (tags and len(tags) > 0) else None
+                # 分类严格取持久化字段；旧缓存无该列时留空，绝不拿标签首项顶替
+                # （标签不是栏目/专栏，顶替会凭空造出假分组）
+                category = (row["category"] if "category" in row.keys() else None)
                 return ArticleItem(
                     id=row["article_id"] or row["url"],
                     title=row["title"] or "",
@@ -115,8 +118,8 @@ def save_cached_article(article: ArticleItem):
             conn.execute("""
                 INSERT OR REPLACE INTO article_cache (
                     url, platform, article_id, title, author, publish_time,
-                    summary, content_html, content_markdown, images_json, tags_json, content_type, column_title, cached_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    summary, content_html, content_markdown, images_json, tags_json, content_type, column_title, category, cached_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 article.url.strip(),
                 article.platform,
@@ -131,6 +134,7 @@ def save_cached_article(article: ArticleItem):
                 tags_json,
                 article.content_type,
                 article.column_title,
+                article.category,
                 now_str
             ))
             conn.commit()

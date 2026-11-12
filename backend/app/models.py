@@ -11,6 +11,8 @@ class PlatformEnum(str, Enum):
     WEIBO = "weibo"
     SINA_BLOG = "sina_blog"
     JIANSHU = "jianshu"
+    SOHU = "sohu"
+    BAIJIAHAO = "baijiahao"
     WECHAT = "wechat"
     CUSTOM_URLS = "custom_urls"
 
@@ -84,6 +86,9 @@ class TaskCreateRequest(BaseModel):
     max_articles: Optional[int] = Field(None, description="最大抓取篇数，None 表示抓取全部")
     start_index: Optional[int] = Field(1, description="起始文章序号，从 1 开始")
     end_index: Optional[int] = Field(None, description="结束文章序号，留空表示抓取到最后")
+    date_from: Optional[str] = Field(None, description="按发布时间过滤：起始日期 YYYY-MM-DD（含当天），留空不限")
+    date_to: Optional[str] = Field(None, description="按发布时间过滤：结束日期 YYYY-MM-DD（含当天），留空不限")
+    group_by_column: bool = Field(False, description="按专栏/栏目分组打包导出：知乎按专栏、新浪博客按栏目，每个分组一个独立 ZIP 归档包；多专栏文章归入首个专栏，无归属归入未分组/未分类；超大分组自动再分批")
     author_name_override: Optional[str] = Field(None, description="自定义博主名称")
     wechat_cookie: Optional[str] = Field(None, description="微信公众号抓取凭证 Cookie (可选)")
     wechat_token: Optional[str] = Field(None, description="微信公众号抓取 Token (可选)")

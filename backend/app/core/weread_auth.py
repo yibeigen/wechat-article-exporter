@@ -102,7 +102,7 @@ async def check_weread_auth_status() -> Dict[str, Any]:
 
     headers = build_weread_headers(cookies)
     try:
-        async with httpx.AsyncClient(headers=headers, timeout=10.0) as client:
+        async with httpx.AsyncClient(headers=headers, timeout=10.0, trust_env=False) as client:
             resp = await client.get(
                 f"{WEREAD_HOST}/web/shelf/sync",
                 params={"userVid": "", "synckey": 0, "lectureSynckey": 0},
@@ -152,10 +152,16 @@ def _launch_weread_qr_login_sync() -> Dict[str, Any]:
                 "--window-position=200,100",
                 "--disable-blink-features=AutomationControlled",
             ]
-            try:
-                browser = p.chromium.launch(channel="msedge", headless=False, args=launch_args)
-            except Exception:
-                browser = p.chromium.launch(headless=False, args=launch_args)
+            browser = None
+            for _channel in ("msedge", "chrome", None):
+                try:
+                    browser = (p.chromium.launch(channel=_channel, headless=False, args=launch_args)
+                               if _channel else p.chromium.launch(headless=False, args=launch_args))
+                    break
+                except Exception:
+                    continue
+            if browser is None:
+                raise RuntimeError("本机未检测到 Edge / Chrome 浏览器，扫码登录需要系统浏览器提供窗口。请安装 Microsoft Edge 后重试。")
 
             context = browser.new_context(
                 user_agent=DEFAULT_HEADERS["User-Agent"],

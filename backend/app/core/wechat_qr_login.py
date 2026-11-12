@@ -22,7 +22,8 @@ class WeChatQRLoginManager:
                         "Accept": "application/json, text/plain, */*"
                     },
                     timeout=15.0,
-                    follow_redirects=True
+                    follow_redirects=True,
+                    trust_env=False
                 ),
                 "created_at": time.time(),
                 "uuid": ""

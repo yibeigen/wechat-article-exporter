@@ -221,6 +221,20 @@ async def get_supported_platforms():
             "tip": "免登录一键提取博主全部公开文章或专题文集，高清图文排版无损导出"
         },
         {
+            "id": "sohu",
+            "name": "搜狐号",
+            "category": "自媒体平台",
+            "placeholder": "输入搜狐号作者主页 (mp.sohu.com/profile?xpt=xxx) 或任意搜狐文章链接",
+            "tip": "免登录全量抓取搜狐号作者全部历史文章，自动解析正文、发布时间与配图"
+        },
+        {
+            "id": "baijiahao",
+            "name": "百家号",
+            "category": "自媒体平台",
+            "placeholder": "输入百家号作者主页 (baijiahao.baidu.com/u?app_id=xxx) 或任意百家号文章链接",
+            "tip": "全量抓取百家号作者历史文章，正文、发布时间与配图完整保留"
+        },
+        {
             "id": "csdn",
             "name": "CSDN",
             "category": "技术博客",
@@ -269,6 +283,9 @@ class ExtractLinksRequest(BaseModel):
     appmsg_token: Optional[str] = None
     # 知乎专享：只检索勾选的内容类型 (articles/answers/pins)；空/缺省表示全部
     content_types: Optional[List[str]] = None
+    # 按发布时间过滤检索清单（YYYY-MM-DD，含当天）；留空不限
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
     # 新版前端传 true 使用异步任务模式；旧版缓存前端不传，后端走同步模式兼容旧行为
     async_mode: Optional[bool] = Field(None, description="是否以异步任务模式执行（海量文章防网关超时）")
 
@@ -326,6 +343,16 @@ async def _do_extract_links(request: ExtractLinksRequest, job_id: Optional[str] 
         for _art in articles:
             if _art.get("title"):
                 _art["title"] = dedupe_wechat_title(_art["title"])
+        # 时间范围过滤：与任务主流程同一套解析规则，弹窗清单直接呈现过滤后的结果
+        explanation = getattr(scraper, "explanation", None)
+        if request.date_from or request.date_to:
+            articles, removed, unknown = task_manager.filter_articles_by_date(
+                articles, request.date_from, request.date_to)
+            if removed or unknown:
+                note = f"⏱ 时间范围过滤（{request.date_from or '不限'} ~ {request.date_to or '不限'}）：剔除范围外 {removed} 篇"
+                if unknown:
+                    note += f"，{unknown} 篇无发布时间已保留"
+                explanation = "\n".join(filter(None, [explanation, note]))
         return {
             "success": True,
             "platform": request.platform,
@@ -334,7 +361,7 @@ async def _do_extract_links(request: ExtractLinksRequest, job_id: Optional[str] 
             "articles": articles,
             "declared_count": getattr(scraper, "declared_count", None),
             "category_name": getattr(scraper, "category_name", None),
-            "explanation": getattr(scraper, "explanation", None),
+            "explanation": explanation,
             "truncated": bool(getattr(scraper, "list_truncated", False))
         }
     finally:
@@ -1018,7 +1045,7 @@ async def proxy_image(url: str):
         "Referer": ""
     }
     try:
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, trust_env=False) as client:
             resp = await client.get(url, headers=headers)
             content_type = resp.headers.get("content-type", "image/png")
             return Response(
@@ -1203,7 +1230,7 @@ async def scan_wechat_albums(req: Dict[str, Any] = Body(...)):
             album_id = m_id.group(1)
             biz = m_biz.group(1) if m_biz else ""
             try:
-                async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+                async with httpx.AsyncClient(timeout=8.0, follow_redirects=True, trust_env=False) as client:
                     resp = await client.get(target, headers=headers)
                     html = resp.text
                     soup = BeautifulSoup(html, "lxml")
@@ -1229,7 +1256,7 @@ async def scan_wechat_albums(req: Dict[str, Any] = Body(...)):
     # 2. 如果是推文链接，纯 HTTP GET 解析，提取作者、biz 和底部的全部合集
     elif target.startswith("http"):
         try:
-            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True, trust_env=False) as client:
                 resp = await client.get(target, headers=headers)
                 html = resp.text
                 
@@ -1284,7 +1311,7 @@ async def scan_wechat_albums(req: Dict[str, Any] = Body(...)):
             _alb_url = (f"https://mp.weixin.qq.com/mp/appmsgalbum"
                         f"?action=getalbum&__biz={biz}&album_id={_alb.get('album_id')}")
         try:
-            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True, trust_env=False) as client:
                 _r = await client.get(_alb_url + "&f=json", headers=headers)
                 if _r.status_code == 200:
                     _cnt = None
@@ -1335,7 +1362,7 @@ async def search_wechat_biz(query: str):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         }
         try:
-            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True, trust_env=False) as client:
                 resp = await client.get(query_str, headers=headers)
                 html = resp.text
                 nick_match = re.search(r'var\s+nickname\s*=\s*["\']([^"\']+)["\']', html) or re.search(r'id="js_name">\s*([^<]+)\s*<', html)
@@ -1412,7 +1439,7 @@ async def search_wechat_biz(query: str):
         }
         search_url = f"https://mp.weixin.qq.com/cgi-bin/searchbiz?action=search_biz&begin=0&count=10&query={query_str}&token={token}&lang=zh_CN&f=json&ajax=1"
         try:
-            async with httpx.AsyncClient(timeout=8.0, verify=False) as client:
+            async with httpx.AsyncClient(timeout=8.0, verify=False, trust_env=False) as client:
                 resp = await client.get(search_url, headers=headers)
                 data = resp.json()
                 biz_list = data.get("list", [])
@@ -1576,8 +1603,8 @@ async def api_admin_update_contributor(contributor_id: str, data: dict = Body(..
 async def get_client_version():
     """获取最新客户端版本信息与下载链接"""
     return {
-        "version": "1.3.0",
-        "release_notes": "顶栏「刷新」新增 GitHub 新版本检查，发现新版一键前往下载；安装包自带 Python 运行环境与浏览器内核，首启不再联网部署；修复多点图标把运行中软件打成空壳；启动提速（二次启动实测 9.2 秒降至 6.6 秒）。",
+        "version": "1.4.0",
+        "release_notes": "平台矩阵扩到 11 家，新增【搜狐号】【百家号】全量翻页与正文还原；修复 51CTO 检索恒为 0 篇（系统代理变量含 IPv6 回环地址导致 HTTP 客户端构造失败）；修复磁盘只读时缓存降级把后端启动整个带崩；清单被平台风控/登录墙截断时不再谎报「无遗漏」，改为写明差额与中断原因；Win10/11 安装包大幅瘦身，剔除运行期永不加载的完整 Chromium、调试符号与多余语言包，抓取与导出能力不变。",
         "standard_download_url": "/api/client/download",
         "win7_download_url": "/api/client/download/win7",
         "mac_download_url": "/api/client/download/mac",
@@ -1590,6 +1617,8 @@ async def download_client_standard():
     dist_dir = BASE_DIR / "dist"
     candidates = [
         dist_dir / "BlogDistiller-Setup-x64.exe",
+        dist_dir / "BlogDistiller Setup 1.4.0.exe",
+        dist_dir / "BlogDistiller 文章导出助手 Setup 1.4.0.exe",
         dist_dir / "BlogDistiller Setup 1.3.0.exe",
         dist_dir / "BlogDistiller Setup 1.2.0.exe",
     ]
@@ -1602,25 +1631,39 @@ async def download_client_standard():
             return FileResponse(exes[0], filename=exes[0].name, media_type="application/octet-stream")
     raise HTTPException(status_code=404, detail="标准版客户端安装包尚未就绪，请稍后重试或查看发布页面")
 
+def _win7_asset_name(p: Path) -> str:
+    """Win7 包下载落盘名统一成 GitHub 附件同款 ASCII 名。
+
+    Win7 新旧两版只差不到 1 万字节，浏览器另存后都显示 231.2M，名字必须能区分是哪一份
+    （2026-11-04 客户装到旧包事故）；中文名在部分浏览器/CDN 上还有编码问题。
+    """
+    m = re.search(r"\d+\.\d+\.\d+", p.name)
+    return f"BlogDistiller-Win7-Setup-{m.group(0)}-win7-latest.exe" if m else p.name
+
+
 @app.get("/api/client/download/win7")
 async def download_client_win7():
     """下载 Windows 7/8.1 兼容版桌面客户端"""
     dist_dir = BASE_DIR / "dist"
     # Win7 版构建产物隔离在 dist/win7/ 子目录（electron-builder 配置 builder-win7.yml 决定）
     candidates = [
+        # 1.4.0 Win7 包；旧 1.3.0 包仍留在 dist/win7/ 备查，不作默认下载
+        dist_dir / "win7" / "BlogDistiller-Win7-Setup-1.4.0-win7最新.exe",
+        dist_dir / "win7" / "BlogDistiller 文章导出助手 Setup 1.4.0.exe",
+        dist_dir / "win7" / "BlogDistiller-Win7-Setup-1.3.0-win7最新.exe",
         dist_dir / "win7" / "BlogDistiller-Win7-Setup-x64.exe",
         dist_dir / "win7" / "BlogDistiller-Win7.exe",
         dist_dir / "BlogDistiller-Win7-Setup-x64.exe",
     ]
     for p in candidates:
         if p.exists():
-            return FileResponse(p, filename="BlogDistiller-Win7-Setup-x64.exe", media_type="application/octet-stream")
+            return FileResponse(p, filename=_win7_asset_name(p), media_type="application/octet-stream")
     # 兜底：取 dist/win7/ 下最新构建的安装包（electron-builder 默认命名为 "{productName} Setup {version}.exe"）
     win7_dir = dist_dir / "win7"
     if win7_dir.exists():
         exes = sorted(win7_dir.glob("*.exe"), key=lambda f: f.stat().st_mtime, reverse=True)
         if exes:
-            return FileResponse(exes[0], filename="BlogDistiller-Win7-Setup-x64.exe", media_type="application/octet-stream")
+            return FileResponse(exes[0], filename=_win7_asset_name(exes[0]), media_type="application/octet-stream")
     raise HTTPException(status_code=404, detail="Win7 兼容版安装包正在打包中，敬请期待")
 
 

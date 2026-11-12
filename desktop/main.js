@@ -3480,6 +3480,9 @@ class LocalPythonManager {
             // 置此变量后 playwright 直接用包内浏览器，省去首启约 170MB 联网下载
             const bundledBrowsers = path.join(process.resourcesPath, "browsers");
             if (fs.existsSync(bundledBrowsers)) childEnv.PLAYWRIGHT_BROWSERS_PATH = bundledBrowsers;
+            // playwright 自带的 node.exe（v16）在 Win7 上会先做系统版本检查并拒绝启动，
+            // 导致 PDF 渲染与知乎/掘金等浏览器通道全挂；跳过该检查后 node 在 Win7 实测可用
+            childEnv.NODE_SKIP_PLATFORM_CHECK = "1";
 
             this.bootLog(`spawn: ${pythonCmd} ${args.join(" ")}`);
 

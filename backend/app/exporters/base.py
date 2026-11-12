@@ -23,6 +23,8 @@ class BaseExporter(ABC):
             "juejin": "稀土掘金",
             "cnblogs": "博客园",
             "51cto": "51CTO",
+            "sohu": "搜狐号",
+            "baijiahao": "百家号",
             "custom_urls": "网页合集"
         }
         if not platform_str:

@@ -69,24 +69,38 @@ class OriginalHTMLExporter(BaseExporter):
         """渲染新浪博客 PC 电脑端 1:1 原版经典排版"""
         output_file = self.output_dir / f"{filename_prefix}_原版.html"
 
-        # 提取分类或专栏名称
-        category_name = None
-        for a in articles:
-            if a.category and a.category.strip() and a.category.strip() not in ["新浪博文", "全部博文", "未分类"]:
-                category_name = a.category.strip()
-                break
+        # 标题栏栏目名：仅当本批文章同属一个真实栏目时才显示该栏目名；
+        # 主页全量导出跨多个栏目，显示单一栏目名会误导，留空由模板回落成「全部博文」。
+        real_cats = {
+            a.category.strip() for a in articles
+            if a.category and a.category.strip()
+            and a.category.strip() not in ["新浪博文", "全部博文", "未分类"]
+        }
+        has_uncategorized = any(
+            not a.category or a.category.strip() in ["", "未分类", "全部博文", "新浪博文"]
+            for a in articles
+        )
+        category_name = next(iter(real_cats)) if len(real_cats) == 1 and not has_uncategorized else None
 
         title = f"{self.author_name} 的新浪博客"
+
+        # 真实博客主页地址：新浪文章 URL 的 blog_ 后 8 位十六进制就是博主 UID
+        # （blog_4d89b834... -> 0x4d89b834 = 1300871220），避免头图写死别人的 UID。
+        blog_url = ""
+        for a in articles:
+            m_uid = re.search(r"blog_([0-9a-fA-F]{8})", a.url or "")
+            if m_uid:
+                blog_url = f"https://blog.sina.com.cn/u/{int(m_uid.group(1), 16)}"
+                break
 
         # 构建给前端模版使用的结构化文章列表
         articles_data = []
         for idx, art in enumerate(articles, 1):
-            cat = art.category
-            if not cat or cat in ["新浪博文", "全部博文", "未分类"]:
-                if art.tags and len(art.tags) > 0 and art.tags[0] != "新浪博客":
-                    cat = art.tags[0]
-                else:
-                    cat = "其它"
+            cat = (art.category or "").strip()
+            # 栏目名直接沿用抓取结果（未归类文章就是「未分类」）；
+            # 不能拿标签首项顶替，标签不是栏目。
+            if not cat or cat in ["新浪博文", "其它"]:
+                cat = "未分类"
 
             articles_data.append({
                 "id": art.id or str(idx),
@@ -124,10 +138,6 @@ class OriginalHTMLExporter(BaseExporter):
         linedot_b64 = load_asset_b64("SG_linedot.gif", "image/gif")
         newsp_b64 = load_asset_b64("sg_newsp.png", "image/png")
 
-        # 默认博主头像 (SVG Base64)
-        default_avatar_svg = '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 24 24" fill="#a0aec0"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>'
-        author_avatar = "data:image/svg+xml;base64," + base64.b64encode(default_avatar_svg.encode("utf-8")).decode("ascii")
-
         # 查找模版文件
         tmpl_paths = [
             CURRENT_DIR / "templates" / "sina_classic" / "sina_classic.html",
@@ -146,7 +156,7 @@ class OriginalHTMLExporter(BaseExporter):
         rendered_html = template.render(
             title=title,
             author_name=self.author_name,
-            author_avatar=author_avatar,
+            blog_url=blog_url,
             category_name=category_name,
             total_articles=len(articles_data),
             banner_b64=banner_b64,
@@ -194,7 +204,7 @@ class OriginalHTMLExporter(BaseExporter):
                 url = "https:" + url
             try:
                 import httpx
-                async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, trust_env=False) as client:
                     resp = await client.get(url, headers={
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                         "Referer": "https://www.jianshu.com/"
@@ -338,7 +348,7 @@ class OriginalHTMLExporter(BaseExporter):
                 url = "https:" + url
             try:
                 import httpx
-                async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, trust_env=False) as client:
                     resp = await client.get(url, headers={
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                         "Referer": "https://www.zhihu.com/"

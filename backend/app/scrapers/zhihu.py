@@ -1030,6 +1030,8 @@ class ZhihuScraper(BaseScraper):
         # 若此前已写入溯源失败等前置说明，合并而非覆盖
         if warnings:
             self.explanation = "\n".join(filter(None, [self.explanation, "\n".join(warnings)]))
+            if any("未抓全" in w for w in warnings):
+                self.list_truncated = True
         # 声明总数（回答+文章）上报：前端检索清单弹窗会显示「标称 X 篇 vs 收录 Y 篇」
         if declared_total:
             self.declared_count = declared_total

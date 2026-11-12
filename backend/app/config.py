@@ -1,4 +1,16 @@
+import asyncio
+import functools
 from pathlib import Path
+
+# Win7 随包内核是 Python 3.8，而 asyncio.to_thread 是 3.9 才加入的 API。
+# 不补这个垫片，PDF/DOCX/ZIP 导出与知乎、掘金、51CTO 抓取会在真 Win7 上
+# 统一抛 "module 'asyncio' has no attribute 'to_thread'"（Win11 开发机永远复现不了）。
+if not hasattr(asyncio, "to_thread"):
+    async def _to_thread(func, *args, **kwargs):
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, functools.partial(func, *args, **kwargs))
+
+    asyncio.to_thread = _to_thread
 
 # 根路径与存储目录
 BASE_DIR = Path(__file__).resolve().parent.parent.parent

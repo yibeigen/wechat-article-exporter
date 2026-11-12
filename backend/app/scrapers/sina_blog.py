@@ -1,7 +1,7 @@
 import re
 import asyncio
 import httpx
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional, Callable, Tuple
 from bs4 import BeautifulSoup
 from app.scrapers.base import BaseScraper
 from app.models import ArticleItem
@@ -21,6 +21,11 @@ class SinaBlogScraper(BaseScraper):
         self.declared_count = None
         self.category_name = None
         self.total_pages = 1
+        # 侧栏「分类专栏」菜单：[{id, name, count}]，「全部博文」是总数不算栏目
+        self.categories: List[Dict[str, Any]] = []
+        # 文章 URL -> 真实栏目名（进各栏目目录页确定归属，比详情页 blog_class 可靠：
+        # 未归类文章的 td.blog_class 是空的，只看详情页会把它们误判成「全部博文」）
+        self.article_category_map: Dict[str, str] = {}
         self.client.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Referer": "https://blog.sina.com.cn/"
@@ -161,35 +166,31 @@ class SinaBlogScraper(BaseScraper):
         current_page = 1
         total_pages = 1
         unfetched_pages = []
+        hit_limit = False
 
         while current_page <= total_pages:
             list_url = f"https://blog.sina.com.cn/s/articlelist_{uid}_{cat_id}_{current_page}.html"
             cells, soup = await self._fetch_page_cells(list_url, current_page, total_pages)
 
-            # 首页提取总页数与标称专栏分类篇数
+            # 首页提取总页数、真实栏目菜单与标称篇数
             if current_page == 1 and soup:
                 m_pages = re.search(r"共\s*(\d+)\s*页", str(soup))
                 if m_pages:
                     total_pages = int(m_pages.group(1))
                     self.total_pages = total_pages
 
-                for span in soup.select(".SG_connHead span.title"):
-                    stext = span.text.strip()
-                    m_decl = re.search(r"^([^\(（\n]+?)\s*[\(（](\d+)[\)）]", stext)
-                    if m_decl:
-                        self.category_name = m_decl.group(1).strip()
-                        self.declared_count = int(m_decl.group(2))
-                        break
-
+                self.categories = self._parse_category_menu(soup)
+                if cat_id != "0":
+                    # 直接给了某个栏目链接：只抓该栏目。栏目页把当前栏目渲染成标题头
+                    # 「行情分析(771)」而非菜单链接，故优先读标题头，再退回菜单。
+                    active_name, active_count = self._parse_active_category(soup)
+                    hit = next((c for c in self.categories if c["id"] == cat_id), None)
+                    self.category_name = active_name or (hit["name"] if hit else None)
+                    self.declared_count = active_count if active_count is not None else (hit["count"] if hit else None)
                 if not self.declared_count:
-                    selector = f"a[href*='_{cat_id}_']" if cat_id != "0" else "a[href*='_0_']"
-                    for a in soup.select(selector):
-                        atext = a.text.strip()
-                        m_a = re.search(r"^([^\(（\n]+?)\s*[\(（](\d+)[\)）]", atext)
-                        if m_a:
-                            self.category_name = m_a.group(1).strip()
-                            self.declared_count = int(m_a.group(2))
-                            break
+                    total_decl = self._parse_total_count(soup)
+                    if total_decl is not None:
+                        self.declared_count = total_decl
 
             if cells:
                 for cell in cells:
@@ -234,8 +235,11 @@ class SinaBlogScraper(BaseScraper):
                         )
 
                     if self.max_articles and len(articles) >= self.max_articles:
-                        self._build_explanation(len(articles))
-                        return articles
+                        hit_limit = True
+                        break
+
+                if hit_limit:
+                    break
 
                 # 物理末页判定：新浪博客每页定额 50 篇，若该页存在博文但篇数 < 50 (如尾页 41 篇)，
                 # 说明已完全到达公开博文的最末物理端点，立即安全完成，绝不浪费时间扫描后续空页！
@@ -285,8 +289,131 @@ class SinaBlogScraper(BaseScraper):
                                 "publish_time": pub_time
                             })
 
+        # 归属真实栏目：给栏目链接时全部归该栏目；给主页时进各栏目目录页确定每篇归属，
+        # 未出现在任何栏目里的文章归「未分类」（新浪允许文章不归类，详情页 blog_class 为空）
+        if cat_id != "0" and self.category_name:
+            for a in articles:
+                a["category"] = self.category_name
+                self.article_category_map[a["url"]] = self.category_name
+        elif self.categories:
+            await self._resolve_category_membership(uid, articles, progress_callback)
+            for a in articles:
+                a["category"] = self.article_category_map.get(a["url"], "未分类")
+
         self._build_explanation(len(articles))
         return articles
+
+    def _parse_category_menu(self, soup) -> List[Dict[str, Any]]:
+        """解析侧栏「分类专栏」菜单；「全部博文」是总数条目（strong 无链接），不算栏目"""
+        cats: List[Dict[str, Any]] = []
+        seen = set()
+        for dot in soup.select(".menuCell_main .SG_dot"):
+            a = dot.find("a", href=re.compile(r"articlelist_\d+_\d+_\d+"))
+            if not a:
+                continue
+            m = re.search(r"articlelist_(\d+)_(\d+)_(\d+)", a.get("href", ""))
+            if not m or m.group(2) == "0" or m.group(2) in seen:
+                continue
+            name = a.get_text(strip=True)
+            if not name:
+                continue
+            count = None
+            em = dot.find("em")
+            if em:
+                m_c = re.search(r"(\d+)", em.get_text())
+                if m_c:
+                    count = int(m_c.group(1))
+            seen.add(m.group(2))
+            cats.append({"id": m.group(2), "name": name, "count": count})
+        return cats
+
+    def _parse_active_category(self, soup) -> Tuple[Optional[str], Optional[int]]:
+        """栏目页标题头形如「行情分析(771)」；主页此处是「全部博文(13494)」，属总数不算栏目"""
+        for span in soup.select(".SG_connHead span.title"):
+            m = re.match(r"^([^\(（\n]+?)\s*[\(（](\d+)[\)）]", span.get_text(strip=True))
+            if m:
+                name = m.group(1).strip()
+                if name and name != "全部博文":
+                    return name, int(m.group(2))
+        return None, None
+
+    def _parse_total_count(self, soup) -> Optional[int]:
+        """从菜单「全部博文(13494)」条目取博客标称总篇数"""
+        for dot in soup.select(".menuCell_main .SG_dot"):
+            strong = dot.find("strong")
+            em = dot.find("em")
+            if strong and em and "全部博文" in strong.get_text():
+                m_c = re.search(r"(\d+)", em.get_text())
+                if m_c:
+                    return int(m_c.group(1))
+        return None
+
+    async def _resolve_category_membership(
+        self,
+        uid: str,
+        articles: List[Dict[str, str]],
+        progress_callback: Optional[Callable[[str, int, int], None]] = None
+    ):
+        """遍历各栏目目录页，建立 文章URL -> 栏目名 映射。
+
+        栏目目录与全部博文目录均按时间倒序，因此当某页所有文章都早于本次目标里最旧的一篇时，
+        该栏目后续页不可能再命中，可安全停止（让限量抓取不必扫完整个栏目）。
+        """
+        remaining = {a["url"] for a in articles}
+        dates = [a["publish_time"][:10] for a in articles if a.get("publish_time")]
+        oldest_target = min(dates) if dates else None
+
+        for ci, cat in enumerate(self.categories, 1):
+            if not remaining:
+                break
+            page = 1
+            cat_total_pages = None
+            while True:
+                if progress_callback:
+                    progress_callback(
+                        f"正在识别栏目归属 [{ci}/{len(self.categories)}]「{cat['name']}」(第 {page} 页，已归属 {len(articles) - len(remaining)} 篇)...",
+                        len(articles),
+                        0
+                    )
+                list_url = f"https://blog.sina.com.cn/s/articlelist_{uid}_{cat['id']}_{page}.html"
+                cells, soup = await self._fetch_page_cells(list_url, page, cat_total_pages or 1)
+                if page == 1 and soup:
+                    m_p = re.search(r"共\s*(\d+)\s*页", str(soup))
+                    if m_p:
+                        cat_total_pages = int(m_p.group(1))
+                if not cells:
+                    break
+
+                page_dates = []
+                for cell in cells:
+                    a_tag = cell.select_one(".atc_title a, a[href*='/blog_']")
+                    if not a_tag or not a_tag.get("href"):
+                        continue
+                    href = a_tag["href"].strip()
+                    if href.startswith("//"):
+                        href = "https:" + href
+                    elif not href.startswith("http"):
+                        href = "https://blog.sina.com.cn" + href
+                    href = href.split("?")[0].strip()
+                    if href in remaining:
+                        self.article_category_map[href] = cat["name"]
+                        remaining.discard(href)
+                    tm_tag = cell.select_one(".atc_tm, .time, span.time")
+                    if tm_tag:
+                        m_d = re.search(r"\d{4}-\d{2}-\d{2}", tm_tag.text)
+                        if m_d:
+                            page_dates.append(m_d.group(0))
+
+                if not remaining:
+                    break
+                if len(cells) < 50:
+                    break
+                if cat_total_pages and page >= cat_total_pages:
+                    break
+                if oldest_target and page_dates and max(page_dates) < oldest_target:
+                    break
+                page += 1
+                await asyncio.sleep(0.12)
 
     async def _fetch_page_cells(self, url: str, current_page: int, total_pages: int):
         """
@@ -310,7 +437,7 @@ class SinaBlogScraper(BaseScraper):
                 "Referer": "https://blog.sina.com.cn/"
             }
             try:
-                async with httpx.AsyncClient(headers=headers, timeout=15.0, follow_redirects=True) as temp_client:
+                async with httpx.AsyncClient(headers=headers, timeout=15.0, follow_redirects=True, verify=False, trust_env=False) as temp_client:
                     resp = await temp_client.get(url)
 
                 if resp.status_code == 200:
@@ -327,7 +454,7 @@ class SinaBlogScraper(BaseScraper):
 
     def _build_explanation(self, actual_count: int):
         """生成篇数一致性自洽说明，使前端提示让用户完全安心、明晰原委"""
-        cat_disp = f"「{self.category_name}」" if self.category_name else "该分类专栏"
+        cat_disp = f"「{self.category_name}」" if self.category_name else "该博客"
         if self.declared_count is not None:
             if self.max_articles and actual_count >= self.max_articles:
                 self.explanation = (
@@ -348,6 +475,14 @@ class SinaBlogScraper(BaseScraper):
                 self.explanation = f"已成功检索并收录{cat_disp}全部 {actual_count} 篇公开博文。"
         else:
             self.explanation = f"已成功检索并收录全部 {actual_count} 篇公开博文。"
+
+        # 主页全量模式补一句栏目归属明细，让用户清楚分栏依据与「未分类」的由来
+        if self.article_category_map and not self.category_name:
+            named = len(self.article_category_map)
+            tail = f"已按侧栏分类专栏识别归属：{named} 篇归入具体栏目"
+            if actual_count > named:
+                tail += f"，{actual_count - named} 篇在源站未归入任何栏目（归入「未分类」）"
+            self.explanation = (self.explanation or "") + tail + "。"
 
     async def scrape_article_detail(self, article_meta: Dict[str, str]) -> ArticleItem:
         url = article_meta["url"]
@@ -401,10 +536,17 @@ class SinaBlogScraper(BaseScraper):
                             publish_time = m_time.group(0)
 
                 # 4. 提取标签与专栏分类
-                cat_name = self.category_name
-                cat_tag = soup.select_one("td.blog_class a, .blog_class a, #articlebody .blog_class a")
-                if cat_tag and cat_tag.text.strip():
-                    cat_name = cat_tag.text.strip()
+                # 栏目归属以目录页映射为准：未归类文章的 td.blog_class 为空，
+                # 而 self.category_name 在主页模式下只是总数口径，不能当栏目名用。
+                cat_name = self.article_category_map.get(url)
+                if not cat_name:
+                    cat_tag = soup.select_one("td.blog_class a, .blog_class a, #articlebody .blog_class a")
+                    if cat_tag and cat_tag.text.strip():
+                        cat_name = cat_tag.text.strip()
+                if not cat_name and self.categories:
+                    cat_name = "未分类"
+                if not cat_name:
+                    cat_name = self.category_name
 
                 tags = []
                 for a in soup.select(".articalTag a, td.blog_tag a, .blog_tag a, #articlebody .blog_tag a"):
@@ -412,8 +554,7 @@ class SinaBlogScraper(BaseScraper):
                     if t_text and t_text not in ["标签：", "分类："] and t_text not in tags:
                         tags.append(t_text)
 
-                if not cat_name and tags:
-                    cat_name = tags[0]
+                # category 语义严格等于「栏目」，不能拿标签顶替，否则分栏会凭空多出假栏目
 
                 # 5. 正文区域 (优先选择精确正文容器，避免包含外部广告与装饰图标)
                 content_tag = soup.select_one("#sina_keyword_ad_area2") or soup.select_one(".articalContent")

@@ -430,7 +430,12 @@ class PDFExporter(BaseExporter):
                         ]
                     )
                     page = browser.new_page()
-                    page.set_content(html_text, wait_until="load", timeout=min(35000 + len(articles) * 500, 120000))
+                    try:
+                        page.set_content(html_text, wait_until="load", timeout=min(35000 + len(articles) * 500, 120000))
+                    except Exception as load_err:
+                        # 正文已注入，只是外链图片（防盗链/慢 CDN）拖住 load 事件。此时直接打印照样出 PDF，
+                        # 一刀切放弃会让整份 PDF 退化成 _for_pdf.html，用户拿到的是网页不是文档。
+                        print(f"PDF 页面外链资源未在限时内加载完，按当前内容继续打印: {load_err}")
                     page.pdf(
                         path=str(target_pdf),
                         format="A4",

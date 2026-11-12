@@ -55,14 +55,6 @@
       color: #ffffff;
       text-decoration: none;
     }
-    .top-offline-badge {
-      background: #0284c7;
-      color: #ffffff;
-      padding: 2px 8px;
-      border-radius: 2px;
-      font-size: 11px;
-    }
-
     /* 新浪博客大框架 (950px 居中标准版心) */
     .sinablogb {
       width: 950px;
@@ -232,88 +224,12 @@
       margin-left: 2px;
     }
 
-    /* 个人资料模块 (module_901) */
-    .info {
-      padding: 12px 10px;
-      text-align: center;
-    }
-    .info_img {
-      margin-bottom: 8px;
-    }
-    .info_img img {
-      width: 170px;
-      height: 170px;
-      border: 1px solid #C8D8E5;
-      padding: 2px;
-      background: #ffffff;
-      object-fit: cover;
-      display: block;
-      margin: 0 auto;
-    }
-    .info_nm {
-      font-weight: bold;
-      font-size: 14px;
-      color: #3E73A0;
-      margin: 6px 0;
-    }
-    .info_btn_row {
-      margin: 8px 0;
-      display: flex;
-      justify-content: center;
-      gap: 8px;
-    }
-    .btn_sina {
-      display: inline-block;
-      padding: 2px 10px;
-      border: 1px solid #A9BDCE;
-      background: #EEF4FB;
-      color: #333333;
-      font-size: 12px;
-      border-radius: 2px;
-      cursor: pointer;
-      text-decoration: none;
-    }
-    .btn_sina:hover {
-      background: #DCEAF6;
-      color: #cc0000;
-      text-decoration: none;
-    }
-    .info_stats {
-      font-size: 12px;
-      color: #747474;
-      line-height: 1.6;
-      border-top: 1px dotted #A9BDCE;
-      padding-top: 6px;
-      margin-top: 6px;
-      text-align: left;
-    }
-
-    /* 即时搜索框与快速选篇列表 */
-    .sidebar-search-box {
-      padding: 8px 10px;
-      background: #F8FAFD;
-      border-bottom: 1px solid #E1EAF2;
-    }
-    .search-input-wrap {
-      position: relative;
-      display: flex;
-      align-items: center;
-    }
-    .search-input-wrap input {
-      width: 100%;
-      height: 24px;
-      padding: 2px 20px 2px 6px;
-      border: 1px solid #A9BDCE;
-      font-size: 12px;
-      font-family: inherit;
-      outline: none;
-    }
-    .search-input-wrap input:focus {
-      border-color: #3E73A0;
-    }
+    /* 快速选篇列表（检索控件在顶部常驻检索台） */
     .search-clear {
       position: absolute;
-      right: 5px;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
       background: transparent;
       border: none;
       color: #999;
@@ -321,13 +237,7 @@
       font-size: 12px;
       display: none;
     }
-    .search-meta-row {
-      margin-top: 4px;
-      font-size: 11px;
-      color: #747474;
-      display: flex;
-      justify-content: space-between;
-    }
+    .search-clear:hover { color: #cc0000; }
 
     .sidebar-article-list {
       list-style: none;
@@ -373,41 +283,74 @@
       color: #999999;
       font-weight: normal;
     }
-    .hl-keyword {
-      background: #FEF08A;
-      color: #854D0E;
-      padding: 0 1px;
-      font-weight: bold;
-    }
 
-    /* 分类专栏模块 (module_7) 1:1 复刻新浪博客电脑端左侧分类列表 */
+    /* ========================================================
+       顶部常驻检索台 (模糊/精确 · 标题/全文 检索)
+       栏目分类按原版回归左侧栏顶部「博文」模块；这里只保留检索控件并 sticky 常驻，
+       任何滚动位置都能直接检索，切栏目则在左栏顶部一眼可见、无需翻找。
+       ======================================================== */
+    .archive-toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 60;
+      width: 950px;
+      margin-top: 10px;
+      background: linear-gradient(180deg, #F6FAFD 0%, #E6F0F8 100%);
+      border: 1px solid #A9BDCE;
+      box-shadow: 0 2px 6px rgba(44, 89, 124, .18);
+    }
+    .toolbar-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+    }
+    .toolbar-row + .toolbar-row {
+      border-top: 1px dotted #C3D6E6;
+    }
+    /* ========================================================
+       左侧「博文」栏目分类模块 (1:1 还原原版 articlelist 左栏分类专栏)
+       选中项带整行边框盒 + 浅蓝渐变底，方形小折角点 + 蓝色链接，与原版截图一致。
+       ======================================================== */
+    .blog_classList {
+      max-height: 340px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #A9BDCE #EEF4FB;
+    }
+    .blog_classList::-webkit-scrollbar { width: 5px; }
+    .blog_classList::-webkit-scrollbar-track { background: #EEF4FB; }
+    .blog_classList::-webkit-scrollbar-thumb { background: #A9BDCE; border-radius: 2px; }
+    .blog_classList::-webkit-scrollbar-thumb:hover { background: #3E73A0; }
     .cat-menu-list {
-      padding: 4px 6px;
+      padding: 6px 8px;
       list-style: none;
       font-size: 12px;
       margin: 0;
     }
     .cat-menu-item {
       padding: 5px 8px 5px 18px;
-      border-bottom: 1px dotted #E8EFF6;
       display: flex;
       align-items: center;
       justify-content: space-between;
       background-image: url('{{ dot_b64 }}');
       background-repeat: no-repeat;
-      background-position: 6px center;
+      background-position: 7px center;
       cursor: pointer;
       line-height: 20px;
+      border: 1px solid transparent;
+      margin-bottom: 1px;
     }
     .cat-menu-item:hover {
-      background-color: #f2f7fc;
+      background-color: #F2F7FC;
     }
     .cat-menu-item.current {
-      background-color: #e5f1fb;
+      background: linear-gradient(180deg, #FFFFFF 0%, #E9F2FA 100%);
+      border: 1px solid #A9BDCE;
       font-weight: bold;
     }
     .cat-menu-item.current a {
-      color: #03487F !important;
+      color: #2C597C !important;
       font-weight: bold;
     }
     .cat-menu-item a {
@@ -418,6 +361,10 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .cat-menu-item a:hover {
+      color: #cc0000;
+      text-decoration: underline;
+    }
     .cat-menu-item em {
       font-style: normal;
       color: #747474;
@@ -425,6 +372,206 @@
       margin-left: 6px;
       flex-shrink: 0;
     }
+    .cat-menu-item.current em {
+      color: #2C597C;
+    }
+
+    /* 检索控件 */
+    .toolbar-search {
+      position: relative;
+      display: flex;
+      align-items: center;
+      flex: 1;
+      min-width: 170px;
+    }
+    .toolbar-search input {
+      width: 100%;
+      height: 26px;
+      padding: 2px 24px 2px 8px;
+      border: 1px solid #A9BDCE;
+      background: #FFFFFF;
+      font-family: inherit;
+      font-size: 12px;
+      outline: none;
+    }
+    .toolbar-search input:focus {
+      border-color: #3E73A0;
+      box-shadow: 0 0 0 2px rgba(62, 115, 160, .15);
+    }
+    .search-go {
+      flex-shrink: 0;
+      height: 26px;
+      padding: 0 16px;
+      border: 1px solid #2C597C;
+      background: linear-gradient(180deg, #4A82B0 0%, #3E73A0 100%);
+      color: #FFFFFF;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: bold;
+      letter-spacing: 2px;
+      cursor: pointer;
+    }
+    .search-go:hover { background: linear-gradient(180deg, #5A92C0 0%, #4A82B0 100%); }
+    .search-go:active { background: #2C597C; }
+    .seg-group {
+      display: flex;
+      flex-shrink: 0;
+      border: 1px solid #A9BDCE;
+      background: #FFFFFF;
+    }
+    .seg-btn {
+      padding: 3px 9px;
+      border: none;
+      background: transparent;
+      color: #3E73A0;
+      font-family: inherit;
+      font-size: 12px;
+      line-height: 18px;
+      cursor: pointer;
+    }
+    .seg-btn + .seg-btn { border-left: 1px solid #D6E4EF; }
+    .seg-btn:hover { background: #F0F6FC; }
+    .seg-btn.on { background: #3E73A0; color: #FFFFFF; font-weight: bold; }
+    .toolbar-count { flex-shrink: 0; font-size: 11px; color: #747474; }
+    .toolbar-count b { color: #2C597C; font-size: 13px; }
+    .toolbar-hint {
+      padding: 0 10px 6px;
+      font-size: 11px;
+      color: #7A8C99;
+      line-height: 1.5;
+    }
+
+    /* 命中片段与高亮（列表片段 + 正文内命中） */
+    .item-snippet {
+      margin-top: 2px;
+      font-size: 11px;
+      font-weight: normal;
+      color: #6B7C88;
+      line-height: 1.45;
+      white-space: normal;
+      max-height: 32px;
+      overflow: hidden;
+    }
+    .biglist-snippet {
+      margin: 3px 0 0 11px;
+      font-size: 11px;
+      color: #6B7C88;
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    mark.hit {
+      background: #FEF08A;
+      color: #854D0E;
+      padding: 0 1px;
+      font-weight: bold;
+    }
+    .article-hit-badge {
+      display: inline-block;
+      margin-left: 8px;
+      padding: 1px 6px;
+      border: 1px solid #E0C56A;
+      background: #FFFBEA;
+      color: #854D0E;
+      font-size: 11px;
+      font-weight: normal;
+    }
+
+    /* ----------------------------------------------------
+       跳转确认弹窗 (列表单击 → 确认 → 进入正文)
+       ---------------------------------------------------- */
+    .jump-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(20, 40, 60, .45);
+      backdrop-filter: blur(2px);
+    }
+    .jump-overlay.show { display: flex; animation: jumpFade .18s ease-out; }
+    .jump-dialog {
+      width: 380px;
+      max-width: calc(100vw - 40px);
+      background: #FFFFFF;
+      border: 1px solid #A9BDCE;
+      border-radius: 3px;
+      box-shadow: 0 10px 40px rgba(20, 40, 60, .35);
+      overflow: hidden;
+      animation: jumpPop .2s cubic-bezier(.2, .8, .3, 1);
+    }
+    .jump-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 36px;
+      padding: 0 12px;
+      background: linear-gradient(180deg, #4A82B0 0%, #3E73A0 100%);
+      color: #FFFFFF;
+      font-size: 13px;
+      font-weight: bold;
+    }
+    .jump-close {
+      border: none;
+      background: transparent;
+      color: #DCEAF5;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 2px 4px;
+    }
+    .jump-close:hover { color: #FFFFFF; }
+    .jump-body { padding: 18px 20px 6px; }
+    .jump-q { font-size: 13px; color: #333333; margin: 0 0 12px; }
+    .jump-target {
+      padding: 10px 12px;
+      background: #F2F7FC;
+      border: 1px solid #D6E4EF;
+      border-left: 3px solid #3E73A0;
+    }
+    .jump-target-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #2C597C;
+      font-family: simsun, "宋体";
+      line-height: 1.5;
+      word-break: break-all;
+    }
+    .jump-target-meta { margin-top: 4px; font-size: 11px; color: #7A8C99; }
+    .jump-foot {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 14px 20px 18px;
+    }
+    .jump-btn {
+      min-width: 76px;
+      height: 28px;
+      padding: 0 14px;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 2px;
+    }
+    .jump-btn.cancel {
+      border: 1px solid #A9BDCE;
+      background: #FFFFFF;
+      color: #3E73A0;
+    }
+    .jump-btn.cancel:hover { background: #F0F6FC; }
+    .jump-btn.ok {
+      border: 1px solid #2C597C;
+      background: linear-gradient(180deg, #4A82B0 0%, #3E73A0 100%);
+      color: #FFFFFF;
+      font-weight: bold;
+    }
+    .jump-btn.ok:hover { background: linear-gradient(180deg, #5A92C0 0%, #4A82B0 100%); }
+    .jump-btn.ok:focus-visible, .jump-btn.cancel:focus-visible { outline: 2px solid #2C597C; outline-offset: 1px; }
+    @keyframes jumpFade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes jumpPop { from { opacity: 0; transform: scale(.94) translateY(6px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 
     /* ========================================================
        右侧栏 (#column_2: 730px 标准新浪博客主内容区 .SG_colW73)
@@ -629,25 +776,38 @@
       background-image: url('{{ linedot_b64 }}');
       background-repeat: repeat-x;
       background-position: left bottom;
-      height: 28px;
-      padding-top: 6px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      padding: 7px 0 8px;
+      display: block;
       font-size: 12px;
+      cursor: pointer;
     }
     .articleCell:hover {
       background-color: #F4F8FC;
     }
+    .articleCell:hover .atc_title a {
+      color: #cc0000;
+      text-decoration: underline;
+    }
+    .articleCell:focus-visible {
+      outline: 2px solid #3E73A0;
+      outline-offset: -2px;
+    }
     .atc_main {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
       background-image: url('{{ dot_b64 }}');
       background-repeat: no-repeat;
       background-position: left 7px;
       padding-left: 11px;
+    }
+    .atc_title {
+      flex: 1;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      flex: 1;
     }
     .atc_title a {
       color: #3E73A0;
@@ -663,7 +823,64 @@
       color: #747474;
       font-size: 12px;
       flex-shrink: 0;
-      margin-left: 20px;
+      white-space: nowrap;
+    }
+
+    /* ----------------------------------------------------
+       视图 C: 【关于我 · 我的档案】 (1:1 还原原版 profile 页)
+       ---------------------------------------------------- */
+    #aboutViewContainer {
+      display: none;
+    }
+    .profile_blk {
+      padding: 24px 30px 32px;
+      background: #ffffff;
+    }
+    .profile-sec-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #333333;
+      margin: 0 0 12px;
+    }
+    .profile-table {
+      border-collapse: collapse;
+    }
+    .profile-table td {
+      padding: 5px 0;
+      font-size: 14px;
+      vertical-align: top;
+      line-height: 1.8;
+    }
+    .profile-label {
+      width: 82px;
+      color: #464646;
+      letter-spacing: 6px;
+      white-space: nowrap;
+    }
+    .profile-value {
+      color: #3E73A0;
+      word-break: break-all;
+    }
+    .profile-value strong,
+    .profile-value b {
+      color: #2C597C;
+    }
+    .profile-value a {
+      color: #3E73A0;
+    }
+    .profile-empty {
+      color: #999999;
+    }
+    .profile-divider {
+      border-top: 1px dotted #C3D6E6;
+      margin: 20px 0;
+    }
+    .profile-intro {
+      font-size: 14px;
+      color: #464646;
+      line-height: 1.9;
+      margin: 0;
+      text-indent: 2em;
     }
 
     /* 底部版权说明 */
@@ -688,9 +905,6 @@
       <a href="javascript:switchView('article')">博文正文</a>
       <a href="javascript:switchView('list')">博文目录 ({{ total_articles }}篇)</a>
     </div>
-    <div>
-      <span class="top-offline-badge">100% 离线原版排版</span>
-    </div>
   </div>
 
   <!-- 新浪博客版心容器 (950px) -->
@@ -700,7 +914,10 @@
     <header class="sinabloghead" id="sinablogHead">
       <div class="blogtoparea">
         <h1 class="blogtitle"><a href="javascript:void(0)">{{ author_name }} 的博客</a></h1>
-        <div class="bloglink"><a href="javascript:void(0)">http://blog.sina.com.cn/u/5320406686</a></div>
+        <div class="bloglink">
+          {% if blog_url %}<a href="{{ blog_url }}" target="_blank" rel="noopener noreferrer">{{ blog_url }}</a>
+          {% else %}离线归档 · 共 {{ total_articles }} 篇{% endif %}
+        </div>
       </div>
 
       <!-- 经典导航条 (首页 | 博文目录 | 关于我) -->
@@ -710,10 +927,33 @@
           <span class="blognav-sep">|</span>
           <span><a class="blognav-item" id="navListBtn" href="javascript:switchView('list')">博文目录</a></span>
           <span class="blognav-sep">|</span>
-          <span><a class="blognav-item" href="javascript:showAboutModal()">关于我</a></span>
+          <span><a class="blognav-item" id="navAboutBtn" href="javascript:switchView('about')">关于我</a></span>
         </div>
       </nav>
     </header>
+
+    <!-- ==========================================================
+         顶部常驻检索台：模糊/精确 · 标题/全文 检索（栏目分类见左栏「博文」模块）
+         ========================================================== -->
+    <div class="archive-toolbar" id="archiveToolbar">
+      <div class="toolbar-row">
+        <div class="toolbar-search">
+          <input type="text" id="searchInput" placeholder="🔍 输入关键词，空格分隔可要求多词同时命中..." autocomplete="off">
+          <button class="search-clear" id="searchClearBtn" title="清空">✕</button>
+        </div>
+        <button type="button" class="search-go" id="searchGoBtn" title="执行检索（回车同效）">查询</button>
+        <div class="seg-group" id="modeGroup" title="模糊：忽略大小写，空格分隔的多个词全部命中即可；精确：区分大小写且必须逐字连续一致">
+          <button type="button" class="seg-btn on" data-mode="fuzzy">模糊</button>
+          <button type="button" class="seg-btn" data-mode="exact">精确</button>
+        </div>
+        <div class="seg-group" id="scopeGroup" title="检索范围：仅标题，或标题与正文全文">
+          <button type="button" class="seg-btn on" data-scope="title">标题</button>
+          <button type="button" class="seg-btn" data-scope="all">标题+全文</button>
+        </div>
+        <span class="toolbar-count">匹配 <b id="visibleCount">{{ total_articles }}</b> 篇</span>
+      </div>
+      <div class="toolbar-hint" id="toolbarHint"></div>
+    </div>
 
     <!-- 主体双栏布局 -->
     <div class="sinablogbody">
@@ -723,72 +963,31 @@
            ============================================== -->
       <aside id="column_1" class="SG_colW21 SG_colFirst">
 
-        <!-- 个人资料模块 (module_901) -->
-        <div class="SG_conn" id="module_901">
+        <!-- 博文栏目分类模块 (1:1 还原原版左栏「博文」分类专栏，置于侧栏顶部，切栏目一眼可见) -->
+        <div class="SG_conn" id="module_7">
           <div class="SG_connHead">
-            <span class="title">个人资料</span>
+            <span class="title">博文</span>
           </div>
           <div class="SG_connBody">
-            <div class="info">
-              <div class="info_img">
-                {% if author_avatar %}
-                <img src="{{ author_avatar }}" alt="{{ author_name }}" title="{{ author_name }}">
-                {% else %}
-                <div style="width:170px;height:170px;line-height:170px;background:#eef4fb;color:#747474;border:1px solid #ccc;font-size:36px;margin:0 auto;">✍️</div>
-                {% endif %}
-              </div>
-              <div class="info_nm">
-                <strong>{{ author_name }}</strong>
-              </div>
-              <div class="info_btn_row">
-                <a href="javascript:void(0)" class="btn_sina" onclick="alert('已离线归档，关注功能仅在线有效')">+加关注</a>
-                <a href="javascript:void(0)" class="btn_sina" onclick="alert('已离线归档，发私信功能仅在线有效')">发私信</a>
-              </div>
-              <div class="info_stats">
-                分类：<b>{{ category_name or '全部博文' }}</b><br>
-                篇数：<b>{{ total_articles }}</b> 篇<br>
-                排版：新浪电脑端原版 (Theme 30_1)
-              </div>
+            <div class="menuList blog_classList">
+              <ul class="cat-menu-list" id="categoryMenuList">
+                <!-- 由 JavaScript 动态渲染全部栏目及对应篇数 -->
+              </ul>
             </div>
           </div>
           <div class="SG_connFoot"></div>
         </div>
 
-        <!-- 核心即时搜索与快速选篇组件 -->
+        <!-- 快速选篇列表（检索控件已上移到顶部常驻检索台，此处只保留结果列表） -->
         <div class="SG_conn" id="module_search_nav" style="flex:1;">
           <div class="SG_connHead">
-            <span class="title">博文搜索与切篇</span>
+            <span class="title">博文列表</span>
             <span style="font-size:11px; color:#747474;" id="sidebarCountBadge">{{ total_articles }}篇</span>
           </div>
           <div class="SG_connBody">
-            <div class="sidebar-search-box">
-              <div class="search-input-wrap">
-                <input type="text" id="searchInput" placeholder="🔍 搜索标题关键词..." autocomplete="off">
-                <button class="search-clear" id="searchClearBtn" title="清空">✕</button>
-              </div>
-              <div class="search-meta-row">
-                <span>匹配：<b id="visibleCount" style="color:#2C597C;">{{ total_articles }}</b> 篇</span>
-                <span>即时过滤</span>
-              </div>
-            </div>
             <ul class="sidebar-article-list" id="sidebarArticleList">
               <!-- 动态渲染 -->
             </ul>
-          </div>
-          <div class="SG_connFoot"></div>
-        </div>
-
-        <!-- 分类专栏模块 (module_7) 1:1 复刻新浪博客原版左侧分类专栏 -->
-        <div class="SG_conn" id="module_7">
-          <div class="SG_connHead">
-            <span class="title">博文分类</span>
-          </div>
-          <div class="SG_connBody">
-            <div class="menuList blog_classList" style="max-height: 480px; overflow-y: auto;">
-              <ul class="cat-menu-list" id="categoryMenuList">
-                <!-- 由 JavaScript 动态渲染全部分类及对应文章篇数 -->
-              </ul>
-            </div>
           </div>
           <div class="SG_connFoot"></div>
         </div>
@@ -898,6 +1097,58 @@
           </div>
         </div>
 
+        <!-- --------------------------------------------
+             视图 C: 【关于我 · 我的档案】 (1:1 还原原版 profile 页)
+             -------------------------------------------- -->
+        <div id="aboutViewContainer">
+          <div class="SG_conn" id="module_930">
+            <div class="SG_connHead">
+              <span class="title">我的档案</span>
+              <span class="fontSize">
+                <a href="javascript:switchView('article')" style="color:#2C597C; font-weight:bold;">[返回正文阅读]</a>
+              </span>
+            </div>
+            <div class="SG_connBody">
+              <div class="profile_blk">
+                <div class="profile-section">
+                  <h3 class="profile-sec-title">基本信息：</h3>
+                  <table class="profile-table">
+                    <tr>
+                      <td class="profile-label">博主</td>
+                      <td class="profile-value"><strong>{{ author_name }}</strong></td>
+                    </tr>
+                    <tr>
+                      <td class="profile-label">主页</td>
+                      <td class="profile-value">
+                        {% if blog_url %}<a href="{{ blog_url }}" target="_blank" rel="noopener noreferrer">{{ blog_url }}</a>
+                        {% else %}<span class="profile-empty">暂未添加</span>{% endif %}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="profile-label">收录</td>
+                      <td class="profile-value"><b id="profileTotal">{{ total_articles }}</b> 篇博文</td>
+                    </tr>
+                    <tr>
+                      <td class="profile-label">栏目</td>
+                      <td class="profile-value"><b id="profileCatCount">--</b> 个分类</td>
+                    </tr>
+                    <tr>
+                      <td class="profile-label">跨度</td>
+                      <td class="profile-value" id="profileSpan">--</td>
+                    </tr>
+                  </table>
+                </div>
+                <div class="profile-divider"></div>
+                <div class="profile-section">
+                  <h3 class="profile-sec-title">个人简介：</h3>
+                  <p class="profile-intro">本离线知识库由【微信公众号：艺杯羹】整理排版，1:1 还原新浪博客电脑端原版视觉排版，断网亦可顺畅浏览与检索。左栏「博文」模块可随时切换栏目，顶部检索台支持模糊/精确与标题/全文检索。所有图文知识产权归原作者所有，仅供个人离线学习、学术研究与知识归档使用。</p>
+                </div>
+              </div>
+            </div>
+            <div class="SG_connFoot"></div>
+          </div>
+        </div>
+
       </main>
 
     </div>
@@ -908,6 +1159,27 @@
       仅供个人离线学习、学术研究与知识归档使用，所有图文知识产权归原作者所有。
     </footer>
 
+  </div>
+
+  <!-- 跳转确认弹窗：列表单击文章先确认再进入正文 -->
+  <div class="jump-overlay" id="jumpConfirmOverlay" role="dialog" aria-modal="true" aria-labelledby="jumpConfirmHeading">
+    <div class="jump-dialog">
+      <div class="jump-head">
+        <span id="jumpConfirmHeading">跳转确认</span>
+        <button type="button" class="jump-close" id="jumpConfirmClose" title="关闭" aria-label="关闭">✕</button>
+      </div>
+      <div class="jump-body">
+        <p class="jump-q">确定要跳转到这篇博文吗？</p>
+        <div class="jump-target">
+          <div class="jump-target-title" id="jumpConfirmTitle"></div>
+          <div class="jump-target-meta" id="jumpConfirmMeta"></div>
+        </div>
+      </div>
+      <div class="jump-foot">
+        <button type="button" class="jump-btn cancel" id="jumpConfirmCancel">取消</button>
+        <button type="button" class="jump-btn ok" id="jumpConfirmOk">确定跳转</button>
+      </div>
+    </div>
   </div>
 
   <!-- 内嵌全量结构化文章数据 -->
@@ -936,6 +1208,13 @@
     let isYaHei = true;
     let likeCounts = {};
 
+    // 检索状态：模糊/精确 · 标题/标题+全文
+    let searchMode = 'fuzzy';   // fuzzy | exact
+    let searchScope = 'title';  // title | all
+    let currentKeyword = '';
+    // 正文纯文本索引，按需构建并缓存（首次全文检索才付出一次代价）
+    const plainTextCache = new Array(articles.length).fill(null);
+
     const searchInput = document.getElementById('searchInput');
     const searchClearBtn = document.getElementById('searchClearBtn');
     const visibleCount = document.getElementById('visibleCount');
@@ -943,127 +1222,199 @@
     const bigArticleList = document.getElementById('bigArticleList');
     const articleViewContainer = document.getElementById('articleViewContainer');
     const listViewContainer = document.getElementById('listViewContainer');
+    const aboutViewContainer = document.getElementById('aboutViewContainer');
     const navArticleBtn = document.getElementById('navArticleBtn');
     const navListBtn = document.getElementById('navListBtn');
+    const navAboutBtn = document.getElementById('navAboutBtn');
 
-    // 规整所有文章分类（优先从标签首项提取真实分类，确保 100% 数据完备）
+    // 规整文章分类：栏目归属由抓取阶段按侧栏分类专栏确定，这里只兜底缺失值。
+    // 不能拿标签首项顶替栏目（标签不是栏目，会凭空造出假分类）。
     function normalizeCategories() {
       articles.forEach(art => {
-        if (!art.category || art.category === '默认分类' || art.category === '未分类' || art.category === '全部博文' || art.category === '新浪博文' || art.category === '其它') {
-          if (art.tags && art.tags.length > 0 && art.tags[0] && art.tags[0] !== '新浪博客') {
-            art.category = art.tags[0];
-          } else {
-            art.category = '其它博文';
-          }
+        if (!art.category || art.category === '默认分类' || art.category === '新浪博文' || art.category === '其它') {
+          art.category = '未分类';
         }
       });
     }
 
-    // 渲染左侧分类菜单 (1:1 像素级复刻新浪博客原版分类专栏)
+    // ========================================================
+    // 检索引擎：模糊/精确 × 标题/标题+全文
+    // ========================================================
+
+    // 取正文纯文本。用正则剥标签而不是 innerHTML：后者会让上千篇文章里的
+    // <img> 立刻发起网络请求，离线归档会因此卡住并刷满失败请求。
+    function getPlainText(idx) {
+      if (plainTextCache[idx] !== null) return plainTextCache[idx];
+      const html = articles[idx].content_html || '';
+      const text = html
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#39;/gi, "'")
+        .replace(/&amp;/gi, '&')
+        .replace(/\s+/g, ' ')
+        .trim();
+      plainTextCache[idx] = text;
+      return text;
+    }
+
+    // 模糊：空格分词，全部命中即可（不要求连续）；精确：整串逐字连续、区分大小写
+    function parseQuery(kw) {
+      const raw = (kw || '').trim();
+      if (!raw) return [];
+      if (searchMode === 'exact') return [raw];
+      return raw.split(/\s+/).filter(Boolean);
+    }
+
+    function matchArticle(art, idx, terms) {
+      if (!terms.length) return { hit: true, inTitle: false, inBody: false };
+      const titleRaw = art.title || '';
+      const titleHay = searchMode === 'exact' ? titleRaw : titleRaw.toLowerCase();
+      const needle = t => (searchMode === 'exact' ? t : t.toLowerCase());
+      let bodyHay = null;
+      let allInTitle = true;
+      let anyInBody = false;
+
+      for (const t of terms) {
+        if (titleHay.indexOf(needle(t)) !== -1) continue;
+        allInTitle = false;
+        if (searchScope !== 'all') return { hit: false, inTitle: false, inBody: false };
+        if (bodyHay === null) {
+          const bodyRaw = getPlainText(idx);
+          bodyHay = searchMode === 'exact' ? bodyRaw : bodyRaw.toLowerCase();
+        }
+        if (bodyHay.indexOf(needle(t)) === -1) return { hit: false, inTitle: false, inBody: false };
+        anyInBody = true;
+      }
+      return { hit: true, inTitle: allInTitle, inBody: anyInBody };
+    }
+
+    // 单次合并正则替换，避免多次 replace 把上一次插入的 <mark> 标签再当文本命中
+    function highlightEscaped(escapedText, terms) {
+      const parts = terms.map(t => escapeRegExp(escapeHtml(t))).filter(Boolean);
+      if (!parts.length) return escapedText;
+      const re = new RegExp('(' + parts.join('|') + ')', searchMode === 'exact' ? 'g' : 'gi');
+      return escapedText.replace(re, '<mark class="hit">$1</mark>');
+    }
+
+    // 全文命中时给出上下文片段，省去打开文章再找词
+    function buildSnippet(idx, terms) {
+      const text = getPlainText(idx);
+      if (!text || !terms.length) return '';
+      const hay = searchMode === 'exact' ? text : text.toLowerCase();
+      let pos = -1;
+      terms.forEach(t => {
+        const p = hay.indexOf(searchMode === 'exact' ? t : t.toLowerCase());
+        if (p !== -1 && (pos === -1 || p < pos)) pos = p;
+      });
+      if (pos === -1) return '';
+      const start = Math.max(0, pos - 28);
+      const end = Math.min(text.length, pos + 72);
+      return (start > 0 ? '…' : '')
+        + highlightEscaped(escapeHtml(text.slice(start, end)), terms)
+        + (end < text.length ? '…' : '');
+    }
+
+    function updateToolbarHint() {
+      const hint = document.getElementById('toolbarHint');
+      if (!hint) return;
+      const modeTxt = searchMode === 'exact'
+        ? '精确：区分大小写，必须与输入整串逐字连续一致'
+        : '模糊：忽略大小写，空格分隔的多个词全部命中即可（不要求连续）';
+      const scopeTxt = searchScope === 'all'
+        ? '范围＝标题+全文，正文命中会显示片段，打开文章自动高亮并定位'
+        : '范围＝仅标题';
+      hint.textContent = modeTxt + '；' + scopeTxt + '。';
+    }
+
+    // 渲染左栏顶部「博文」栏目分类（1:1 还原原版左侧分类专栏，选中项带边框盒）
     function renderCategoryMenu() {
       const menuList = document.getElementById('categoryMenuList');
       if (!menuList) return;
 
       const catCounts = {};
-      articles.forEach(art => {
-        const cat = art.category || '其它博文';
-        catCounts[cat] = (catCounts[cat] || 0) + 1;
-      });
-
-      // 提取所有分类并保持文章中首次出现的自然序列
       const catsInOrder = [];
       articles.forEach(art => {
-        const cat = art.category || '其它博文';
-        if (!catsInOrder.includes(cat)) {
-          catsInOrder.push(cat);
-        }
+        const cat = art.category || '未分类';
+        catCounts[cat] = (catCounts[cat] || 0) + 1;
+        if (!catsInOrder.includes(cat)) catsInOrder.push(cat);
       });
+      catsInOrder.sort((a, b) => (a === '未分类') - (b === '未分类'));
 
-      let html = '';
-      // 顶部条目：全部博文
-      const allActive = !currentCategory ? 'current' : '';
-      html += `
-        <li class="cat-menu-item ${allActive}" data-cat="">
-          <a href="javascript:void(0)" onclick="selectCategory('')">全部博文</a>
-          <em>(${articles.length})</em>
-        </li>
-      `;
+      const mkItem = (cat, label, count) => {
+        const on = currentCategory === cat ? ' current' : '';
+        return `<li class="cat-menu-item${on}" data-cat="${escapeHtml(cat)}" title="${escapeHtml(label)}（${count} 篇）">
+          <a href="javascript:void(0)">${escapeHtml(label)}</a><em>(${count})</em>
+        </li>`;
+      };
 
-      catsInOrder.forEach(cat => {
-        const isActive = currentCategory === cat ? 'current' : '';
-        html += `
-          <li class="cat-menu-item ${isActive}" data-cat="${escapeHtml(cat)}">
-            <a href="javascript:void(0)" onclick="selectCategory('${escapeHtml(cat)}')">${escapeHtml(cat)}</a>
-            <em>(${catCounts[cat] || 0})</em>
-          </li>
-        `;
-      });
-
+      let html = mkItem('', '全部博文', articles.length);
+      catsInOrder.forEach(cat => { html += mkItem(cat, cat, catCounts[cat] || 0); });
       menuList.innerHTML = html;
+
+      menuList.querySelectorAll('.cat-menu-item').forEach(item => {
+        item.addEventListener('click', () => selectCategory(item.dataset.cat || ''));
+      });
     }
 
     // 切换分类
     function selectCategory(catName) {
       currentCategory = catName || '';
 
-      // 更新分类菜单高亮样式
-      const menuItems = document.querySelectorAll('#categoryMenuList .cat-menu-item');
-      menuItems.forEach(item => {
-        const cat = item.getAttribute('data-cat') || '';
-        if (cat === currentCategory) {
-          item.classList.add('current');
-        } else {
-          item.classList.remove('current');
-        }
+      document.querySelectorAll('#categoryMenuList .cat-menu-item').forEach(item => {
+        item.classList.toggle('current', (item.dataset.cat || '') === currentCategory);
       });
+      // 让选中的栏目滚入可视区，栏目很多时也能看到当前选中项
+      const active = document.querySelector('#categoryMenuList .cat-menu-item.current');
+      if (active && active.scrollIntoView) {
+        active.scrollIntoView({ block: 'nearest' });
+      }
 
-      // 刷新左侧文章列表（遵循当前选中的分类）
-      renderSidebarList(searchInput ? searchInput.value : '');
-
-      // 刷新右侧目录清单
-      renderBigList();
-
-      // 切换至目录清单视图展示该分类全部博文
+      // 用实时输入值重绘：撤销待执行防抖后，currentKeyword 可能还是上一次的旧词
+      renderAll();
       switchView('list');
     }
 
-    // 视图切换（正文视图 vs 目录大清单视图）
+    // 视图切换（正文 / 目录大清单 / 关于我·我的档案）
     function switchView(viewName) {
       currentView = viewName;
-      if (viewName === 'article') {
-        articleViewContainer.style.display = 'block';
-        listViewContainer.style.display = 'none';
-        navArticleBtn.classList.add('on');
-        navListBtn.classList.remove('on');
-      } else {
-        articleViewContainer.style.display = 'none';
-        listViewContainer.style.display = 'block';
-        navArticleBtn.classList.remove('on');
-        navListBtn.classList.add('on');
-        renderBigList();
-      }
+      articleViewContainer.style.display = viewName === 'article' ? 'block' : 'none';
+      listViewContainer.style.display = viewName === 'list' ? 'block' : 'none';
+      aboutViewContainer.style.display = viewName === 'about' ? 'block' : 'none';
+      navArticleBtn.classList.toggle('on', viewName === 'article');
+      navListBtn.classList.toggle('on', viewName === 'list');
+      navAboutBtn.classList.toggle('on', viewName === 'about');
+      if (viewName === 'list') renderBigList();
+      if (viewName === 'about') renderAbout();
       window.scrollTo({ top: 200, behavior: 'smooth' });
     }
 
-    // 渲染左侧搜索目录
+    // 渲染左侧结果列表（栏目 + 关键词共同过滤，全文命中附片段）
     function renderSidebarList(keyword = '') {
+      currentKeyword = keyword;
+      const terms = parseQuery(keyword);
       sidebarArticleList.innerHTML = '';
-      const kw = keyword.trim().toLowerCase();
       filteredIndices = [];
+      const bodyHit = {};
 
       articles.forEach((art, idx) => {
-        const title = art.title || '';
-        const matchKw = !kw || title.toLowerCase().includes(kw);
-        const matchCat = !currentCategory || art.category === currentCategory;
-        if (matchKw && matchCat) {
-          filteredIndices.push(idx);
-        }
+        if (currentCategory && art.category !== currentCategory) return;
+        const m = matchArticle(art, idx, terms);
+        if (!m.hit) return;
+        filteredIndices.push(idx);
+        if (m.inBody) bodyHit[idx] = true;
       });
 
       visibleCount.textContent = filteredIndices.length;
+      const badge = document.getElementById('sidebarCountBadge');
+      if (badge) badge.textContent = filteredIndices.length + '篇';
 
       if (filteredIndices.length === 0) {
-        sidebarArticleList.innerHTML = '<li style="padding:15px;text-align:center;color:#999;">未找到匹配博文</li>';
+        sidebarArticleList.innerHTML = '<li style="padding:15px;text-align:center;color:#999;">未找到匹配博文<br><span style="font-size:11px;">可切到「模糊」或「标题+全文」放宽条件</span></li>';
         return;
       }
 
@@ -1074,23 +1425,16 @@
         li.className = `sidebar-article-item ${artIdx === currentIndex ? 'active' : ''}`;
         li.dataset.index = artIdx;
 
-        let titleDisplay = escapeHtml(art.title || '无标题');
-        if (kw) {
-          const reg = new RegExp(`(${escapeRegExp(kw)})`, 'gi');
-          titleDisplay = titleDisplay.replace(reg, '<span class="hl-keyword">$1</span>');
-        }
+        const titleDisplay = highlightEscaped(escapeHtml(art.title || '无标题'), terms);
+        const snippet = bodyHit[artIdx] ? buildSnippet(artIdx, terms) : '';
 
         li.innerHTML = `
           <div class="item-txt">${artIdx + 1}. ${titleDisplay}</div>
           <div class="item-time">${art.publish_time ? art.publish_time.slice(0, 10) : ''}</div>
+          ${snippet ? `<div class="item-snippet">${snippet}</div>` : ''}
         `;
 
-        li.addEventListener('click', () => {
-          if (currentView !== 'article') {
-            switchView('article');
-          }
-          loadArticle(artIdx);
-        });
+        li.addEventListener('click', () => openArticle(artIdx));
 
         fragment.appendChild(li);
       });
@@ -1098,30 +1442,29 @@
       sidebarArticleList.appendChild(fragment);
     }
 
-    // 渲染右侧完整目录清单 (1:1 还原 articlelist_xxx.html)
+    // 渲染右侧完整目录清单 (与左侧共用同一份过滤结果，检索条件对两个视图一致生效)
     function renderBigList() {
       bigArticleList.innerHTML = '';
 
       const titleEl = document.querySelector('#module_928 .title');
       const summaryEl = document.querySelector('#listViewContainer .list-filter-bar span:first-child');
       const catTitle = currentCategory ? `【${currentCategory}】` : '【全部博文】';
-
-      const listIndices = [];
-      articles.forEach((art, idx) => {
-        if (!currentCategory || art.category === currentCategory) {
-          listIndices.push(idx);
-        }
-      });
+      const terms = parseQuery(currentKeyword);
+      const listIndices = filteredIndices;
 
       if (titleEl) {
         titleEl.innerHTML = `${escapeHtml(catTitle)}目录列表 <em>(${listIndices.length})</em>`;
       }
       if (summaryEl) {
-        summaryEl.innerHTML = `共收录 <b>${listIndices.length}</b> 篇博文 · 点击任意一篇直接进入正文阅读`;
+        const kwTxt = currentKeyword.trim()
+          ? ` · 检索「<b>${escapeHtml(currentKeyword.trim())}</b>」(${searchMode === 'exact' ? '精确' : '模糊'} · ${searchScope === 'all' ? '标题+全文' : '仅标题'})`
+          : '';
+        const clickHint = currentKeyword.trim() ? '点击任意一篇，确认后进入正文' : '点击任意一篇直接进入正文阅读';
+        summaryEl.innerHTML = `共收录 <b>${listIndices.length}</b> 篇博文${kwTxt} · ${clickHint}`;
       }
 
       if (listIndices.length === 0) {
-        bigArticleList.innerHTML = '<div style="padding:30px;text-align:center;color:#999;">该分类下暂无博文</div>';
+        bigArticleList.innerHTML = '<div style="padding:30px;text-align:center;color:#999;">当前栏目与检索条件下暂无博文<br><span style="font-size:11px;">可在顶部检索台切到「模糊」或「标题+全文」放宽条件</span></div>';
         return;
       }
 
@@ -1131,15 +1474,23 @@
         const art = articles[idx];
         const div = document.createElement('div');
         div.className = 'articleCell SG_j_linedot1';
+        div.setAttribute('role', 'button');
+        div.setAttribute('tabindex', '0');
+        div.title = '点击跳转到这篇博文';
+        const titleHtml = highlightEscaped(escapeHtml(art.title), terms);
+        const snippet = (terms.length && searchScope === 'all') ? buildSnippet(idx, terms) : '';
+        div.addEventListener('click', () => maybeConfirmOpen(idx));
+        div.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); maybeConfirmOpen(idx); }
+        });
         div.innerHTML = `
-          <p class="atc_main SG_dot">
+          <div class="atc_main SG_dot">
             <span class="atc_title">
-              <a href="javascript:void(0)" onclick="openArticle(${idx})">${seq + 1}. ${escapeHtml(art.title)}</a>
+              <a href="javascript:void(0)" tabindex="-1">${seq + 1}. ${titleHtml}</a>
             </span>
-          </p>
-          <p class="atc_info">
             <span class="atc_tm SG_txtc">${art.publish_time || ''}</span>
-          </p>
+          </div>
+          ${snippet ? `<div class="biglist-snippet">${snippet}</div>` : ''}
         `;
 
         fragment.appendChild(div);
@@ -1152,6 +1503,46 @@
     function openArticle(idx) {
       switchView('article');
       loadArticle(idx);
+    }
+
+    // 仅「检索结果」需要跳转确认：有关键词时全文命中可能不是目标篇，先确认再跳；
+    // 正常浏览（无关键词）直接进正文，不打断。
+    function maybeConfirmOpen(idx) {
+      if (currentKeyword && currentKeyword.trim()) {
+        confirmOpenArticle(idx);
+      } else {
+        openArticle(idx);
+      }
+    }
+
+    // 检索结果跳转确认弹窗
+    let pendingJumpIdx = null;
+    let lastFocusedBeforeJump = null;
+    function confirmOpenArticle(idx) {
+      const art = articles[idx];
+      if (!art) return;
+      pendingJumpIdx = idx;
+      lastFocusedBeforeJump = document.activeElement;
+      document.getElementById('jumpConfirmTitle').textContent = art.title || '无标题';
+      const meta = [];
+      if (art.category) meta.push(art.category);
+      if (art.publish_time) meta.push(art.publish_time);
+      if (currentKeyword && currentKeyword.trim()) meta.push('检索「' + currentKeyword.trim() + '」');
+      document.getElementById('jumpConfirmMeta').textContent = meta.join(' · ');
+      document.getElementById('jumpConfirmOverlay').classList.add('show');
+      document.body.style.overflow = 'hidden';
+      setTimeout(() => document.getElementById('jumpConfirmOk').focus(), 30);
+    }
+    function closeJumpConfirm() {
+      document.getElementById('jumpConfirmOverlay').classList.remove('show');
+      document.body.style.overflow = '';
+      pendingJumpIdx = null;
+      if (lastFocusedBeforeJump && lastFocusedBeforeJump.focus) lastFocusedBeforeJump.focus();
+    }
+    function acceptJumpConfirm() {
+      const idx = pendingJumpIdx;
+      closeJumpConfirm();
+      if (idx !== null) openArticle(idx);
     }
 
     // 加载指定文章正文
@@ -1186,6 +1577,17 @@
       const contentEl = document.getElementById('articleContent');
       contentEl.innerHTML = sanitizeContent(art.content_html) || '<p>博文暂无内容</p>';
       applyFontStylesToContent(contentEl);
+
+      // 检索命中定位：高亮正文里的关键词，并跳到第一处，全文检索不必再自己找
+      const activeTerms = parseQuery(currentKeyword);
+      const hitCount = highlightArticleContent(contentEl, activeTerms);
+      const titleEl2 = document.getElementById('articleTitle');
+      if (hitCount > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'article-hit-badge';
+        badge.textContent = `正文命中 ${hitCount} 处`;
+        titleEl2.appendChild(badge);
+      }
 
       // 点赞数模拟
       document.getElementById('likeCount').textContent = likeCounts[index] || 0;
@@ -1225,8 +1627,57 @@
       // 更新左侧列表激活项
       updateSidebarActive(index);
 
-      // 滚动至顶部阅读区
-      window.scrollTo({ top: 220, behavior: 'smooth' });
+      // 有命中就停在第一处命中（让开顶部常驻检索台的高度），否则回到阅读区顶部
+      const firstHit = contentEl.querySelector('mark.hit');
+      if (firstHit) {
+        const bar = document.getElementById('archiveToolbar');
+        const offset = (bar ? bar.offsetHeight : 0) + 16;
+        const y = window.pageYOffset + firstHit.getBoundingClientRect().top - offset;
+        window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+      } else {
+        window.scrollTo({ top: 220, behavior: 'smooth' });
+      }
+    }
+
+    // 正文内命中高亮：走文本节点而非 innerHTML 正则，避免破坏原文标签结构
+    function highlightArticleContent(el, terms) {
+      const parts = terms.map(t => escapeRegExp(t)).filter(Boolean);
+      if (!parts.length) return 0;
+      const flags = searchMode === 'exact' ? '' : 'i';
+      const tester = new RegExp(parts.join('|'), flags);
+      const finder = new RegExp('(' + parts.join('|') + ')', flags + 'g');
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+          if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+          const p = node.parentNode;
+          if (p && /^(SCRIPT|STYLE|MARK)$/.test(p.nodeName)) return NodeFilter.FILTER_REJECT;
+          return tester.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        }
+      });
+      const targets = [];
+      while (walker.nextNode()) targets.push(walker.currentNode);
+
+      let count = 0;
+      targets.forEach(node => {
+        const text = node.nodeValue;
+        const frag = document.createDocumentFragment();
+        let last = 0;
+        finder.lastIndex = 0;
+        let m;
+        while ((m = finder.exec(text)) !== null) {
+          if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+          const mk = document.createElement('mark');
+          mk.className = 'hit';
+          mk.textContent = m[0];
+          frag.appendChild(mk);
+          last = m.index + m[0].length;
+          count++;
+          if (m[0].length === 0) finder.lastIndex++;
+        }
+        if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+        node.parentNode.replaceChild(frag, node);
+      });
+      return count;
     }
 
     function toggleLike() {
@@ -1236,8 +1687,14 @@
 
     function filterByTag(tagName) {
       searchInput.value = tagName;
-      searchClearBtn.style.display = 'block';
-      renderSidebarList(tagName);
+      // 标签词多半只出现在正文里，点标签直接放宽到全文范围
+      searchScope = 'all';
+      document.querySelectorAll('#scopeGroup .seg-btn').forEach(b => {
+        b.classList.toggle('on', b.dataset.scope === 'all');
+      });
+      updateToolbarHint();
+      applySearch(tagName);
+      switchView('list');
     }
 
     // 清理文章正文中硬编码的类名与行内样式，让控制器 100% 绝对掌控
@@ -1399,26 +1856,72 @@
       });
     }
 
-    // 搜索输入防抖
+    // 搜索输入防抖。定时器只读实时输入值，并且任何同步重绘都先撤销待执行的定时器，
+    // 否则快速「输入后立刻切栏目/模式」会让旧定时器把新结果覆盖回去。
     let debounceTimer = null;
-    searchInput.addEventListener('input', (e) => {
-      const val = e.target.value;
+    function renderAll() {
+      clearTimeout(debounceTimer);
+      renderSidebarList(searchInput.value);
+      renderBigList();
+    }
+    function applySearch(val) {
       searchClearBtn.style.display = val ? 'block' : 'none';
       clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        renderSidebarList(val);
-      }, 150);
+      debounceTimer = setTimeout(renderAll, 150);
+    }
+
+    searchInput.addEventListener('input', (e) => applySearch(e.target.value));
+
+    // 「查询」按钮 / 回车：提交检索并切到目录视图集中展示结果
+    function commitSearch() {
+      clearTimeout(debounceTimer);
+      renderSidebarList(searchInput.value);
+      switchView('list');
+    }
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commitSearch(); }
     });
+    document.getElementById('searchGoBtn').addEventListener('click', commitSearch);
 
     searchClearBtn.addEventListener('click', () => {
       searchInput.value = '';
-      searchClearBtn.style.display = 'none';
-      renderSidebarList('');
+      applySearch('');
       searchInput.focus();
+    });
+
+    // 模糊 / 精确
+    document.querySelectorAll('#modeGroup .seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        searchMode = btn.dataset.mode;
+        document.querySelectorAll('#modeGroup .seg-btn').forEach(b => b.classList.toggle('on', b === btn));
+        updateToolbarHint();
+        renderAll();
+      });
+    });
+
+    // 仅标题 / 标题+全文
+    document.querySelectorAll('#scopeGroup .seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        searchScope = btn.dataset.scope;
+        document.querySelectorAll('#scopeGroup .seg-btn').forEach(b => b.classList.toggle('on', b === btn));
+        updateToolbarHint();
+        renderAll();
+      });
+    });
+
+    // 跳转确认弹窗交互：遮罩/取消/关闭/Esc 关闭，确定才跳转
+    const jumpOverlay = document.getElementById('jumpConfirmOverlay');
+    jumpOverlay.addEventListener('click', (e) => { if (e.target === jumpOverlay) closeJumpConfirm(); });
+    document.getElementById('jumpConfirmCancel').addEventListener('click', closeJumpConfirm);
+    document.getElementById('jumpConfirmClose').addEventListener('click', closeJumpConfirm);
+    document.getElementById('jumpConfirmOk').addEventListener('click', acceptJumpConfirm);
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && jumpOverlay.classList.contains('show')) closeJumpConfirm();
     });
 
     // 快捷键支持：键盘左右键直接切篇
     window.addEventListener('keydown', (e) => {
+      if (jumpOverlay.classList.contains('show')) return;
       if (document.activeElement === searchInput) return;
       if (currentView !== 'article') return;
       if (e.key === 'ArrowLeft') {
@@ -1428,8 +1931,31 @@
       }
     });
 
-    function showAboutModal() {
-      alert('【欧洋 的新浪博客离线知识合集】\n\n本文件为新浪博客电脑端 1:1 原版排版离线版，断网亦可顺畅浏览与检索。');
+    // 渲染「关于我 · 我的档案」：用真实归档数据填充（篇数/栏目数/时间跨度），不编造个人资料
+    function renderAbout() {
+      const catSet = new Set();
+      let minT = '';
+      let maxT = '';
+      articles.forEach(a => {
+        catSet.add(a.category || '未分类');
+        const t = a.publish_time || '';
+        if (t) {
+          if (!minT || t < minT) minT = t;
+          if (!maxT || t > maxT) maxT = t;
+        }
+      });
+      const tot = document.getElementById('profileTotal');
+      if (tot) tot.textContent = articles.length;
+      const cc = document.getElementById('profileCatCount');
+      if (cc) cc.textContent = catSet.size;
+      const span = document.getElementById('profileSpan');
+      if (span) {
+        if (minT && maxT) {
+          span.textContent = minT.slice(0, 10) + ' 至 ' + maxT.slice(0, 10);
+        } else {
+          span.innerHTML = '<span class="profile-empty">暂未添加</span>';
+        }
+      }
     }
 
     function escapeHtml(str) {
@@ -1448,6 +1974,7 @@
     window.addEventListener('DOMContentLoaded', () => {
       normalizeCategories();
       renderCategoryMenu();
+      updateToolbarHint();
       initFontSettings();
       renderSidebarList();
       if (articles.length > 0) {

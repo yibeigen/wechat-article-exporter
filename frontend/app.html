@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>文章批量导出助手 工作台 | 全网博文一键抓取与排版打包</title>
-    <meta name="description" content="文章批量导出助手 工作台 · 支持微信公众号、知乎、微博、新浪博客、简书、掘金、CSDN、博客园、51CTO 等 9 大平台博文一键打包导出为 PDF、Markdown、Word 电子书">
+    <meta name="description" content="文章批量导出助手 工作台 · 支持微信公众号、知乎、微博、新浪博客、简书、搜狐号、百家号、掘金、CSDN、博客园、51CTO 等 11 大平台博文一键打包导出为 PDF、Markdown、Word 电子书">
     <link rel="icon" type="image/svg+xml" href="/assets/logo_icon.svg">
     <link rel="alternate icon" type="image/png" href="/assets/logo_icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1330,7 +1330,7 @@
         <div class="workspace-header">
             <div>
                 <h1 class="workspace-title">博主文章批量抓取与打包导出</h1>
-                <p style="font-size: 0.88rem; color: var(--text-muted); margin-top: 4px;">支持公众号、知乎、微博、新浪博客、简书、掘金、CSDN 等 9 大主流平台，智能过滤广告噪音，一键合并为带目录的 PDF、Markdown、HTML 或 Word 电子书。</p>
+                <p style="font-size: 0.88rem; color: var(--text-muted); margin-top: 4px;">支持公众号、知乎、微博、新浪博客、简书、搜狐号、百家号、掘金、CSDN 等 11 大主流平台，智能过滤广告噪音，一键合并为带目录的 PDF、Markdown、HTML 或 Word 电子书。</p>
             </div>
         </div>
 
@@ -1356,7 +1356,7 @@
             <div class="metric-item">
                 <div class="metric-content">
                     <span class="metric-label">支持主流内容平台</span>
-                    <span class="metric-value" style="color: var(--accent-gold);">9 大主流平台全能支持</span>
+                    <span class="metric-value" style="color: var(--accent-gold);">11 大主流平台全能支持</span>
                 </div>
             </div>
         </div>
@@ -1605,6 +1605,10 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                         <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
                         <span>自定义篇数范围</span>
                     </div>
+                    <div class="format-badge" id="rangeModeDate" onclick="setRangeMode('date')">
+                        <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                        <span>按发布时间范围</span>
+                    </div>
                 </div>
 
                 <!-- 知乎专享：抓取内容类型勾选（想法/回答多达数千条时，取消勾选可大幅提速） -->
@@ -1616,6 +1620,18 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;"><input type="checkbox" id="zhihuTypePins" checked> 想法</label>
                     </div>
                     <div style="margin-top: 6px; font-size: 0.76rem; color: var(--text-muted);">检索清单只包含勾选的类型。回答/想法多达数千条时，只勾「文章」可跳过漫长的滚动加载。</div>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin-top: 10px; font-size: 0.84rem; color: var(--text-primary); font-weight: 700;">
+                        <input type="checkbox" id="zhihuGroupByColumn"> 按专栏分组打包导出
+                    </label>
+                    <div style="margin-top: 4px; font-size: 0.76rem; color: var(--text-muted);">每个专栏生成一个独立 ZIP 归档包（含该专栏全部已选格式）；属于多个专栏的文章归入首个专栏，回答/想法/无专栏文章归入「未分组」包。</div>
+                </div>
+
+                <!-- 新浪博客专享：按博客自有栏目分栏打包 -->
+                <div id="sinaGroupByColumnBox" style="display: none; padding: 12px 14px; background: var(--bg-subtle); border: 1px solid var(--border-main); border-radius: 8px; margin-bottom: 8px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.84rem; color: var(--text-primary); font-weight: 700;">
+                        <input type="checkbox" id="sinaGroupByColumn"> 按栏目分组打包导出（一键全量分栏）
+                    </label>
+                    <div style="margin-top: 4px; font-size: 0.76rem; color: var(--text-muted);">给主页即全量抓取，并按博客自有栏目（如「红楼梦」「水浒」）各生成一个独立 ZIP 归档包，含原版HTML等全部已选格式；超大栏目自动按批拆分，无栏目文章归入「未分类」包。</div>
                 </div>
 
                 <!-- 动态展开的范围输入控制面板 -->
@@ -1631,6 +1647,13 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                         <span style="color: var(--text-primary); font-weight: 700;">篇 到 第</span>
                         <input type="number" id="endIndexInput" class="single-input" placeholder="末尾" min="1" style="width: 80px; height: 36px; padding: 0 10px; font-size: 0.88rem; font-weight: 700; text-align: center;">
                         <span style="color: var(--text-muted);">篇 (留空默认至最后一篇)</span>
+                    </div>
+                    <div id="dateRangeBox" style="display: none; align-items: center; gap: 10px; font-size: 0.84rem; flex-wrap: wrap;">
+                        <span style="color: var(--text-primary); font-weight: 700;">发布时间从</span>
+                        <input type="date" id="dateFromInput" class="single-input" style="height: 36px; padding: 0 10px; font-size: 0.86rem;">
+                        <span style="color: var(--text-primary); font-weight: 700;">至</span>
+                        <input type="date" id="dateToInput" class="single-input" style="height: 36px; padding: 0 10px; font-size: 0.86rem;">
+                        <span style="color: var(--text-muted);">(均含当天，留空不限；无法解析发布时间的文章会保留并提示)</span>
                     </div>
                 </div>
             </div>
@@ -2554,7 +2577,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 <div class="modal-title" style="display: flex; align-items: center; gap: 8px;">
                     <svg class="icon" viewBox="0 0 24 24" style="color: #6366f1;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                     <span>BlogDistiller 版本更新日志</span>
-                    <span style="font-size: 0.68rem; padding: 2px 8px; border-radius: 9999px; background: rgba(0, 102, 255, 0.12); color: #0066ff; font-weight: 800; font-family: monospace;">v1.3.0</span>
+                    <span style="font-size: 0.68rem; padding: 2px 8px; border-radius: 9999px; background: rgba(0, 102, 255, 0.12); color: #0066ff; font-weight: 800; font-family: monospace;">v1.4.0</span>
                 </div>
                 <button class="modal-close-btn" onclick="closeChangelogModal()">&times;</button>
             </div>
@@ -2566,11 +2589,28 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     </div>
 
                     <div style="display: flex; flex-direction: column; gap: 14px;">
-                        <!-- v1.3.0 最新版本：蓝色高亮卡 -->
+                        <!-- v1.4.0 最新版本：蓝色高亮卡 -->
                         <div style="background: var(--bg-surface); border: 1px solid rgba(0, 102, 255, 0.35); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow-sm);">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                <span style="background: #0066ff; color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; font-family: monospace;">v1.3.0</span>
-                                <span style="font-size: 0.74rem; color: var(--text-muted);">2026-10-28</span>
+                                <span style="background: #0066ff; color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; font-family: monospace;">v1.4.0</span>
+                                <span style="font-size: 0.74rem; color: var(--text-muted);">2026-11-11</span>
+                            </div>
+                            <ul style="margin: 0; padding-left: 18px; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.7;">
+                                <li><strong>平台矩阵扩到 11 家，新增【搜狐号】与【百家号】</strong>：搜狐号直连官方翻页接口全量遍历历史文章，百家号用无头浏览器穿透百度动态渲染，两者正文纯净直取、发布时间精确到秒；</li>
+                                <li><strong>Win10/11 安装包 448 MB → 263 MB（少 185 MB，约 41%）</strong>：剔除运行期永不加载的完整 Chromium、40 个调试符号文件、217 个多余语言包、GUI 工具链与零引用的前端依赖；抓取与导出能力实测不变。Win7 兼容包的 Python 与浏览器内核完全不动（其 Playwright 1.29 的无头模式也依赖完整 Chromium，不能删），只同步剔掉零引用前端依赖，242 MB → 232 MB；</li>
+                                <li><strong>修复 51CTO 检索恒为 0 篇</strong>：系统代理变量里的 IPv6 回环地址（<code>NO_PROXY</code> 含 <code>[::1]</code>）会让 HTTP 客户端在构造阶段就抛 <code>Invalid port</code>，请求根本没发出去；全项目 15 处客户端统一不再继承环境代理，实测恢复 6/6 篇 · 1.5 秒；</li>
+                                <li><strong>修复磁盘只读/权限不足时后端启动即崩</strong>：缓存降级分支靠 ⚠️ 符号通报，Windows cp936 控制台编码不了它直接抛异常，把整个启动带崩；现在管道输出统一 UTF-8，真控制台保留原编码只放开错误处理；</li>
+                                <li><strong>清单被截断时不再谎报「无遗漏」</strong>：知乎登录墙、CSDN 风控截断以前会被显示成「全部分页深度穿透完成」，现在以后端截断标记为准，写明标称篇数、实得篇数、差额与中断原因；</li>
+                                <li>搜狐视频简报页失败原因说清：只有播放器没有正文的条目直接标明「搜狐视频简报，无法导出为文档」，不再笼统提示提取失败让人反复重试；</li>
+                                <li>扫码登录兜底更稳：微博/知乎/微信读书的登录窗口按 Edge → Chrome 依次尝试，两者都不可用时直接提示安装浏览器，不再抛看不懂的英文路径错误。</li>
+                            </ul>
+                        </div>
+
+                        <!-- v1.3.0 -->
+                        <div style="background: var(--bg-subtle); border: 1px solid var(--border-main); border-radius: 10px; padding: 14px 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <span style="background: var(--text-muted); color: #fff; font-size: 0.72rem; font-weight: 800; padding: 2px 8px; border-radius: 4px; font-family: monospace;">v1.3.0</span>
+                                <span style="font-size: 0.74rem; color: var(--text-muted);">2026-10-28 · Win7 兼容包 2026-11-04 重打包</span>
                             </div>
                             <ul style="margin: 0; padding-left: 18px; font-size: 0.8rem; color: var(--text-secondary); line-height: 1.7;">
                                 <li><strong>顶栏「刷新」会先查 GitHub 有没有新版本</strong>：有新版弹窗显示当前版本/最新版与更新说明，一键前往下载；没新版才刷新页面；</li>
@@ -2578,6 +2618,10 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                                 <li>修复「多点一次图标就把正在运行的软件打成空壳」：检测到已运行只唤起窗口，不再误杀后台服务；</li>
                                 <li>启动提速（实测二次启动 9.2 秒 → 6.6 秒）：热更清单拉取加 3 秒超时，服务器抽风不再无限干等；正常退出后下次启动跳过孤儿进程扫描；</li>
                                 <li>启动页文案讲实话：暖启动不再显示"正在检测本地 Python 运行环境"。</li>
+                                <li><strong>（2026-11-04 · 仅 Win7 兼容包）修复 PDF / Word / 归档包导出在 Win7 上全部拿不到</strong>：随包 Python 3.8 内核没有 <code>asyncio.to_thread</code>，新装 Win7 用户四种格式里只有 Markdown 能出；</li>
+                                <li><strong>（2026-11-04 · 仅 Win7 兼容包）修复浏览器渲染内核在 Win7 上拒绝启动</strong>：Playwright 自带 node 16 会先检查系统版本并直接退出，PDF 与知乎/掘金/51CTO 抓取通道全废；</li>
+                                <li>（2026-11-04）部分格式失败不再谎报「全部完成」，完成提示后会写明哪几项没生成、原因是什么；</li>
+                                <li>（2026-11-04）Win7 兼容包已在 Win7 SP1 64 位实机环境全新安装并真实抓取通过：PDF 329,117 / Word 39,647 / Markdown 3,239 / 归档包 ZIP 682,557 字节四份产物全部落盘。</li>
                             </ul>
                         </div>
 
@@ -2713,7 +2757,7 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     欢迎使用 BlogDistiller (博萃) 文章导出助手
                 </div>
                 <p style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; margin-bottom: 14px; text-align: left; background: var(--bg-subtle); padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border-main);">
-                    专为知识创作者与研究者打造，现已支持微信公众号、知乎、微博、新浪博客、简书、掘金、CSDN、博客园、51CTO 等 9 大主流平台博文一键批量提取、排版与离线电子书归档。<br><br>
+                    专为知识创作者与研究者打造，现已支持微信公众号、知乎、微博、新浪博客、简书、搜狐号、百家号、掘金、CSDN、博客园、51CTO 等 11 大主流平台博文一键批量提取、排版与离线电子书归档。<br><br>
                     <b style="color:var(--accent-emerald);">📢 进群与技术支持：</b>欢迎扫描下方群二维码直接加入「博萃·文章导出交流群」，或微信扫码关注官方公众号【<b>艺杯羹</b>】回复「文章」领激活口令！
                 </p>
 
@@ -3081,6 +3125,8 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
             'weibo': `<svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"></path></svg>`,
             'sina_blog': `<svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>`,
             'jianshu': `<svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path><path d="M10 2v8l3-2.5 3 2.5V2"></path></svg>`,
+            'sohu': `<svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"></path><path d="M18 14h-8"></path><path d="M15 18h-5"></path><path d="M10 6h8v4h-8V6Z"></path></svg>`,
+            'baijiahao': `<svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path><line x1="4" y1="12" x2="12" y2="12"></line></svg>`,
             'wechat': `<svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>`,
             'custom_urls': `<svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`
         };
@@ -3307,6 +3353,8 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
 
             const zhihuTypeBox = document.getElementById('zhihuTypeBox');
             if (zhihuTypeBox) zhihuTypeBox.style.display = (currentPlatform === 'zhihu') ? 'block' : 'none';
+            const sinaGroupBox = document.getElementById('sinaGroupByColumnBox');
+            if (sinaGroupBox) sinaGroupBox.style.display = (currentPlatform === 'sina_blog') ? 'block' : 'none';
 
             updateZhihuAuthUI();
             updateWeiboAuthUI();
@@ -3840,7 +3888,8 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
         function handleWechatMainInputChange(val) {
             const trimmed = (val || '').trim();
             const targetInput = document.getElementById('targetInput');
-            if (targetInput) targetInput.value = trimmed;
+            // 恢复历史配置时也会走到这里；非微信平台不能被微信链接覆盖掉已恢复的目标输入
+            if (targetInput && currentPlatform === 'wechat') targetInput.value = trimmed;
             const detected = detectWechatInputType(trimmed);
             if ((detected === 'album' || detected === 'single') && detected !== wechatInputMode) {
                 switchWechatInputMode(detected);
@@ -3927,6 +3976,8 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     'jianshu': '简书',
                     'juejin': '稀土掘金',
                     'cnblogs': '博客园',
+                    'sohu': '搜狐号',
+                    'baijiahao': '百家号',
                     'custom_urls': '自定义网址'
                 };
                 const platLabel = platformNames[currentPlatform] || currentPlatform;
@@ -3949,6 +4000,8 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     cookie: document.getElementById('wechatCookieInput')?.value.trim() || undefined,
                     token: document.getElementById('wechatTokenInput')?.value.trim() || undefined,
                     content_types: getZhihuContentTypes(),
+                    date_from: currentRangeMode === 'date' ? (document.getElementById('dateFromInput')?.value || undefined) : undefined,
+                    date_to: currentRangeMode === 'date' ? (document.getElementById('dateToInput')?.value || undefined) : undefined,
                     async_mode: true
                 };
 
@@ -4368,6 +4421,9 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
             if (noticeBox) {
                 if (declaredCount && declaredCount > actualCount) {
                     const diff = declaredCount - actualCount;
+                    // 以后端 list_truncated 为准：知乎「未抓全」、CSDN「风控截断」都不含「未翻完」字样，
+                    // 只按关键词判断会把被截断的清单说成「无遗漏」
+                    const truncated = meta.truncated === true || /未翻完|未抓全|截断/.test(meta.explanation || '');
                     noticeBox.style.display = 'block';
                     noticeBox.style.background = 'rgba(245, 158, 11, 0.08)';
                     noticeBox.style.border = '1px solid rgba(245, 158, 11, 0.28)';
@@ -4378,10 +4434,9 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                         noticeTitle.innerText = `为什么源网页标称 ${declaredCount} 篇，实际检索到 ${actualCount} 篇？`;
                     }
                     if (noticeTag) {
-                        const truncated = meta.explanation && meta.explanation.includes('未翻完');
                         noticeTag.style.background = 'rgba(245, 158, 11, 0.15)';
                         noticeTag.style.color = '#d97706';
-                        noticeTag.innerText = truncated ? `本次未翻完 · 可稍后重试` : `全部分页深度穿透完成 · 无遗漏`;
+                        noticeTag.innerText = truncated ? `本次未抓全 · 可稍后重试` : `全部分页深度穿透完成 · 无遗漏`;
                     }
                     if (noticeContent) {
                         const targetDesc = categoryName ? `「${escapeHtml(categoryName)}」` : (author ? `「${escapeHtml(author)}」` : '该作者主页');
@@ -4391,6 +4446,12 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                         // 如果后端已有完整的差额自洽说明（包含差额、标称或公网说明）
                         if (meta.explanation && (meta.explanation.includes('差额') || meta.explanation.includes('并非系统') || meta.explanation.includes('有效博文'))) {
                             exp = meta.explanation.replace(/\n/g, '<br>');
+                        } else if (truncated) {
+                            // 后端已判定本次被截断时，绝不能套用「并非系统抓取遗漏，请放心导出」的默认说辞
+                            exp = `源网页标称 <b>${targetDesc}</b> 共含 <b>${declaredCount}</b> 篇，本次只取到 <b>${actualCount}</b> 篇，<b>差额 ${diff} 篇本次未取到</b>——是抓取被平台分页/风控/登录墙中断，不是博主删除。<br>已取到的 ${actualCount} 篇可正常导出；补齐该平台登录态或稍后重试可继续向后翻取。`;
+                            if (meta.explanation) {
+                                exp += `<div style="margin-top: 6px; padding-top: 4px; border-top: 1px dashed rgba(245, 158, 11, 0.25); font-size: 0.73rem; color: var(--text-muted);">📊 <b>中断原因</b>：${escapeHtml(meta.explanation).replace(/\n/g, '<br>')}</div>`;
+                            }
                         } else {
                             // 后端未提供篇数差异原因（例如仅传了字数统计或提示），必须展示核心差额自洽解答，避免“提了为什么却没回答为什么”
                             exp = defaultDiffExp;
@@ -5061,14 +5122,17 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
             const allBtn = document.getElementById('rangeModeAll');
             const recentBtn = document.getElementById('rangeModeRecent');
             const customBtn = document.getElementById('rangeModeCustom');
+            const dateBtn = document.getElementById('rangeModeDate');
 
             if (allBtn) allBtn.classList.toggle('active', mode === 'all');
             if (recentBtn) recentBtn.classList.toggle('active', mode === 'recent');
             if (customBtn) customBtn.classList.toggle('active', mode === 'custom');
+            if (dateBtn) dateBtn.classList.toggle('active', mode === 'date');
 
             const container = document.getElementById('rangeInputsContainer');
             const recentBox = document.getElementById('recentRangeBox');
             const customBox = document.getElementById('customRangeBox');
+            const dateBox = document.getElementById('dateRangeBox');
 
             if (container) {
                 if (mode === 'all') {
@@ -5077,21 +5141,28 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     container.style.display = 'block';
                     if (recentBox) recentBox.style.display = 'flex';
                     if (customBox) customBox.style.display = 'none';
+                    if (dateBox) dateBox.style.display = 'none';
                 } else if (mode === 'custom') {
                     container.style.display = 'block';
                     if (recentBox) recentBox.style.display = 'none';
                     if (customBox) customBox.style.display = 'flex';
+                    if (dateBox) dateBox.style.display = 'none';
+                } else if (mode === 'date') {
+                    container.style.display = 'block';
+                    if (recentBox) recentBox.style.display = 'none';
+                    if (customBox) customBox.style.display = 'none';
+                    if (dateBox) dateBox.style.display = 'flex';
                 }
             }
             saveFormState();
         }
 
         // 监听所有输入框和开关变化，自动保存配置
-        ['recentCountInput', 'startIndexInput', 'endIndexInput', 'authorNameOverrideInput', 'wechatTokenInput', 'wechatCookieInput'].forEach(id => {
+        ['recentCountInput', 'startIndexInput', 'endIndexInput', 'dateFromInput', 'dateToInput', 'authorNameOverrideInput', 'wechatTokenInput', 'wechatCookieInput'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('input', saveFormState);
         });
-        ['noiseFilterSwitch', 'removeWatermarkSwitch', 'useCacheSwitch'].forEach(id => {
+        ['noiseFilterSwitch', 'removeWatermarkSwitch', 'useCacheSwitch', 'zhihuGroupByColumn', 'sinaGroupByColumn'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('change', saveFormState);
         });
@@ -5116,6 +5187,10 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     recentCount: document.getElementById('recentCountInput')?.value || '',
                     startIndex: document.getElementById('startIndexInput')?.value || '',
                     endIndex: document.getElementById('endIndexInput')?.value || '',
+                    dateFrom: document.getElementById('dateFromInput')?.value || '',
+                    dateTo: document.getElementById('dateToInput')?.value || '',
+                    groupByColumn: document.getElementById('zhihuGroupByColumn')?.checked ?? false,
+                    sinaGroupByColumn: document.getElementById('sinaGroupByColumn')?.checked ?? false,
                     noiseFilter: document.getElementById('noiseFilterSwitch')?.checked ?? true,
                     removeWatermark: document.getElementById('removeWatermarkSwitch')?.checked ?? true,
                     useCache: document.getElementById('useCacheSwitch')?.checked ?? true,
@@ -5168,6 +5243,10 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 if (state.recentCount && document.getElementById('recentCountInput')) document.getElementById('recentCountInput').value = state.recentCount;
                 if (state.startIndex && document.getElementById('startIndexInput')) document.getElementById('startIndexInput').value = state.startIndex;
                 if (state.endIndex && document.getElementById('endIndexInput')) document.getElementById('endIndexInput').value = state.endIndex;
+                if (state.dateFrom && document.getElementById('dateFromInput')) document.getElementById('dateFromInput').value = state.dateFrom;
+                if (state.dateTo && document.getElementById('dateToInput')) document.getElementById('dateToInput').value = state.dateTo;
+                if (state.groupByColumn !== undefined && document.getElementById('zhihuGroupByColumn')) document.getElementById('zhihuGroupByColumn').checked = state.groupByColumn;
+                if (state.sinaGroupByColumn !== undefined && document.getElementById('sinaGroupByColumn')) document.getElementById('sinaGroupByColumn').checked = state.sinaGroupByColumn;
                 if (state.noiseFilter !== undefined && document.getElementById('noiseFilterSwitch')) document.getElementById('noiseFilterSwitch').checked = state.noiseFilter;
                 if (state.removeWatermark !== undefined && document.getElementById('removeWatermarkSwitch')) document.getElementById('removeWatermarkSwitch').checked = state.removeWatermark;
                 if (state.useCache !== undefined && document.getElementById('useCacheSwitch')) document.getElementById('useCacheSwitch').checked = state.useCache;
@@ -5238,6 +5317,10 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 const s = document.getElementById('startIndexInput').value || '1';
                 const e = document.getElementById('endIndexInput').value || '末尾';
                 rangeText = `第 ${s} 篇 到 第 ${e} 篇`;
+            } else if (currentRangeMode === 'date') {
+                const df = document.getElementById('dateFromInput').value || '不限';
+                const dt = document.getElementById('dateToInput').value || '不限';
+                rangeText = `发布时间 ${df} ~ ${dt}`;
             }
             document.getElementById('modalRange').innerText = rangeText;
 
@@ -5314,6 +5397,20 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 return;
             }
 
+            // 按发布时间模式：至少填一个日期，且起止顺序合法
+            if (!isFromModal && currentRangeMode === 'date') {
+                const df = document.getElementById('dateFromInput')?.value || '';
+                const dt = document.getElementById('dateToInput')?.value || '';
+                if (!df && !dt) {
+                    alert('请至少填写一个起始或结束日期，或改选「全部文章」！');
+                    return;
+                }
+                if (df && dt && df > dt) {
+                    alert('起始日期不能晚于结束日期！');
+                    return;
+                }
+            }
+
             const enableNoise = document.getElementById('noiseFilterSwitch')?.checked ?? true;
             const removeWatermark = document.getElementById('removeWatermarkSwitch')?.checked ?? true;
             const useCache = document.getElementById('useCacheSwitch')?.checked ?? true;
@@ -5325,6 +5422,8 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
             let maxArticles = null;
             let startIndex = 1;
             let endIndex = null;
+            let dateFrom = null;
+            let dateTo = null;
 
             // 若用户从清单选择弹窗明确勾选文章后启动，严禁再次截断用户勾选的内容
             if (!isFromModal) {
@@ -5336,6 +5435,9 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     const endVal = document.getElementById('endIndexInput')?.value?.trim();
                     startIndex = startVal ? parseInt(startVal) : 1;
                     endIndex = endVal ? parseInt(endVal) : null;
+                } else if (currentRangeMode === 'date') {
+                    dateFrom = document.getElementById('dateFromInput')?.value || null;
+                    dateTo = document.getElementById('dateToInput')?.value || null;
                 }
             }
 
@@ -5350,6 +5452,11 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                 max_articles: maxArticles,
                 start_index: startIndex,
                 end_index: endIndex,
+                date_from: dateFrom,
+                date_to: dateTo,
+                // 知乎专享：按专栏分组打包（每个专栏一个独立 ZIP）
+                group_by_column: (currentPlatform === 'zhihu' && (document.getElementById('zhihuGroupByColumn')?.checked ?? false))
+                    || (currentPlatform === 'sina_blog' && (document.getElementById('sinaGroupByColumn')?.checked ?? false)),
                 author_name_override: authorOverride || null,
                 wechat_token: wechatToken || null,
                 wechat_cookie: wechatCookie || null,
@@ -5815,13 +5922,22 @@ https://mp.weixin.qq.com/s/xxxxxxxxx"></textarea>
                     } else {
                         Object.entries(files).forEach(([fmt, url]) => {
                             if (fmt !== 'zip') {
+                                // 分包 ZIP（按批次/按专栏）：用真实文件名做按钮标签，专栏名一目了然
+                                let btnLabel = formatLabels[fmt] || fmt.toUpperCase();
+                                let btnIcon = formatIcons[fmt] || '📄';
+                                if (fmt.startsWith('zip_batch_')) {
+                                    btnIcon = '📦';
+                                    try { btnLabel = decodeURIComponent(url.split('/').pop()).replace(/\.zip$/i, ''); } catch (e) {}
+                                }
+                                const htmlLabel = btnLabel.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                const jsLabel = btnLabel.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                                 htmlOutput += `
-                                    <a href="${url}" class="action-card-btn secondary-action-btn" target="_blank" download onclick="return handleDownloadClick(this, '${formatLabels[fmt] || fmt.toUpperCase()}')" style="text-decoration:none; justify-content:space-between; padding: 12px 16px;">
-                                        <div style="display:flex; align-items:center; gap:8px;">
-                                            <span>${formatIcons[fmt] || '📄'}</span>
-                                            <span style="font-weight:700;">${formatLabels[fmt] || fmt.toUpperCase()}</span>
+                                    <a href="${url}" class="action-card-btn secondary-action-btn" target="_blank" download onclick="return handleDownloadClick(this, '${jsLabel}')" style="text-decoration:none; justify-content:space-between; padding: 12px 16px;">
+                                        <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                                            <span>${btnIcon}</span>
+                                            <span style="font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${htmlLabel}">${htmlLabel}</span>
                                         </div>
-                                        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                        <svg class="icon icon-sm" viewBox="0 0 24 24" style="flex-shrink:0;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                                     </a>
                                 `;
                             }

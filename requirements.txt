@@ -13,3 +13,6 @@ jinja2>=3.1.3
 pydantic>=2.6.0
 playwright>=1.42.0
 pillow>=10.2.0
+# 知乎/微博「一键同步本机浏览器」要用 AES-GCM 解 Chrome v10 加密 Cookie，
+# 漏登记会让重建出来的内核少这个包，同步时直接 ImportError
+cryptography>=42.0.0

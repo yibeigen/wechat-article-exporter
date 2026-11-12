@@ -76,7 +76,7 @@ async def check_zhihu_auth_status() -> Dict[str, Any]:
     }
     
     try:
-        async with httpx.AsyncClient(headers=headers, cookies=cookies, timeout=8.0) as client:
+        async with httpx.AsyncClient(headers=headers, cookies=cookies, timeout=8.0, trust_env=False) as client:
             resp = await client.get("https://www.zhihu.com/api/v4/me")
             if resp.status_code == 200:
                 data = resp.json()
@@ -116,23 +116,22 @@ def _launch_zhihu_qr_login_sync() -> Dict[str, Any]:
     
     try:
         with sync_playwright() as p:
-            # 优先使用系统安装的 Edge，其次 Chromium
+            # 优先系统 Edge，其次 Chrome，最后自带 Chromium
             launch_args = [
                 '--window-size=920,720',
                 '--window-position=200,100',
                 '--disable-blink-features=AutomationControlled'
             ]
-            try:
-                browser = p.chromium.launch(
-                    channel="msedge",
-                    headless=False,
-                    args=launch_args
-                )
-            except Exception:
-                browser = p.chromium.launch(
-                    headless=False,
-                    args=launch_args
-                )
+            browser = None
+            for _channel in ("msedge", "chrome", None):
+                try:
+                    browser = (p.chromium.launch(channel=_channel, headless=False, args=launch_args)
+                               if _channel else p.chromium.launch(headless=False, args=launch_args))
+                    break
+                except Exception:
+                    continue
+            if browser is None:
+                raise RuntimeError("本机未检测到 Edge / Chrome 浏览器，扫码登录需要系统浏览器提供窗口。请安装 Microsoft Edge 后重试。")
                 
             context = browser.new_context(
                 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0',

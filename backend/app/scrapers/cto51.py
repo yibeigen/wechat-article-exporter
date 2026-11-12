@@ -55,7 +55,7 @@ def _fetch_51cto_via_bot_sync(user_id: str, max_articles: Optional[int] = None) 
     seen_urls = set()
     article_id_pattern = re.compile(rf"/{user_id}/(\d+)")
 
-    with httpx.Client(timeout=10.0, verify=False, follow_redirects=True) as client:
+    with httpx.Client(timeout=10.0, verify=False, follow_redirects=True, trust_env=False) as client:
         headers = {
             "User-Agent": BOT_USER_AGENT,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",

@@ -55,14 +55,6 @@
       color: #ffffff;
       text-decoration: none;
     }
-    .top-offline-badge {
-      background: #0284c7;
-      color: #ffffff;
-      padding: 2px 8px;
-      border-radius: 2px;
-      font-size: 11px;
-    }
-
     /* 新浪博客大框架 (950px 居中标准版心) */
     .sinablogb {
       width: 950px;
@@ -232,62 +224,6 @@
       margin-left: 2px;
     }
 
-    /* 个人资料模块 (module_901) */
-    .info {
-      padding: 12px 10px;
-      text-align: center;
-    }
-    .info_img {
-      margin-bottom: 8px;
-    }
-    .info_img img {
-      width: 170px;
-      height: 170px;
-      border: 1px solid #C8D8E5;
-      padding: 2px;
-      background: #ffffff;
-      object-fit: cover;
-      display: block;
-      margin: 0 auto;
-    }
-    .info_nm {
-      font-weight: bold;
-      font-size: 14px;
-      color: #3E73A0;
-      margin: 6px 0;
-    }
-    .info_btn_row {
-      margin: 8px 0;
-      display: flex;
-      justify-content: center;
-      gap: 8px;
-    }
-    .btn_sina {
-      display: inline-block;
-      padding: 2px 10px;
-      border: 1px solid #A9BDCE;
-      background: #EEF4FB;
-      color: #333333;
-      font-size: 12px;
-      border-radius: 2px;
-      cursor: pointer;
-      text-decoration: none;
-    }
-    .btn_sina:hover {
-      background: #DCEAF6;
-      color: #cc0000;
-      text-decoration: none;
-    }
-    .info_stats {
-      font-size: 12px;
-      color: #747474;
-      line-height: 1.6;
-      border-top: 1px dotted #A9BDCE;
-      padding-top: 6px;
-      margin-top: 6px;
-      text-align: left;
-    }
-
     /* 即时搜索框与快速选篇列表 */
     .sidebar-search-box {
       padding: 8px 10px;
@@ -328,6 +264,22 @@
       display: flex;
       justify-content: space-between;
     }
+    .search-go {
+      flex-shrink: 0;
+      height: 24px;
+      margin-left: 6px;
+      padding: 0 12px;
+      border: 1px solid #2C597C;
+      background: linear-gradient(180deg, #4A82B0 0%, #3E73A0 100%);
+      color: #FFFFFF;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      cursor: pointer;
+    }
+    .search-go:hover { background: linear-gradient(180deg, #5A92C0 0%, #4A82B0 100%); }
+    .search-go:active { background: #2C597C; }
 
     .sidebar-article-list {
       list-style: none;
@@ -380,34 +332,47 @@
       font-weight: bold;
     }
 
-    /* 分类专栏模块 (module_7) 1:1 复刻新浪博客电脑端左侧分类列表 */
+    /* 左侧「博文」栏目分类模块 (1:1 还原原版 articlelist 左栏分类专栏)
+       选中项带整行边框盒 + 浅蓝渐变底，方形小折角点 + 蓝色链接，与原版截图一致。 */
+    .blog_classList {
+      max-height: 340px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #A9BDCE #EEF4FB;
+    }
+    .blog_classList::-webkit-scrollbar { width: 5px; }
+    .blog_classList::-webkit-scrollbar-track { background: #EEF4FB; }
+    .blog_classList::-webkit-scrollbar-thumb { background: #A9BDCE; border-radius: 2px; }
+    .blog_classList::-webkit-scrollbar-thumb:hover { background: #3E73A0; }
     .cat-menu-list {
-      padding: 4px 6px;
+      padding: 6px 8px;
       list-style: none;
       font-size: 12px;
       margin: 0;
     }
     .cat-menu-item {
       padding: 5px 8px 5px 18px;
-      border-bottom: 1px dotted #E8EFF6;
       display: flex;
       align-items: center;
       justify-content: space-between;
       background-image: url('{{ dot_b64 }}');
       background-repeat: no-repeat;
-      background-position: 6px center;
+      background-position: 7px center;
       cursor: pointer;
       line-height: 20px;
+      border: 1px solid transparent;
+      margin-bottom: 1px;
     }
     .cat-menu-item:hover {
-      background-color: #f2f7fc;
+      background-color: #F2F7FC;
     }
     .cat-menu-item.current {
-      background-color: #e5f1fb;
+      background: linear-gradient(180deg, #FFFFFF 0%, #E9F2FA 100%);
+      border: 1px solid #A9BDCE;
       font-weight: bold;
     }
     .cat-menu-item.current a {
-      color: #03487F !important;
+      color: #2C597C !important;
       font-weight: bold;
     }
     .cat-menu-item a {
@@ -418,12 +383,19 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .cat-menu-item a:hover {
+      color: #cc0000;
+      text-decoration: underline;
+    }
     .cat-menu-item em {
       font-style: normal;
       color: #747474;
       font-size: 11px;
       margin-left: 6px;
       flex-shrink: 0;
+    }
+    .cat-menu-item.current em {
+      color: #2C597C;
     }
 
     /* ========================================================
@@ -629,25 +601,38 @@
       background-image: url('{{ linedot_b64 }}');
       background-repeat: repeat-x;
       background-position: left bottom;
-      height: 28px;
-      padding-top: 6px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      padding: 7px 0 8px;
+      display: block;
       font-size: 12px;
+      cursor: pointer;
     }
     .articleCell:hover {
       background-color: #F4F8FC;
     }
+    .articleCell:hover .atc_title a {
+      color: #cc0000;
+      text-decoration: underline;
+    }
+    .articleCell:focus-visible {
+      outline: 2px solid #3E73A0;
+      outline-offset: -2px;
+    }
     .atc_main {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
       background-image: url('{{ dot_b64 }}');
       background-repeat: no-repeat;
       background-position: left 7px;
       padding-left: 11px;
+    }
+    .atc_title {
+      flex: 1;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      flex: 1;
     }
     .atc_title a {
       color: #3E73A0;
@@ -663,7 +648,158 @@
       color: #747474;
       font-size: 12px;
       flex-shrink: 0;
-      margin-left: 20px;
+      white-space: nowrap;
+    }
+
+    /* ----------------------------------------------------
+       跳转确认弹窗 (列表单击 → 确认 → 进入正文)
+       ---------------------------------------------------- */
+    .jump-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(20, 40, 60, .45);
+      backdrop-filter: blur(2px);
+    }
+    .jump-overlay.show { display: flex; animation: jumpFade .18s ease-out; }
+    .jump-dialog {
+      width: 380px;
+      max-width: calc(100vw - 40px);
+      background: #FFFFFF;
+      border: 1px solid #A9BDCE;
+      border-radius: 3px;
+      box-shadow: 0 10px 40px rgba(20, 40, 60, .35);
+      overflow: hidden;
+      animation: jumpPop .2s cubic-bezier(.2, .8, .3, 1);
+    }
+    .jump-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 36px;
+      padding: 0 12px;
+      background: linear-gradient(180deg, #4A82B0 0%, #3E73A0 100%);
+      color: #FFFFFF;
+      font-size: 13px;
+      font-weight: bold;
+    }
+    .jump-close {
+      border: none;
+      background: transparent;
+      color: #DCEAF5;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 2px 4px;
+    }
+    .jump-close:hover { color: #FFFFFF; }
+    .jump-body { padding: 18px 20px 6px; }
+    .jump-q { font-size: 13px; color: #333333; margin: 0 0 12px; }
+    .jump-target {
+      padding: 10px 12px;
+      background: #F2F7FC;
+      border: 1px solid #D6E4EF;
+      border-left: 3px solid #3E73A0;
+    }
+    .jump-target-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #2C597C;
+      font-family: simsun, "宋体";
+      line-height: 1.5;
+      word-break: break-all;
+    }
+    .jump-target-meta { margin-top: 4px; font-size: 11px; color: #7A8C99; }
+    .jump-foot {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 14px 20px 18px;
+    }
+    .jump-btn {
+      min-width: 76px;
+      height: 28px;
+      padding: 0 14px;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 2px;
+    }
+    .jump-btn.cancel {
+      border: 1px solid #A9BDCE;
+      background: #FFFFFF;
+      color: #3E73A0;
+    }
+    .jump-btn.cancel:hover { background: #F0F6FC; }
+    .jump-btn.ok {
+      border: 1px solid #2C597C;
+      background: linear-gradient(180deg, #4A82B0 0%, #3E73A0 100%);
+      color: #FFFFFF;
+      font-weight: bold;
+    }
+    .jump-btn.ok:hover { background: linear-gradient(180deg, #5A92C0 0%, #4A82B0 100%); }
+    .jump-btn.ok:focus-visible, .jump-btn.cancel:focus-visible { outline: 2px solid #2C597C; outline-offset: 1px; }
+    @keyframes jumpFade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes jumpPop { from { opacity: 0; transform: scale(.94) translateY(6px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+    /* ----------------------------------------------------
+       视图 C: 【关于我 · 我的档案】 (1:1 还原原版 profile 页)
+       ---------------------------------------------------- */
+    #aboutViewContainer {
+      display: none;
+    }
+    .profile_blk {
+      padding: 24px 30px 32px;
+      background: #ffffff;
+    }
+    .profile-sec-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #333333;
+      margin: 0 0 12px;
+    }
+    .profile-table {
+      border-collapse: collapse;
+    }
+    .profile-table td {
+      padding: 5px 0;
+      font-size: 14px;
+      vertical-align: top;
+      line-height: 1.8;
+    }
+    .profile-label {
+      width: 82px;
+      color: #464646;
+      letter-spacing: 6px;
+      white-space: nowrap;
+    }
+    .profile-value {
+      color: #3E73A0;
+      word-break: break-all;
+    }
+    .profile-value strong,
+    .profile-value b {
+      color: #2C597C;
+    }
+    .profile-value a {
+      color: #3E73A0;
+    }
+    .profile-empty {
+      color: #999999;
+    }
+    .profile-divider {
+      border-top: 1px dotted #C3D6E6;
+      margin: 20px 0;
+    }
+    .profile-intro {
+      font-size: 14px;
+      color: #464646;
+      line-height: 1.9;
+      margin: 0;
+      text-indent: 2em;
     }
 
     /* 底部版权说明 */
@@ -688,9 +824,6 @@
       <a href="javascript:switchView('article')">博文正文</a>
       <a href="javascript:switchView('list')">博文目录 ({{ total_articles }}篇)</a>
     </div>
-    <div>
-      <span class="top-offline-badge">100% 离线原版排版</span>
-    </div>
   </div>
 
   <!-- 新浪博客版心容器 (950px) -->
@@ -710,7 +843,7 @@
           <span class="blognav-sep">|</span>
           <span><a class="blognav-item" id="navListBtn" href="javascript:switchView('list')">博文目录</a></span>
           <span class="blognav-sep">|</span>
-          <span><a class="blognav-item" href="javascript:showAboutModal()">关于我</a></span>
+          <span><a class="blognav-item" id="navAboutBtn" href="javascript:switchView('about')">关于我</a></span>
         </div>
       </nav>
     </header>
@@ -723,32 +856,16 @@
            ============================================== -->
       <aside id="column_1" class="SG_colW21 SG_colFirst">
 
-        <!-- 个人资料模块 (module_901) -->
-        <div class="SG_conn" id="module_901">
+        <!-- 博文栏目分类模块 (1:1 还原原版左栏「博文」分类专栏，置于侧栏顶部，切栏目一眼可见) -->
+        <div class="SG_conn" id="module_7">
           <div class="SG_connHead">
-            <span class="title">个人资料</span>
+            <span class="title">博文</span>
           </div>
           <div class="SG_connBody">
-            <div class="info">
-              <div class="info_img">
-                {% if author_avatar %}
-                <img src="{{ author_avatar }}" alt="{{ author_name }}" title="{{ author_name }}">
-                {% else %}
-                <div style="width:170px;height:170px;line-height:170px;background:#eef4fb;color:#747474;border:1px solid #ccc;font-size:36px;margin:0 auto;">✍️</div>
-                {% endif %}
-              </div>
-              <div class="info_nm">
-                <strong>{{ author_name }}</strong>
-              </div>
-              <div class="info_btn_row">
-                <a href="javascript:void(0)" class="btn_sina" onclick="alert('已离线归档，关注功能仅在线有效')">+加关注</a>
-                <a href="javascript:void(0)" class="btn_sina" onclick="alert('已离线归档，发私信功能仅在线有效')">发私信</a>
-              </div>
-              <div class="info_stats">
-                分类：<b>{{ category_name or '全部博文' }}</b><br>
-                篇数：<b>{{ total_articles }}</b> 篇<br>
-                排版：新浪电脑端原版 (Theme 30_1)
-              </div>
+            <div class="menuList blog_classList">
+              <ul class="cat-menu-list" id="categoryMenuList">
+                <!-- 由 JavaScript 动态渲染全部分类及对应文章篇数 -->
+              </ul>
             </div>
           </div>
           <div class="SG_connFoot"></div>
@@ -765,6 +882,7 @@
               <div class="search-input-wrap">
                 <input type="text" id="searchInput" placeholder="🔍 搜索标题关键词..." autocomplete="off">
                 <button class="search-clear" id="searchClearBtn" title="清空">✕</button>
+                <button type="button" class="search-go" id="searchGoBtn" title="执行检索（回车同效）">查询</button>
               </div>
               <div class="search-meta-row">
                 <span>匹配：<b id="visibleCount" style="color:#2C597C;">{{ total_articles }}</b> 篇</span>
@@ -774,21 +892,6 @@
             <ul class="sidebar-article-list" id="sidebarArticleList">
               <!-- 动态渲染 -->
             </ul>
-          </div>
-          <div class="SG_connFoot"></div>
-        </div>
-
-        <!-- 分类专栏模块 (module_7) 1:1 复刻新浪博客原版左侧分类专栏 -->
-        <div class="SG_conn" id="module_7">
-          <div class="SG_connHead">
-            <span class="title">博文分类</span>
-          </div>
-          <div class="SG_connBody">
-            <div class="menuList blog_classList" style="max-height: 480px; overflow-y: auto;">
-              <ul class="cat-menu-list" id="categoryMenuList">
-                <!-- 由 JavaScript 动态渲染全部分类及对应文章篇数 -->
-              </ul>
-            </div>
           </div>
           <div class="SG_connFoot"></div>
         </div>
@@ -898,6 +1001,58 @@
           </div>
         </div>
 
+        <!-- --------------------------------------------
+             视图 C: 【关于我 · 我的档案】 (1:1 还原原版 profile 页)
+             -------------------------------------------- -->
+        <div id="aboutViewContainer">
+          <div class="SG_conn" id="module_930">
+            <div class="SG_connHead">
+              <span class="title">我的档案</span>
+              <span class="fontSize">
+                <a href="javascript:switchView('article')" style="color:#2C597C; font-weight:bold;">[返回正文阅读]</a>
+              </span>
+            </div>
+            <div class="SG_connBody">
+              <div class="profile_blk">
+                <div class="profile-section">
+                  <h3 class="profile-sec-title">基本信息：</h3>
+                  <table class="profile-table">
+                    <tr>
+                      <td class="profile-label">博主</td>
+                      <td class="profile-value"><strong>{{ author_name }}</strong></td>
+                    </tr>
+                    <tr>
+                      <td class="profile-label">主页</td>
+                      <td class="profile-value">
+                        {% if blog_url %}<a href="{{ blog_url }}" target="_blank" rel="noopener noreferrer">{{ blog_url }}</a>
+                        {% else %}<span class="profile-empty">暂未添加</span>{% endif %}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="profile-label">收录</td>
+                      <td class="profile-value"><b id="profileTotal">{{ total_articles }}</b> 篇博文</td>
+                    </tr>
+                    <tr>
+                      <td class="profile-label">栏目</td>
+                      <td class="profile-value"><b id="profileCatCount">--</b> 个分类</td>
+                    </tr>
+                    <tr>
+                      <td class="profile-label">跨度</td>
+                      <td class="profile-value" id="profileSpan">--</td>
+                    </tr>
+                  </table>
+                </div>
+                <div class="profile-divider"></div>
+                <div class="profile-section">
+                  <h3 class="profile-sec-title">个人简介：</h3>
+                  <p class="profile-intro">本离线知识库由【微信公众号：艺杯羹】整理排版，1:1 还原新浪博客电脑端原版视觉排版，断网亦可顺畅浏览与检索。左栏「博文」模块可随时切换栏目，顶部检索台支持模糊/精确与标题/全文检索。所有图文知识产权归原作者所有，仅供个人离线学习、学术研究与知识归档使用。</p>
+                </div>
+              </div>
+            </div>
+            <div class="SG_connFoot"></div>
+          </div>
+        </div>
+
       </main>
 
     </div>
@@ -908,6 +1063,27 @@
       仅供个人离线学习、学术研究与知识归档使用，所有图文知识产权归原作者所有。
     </footer>
 
+  </div>
+
+  <!-- 跳转确认弹窗：列表单击文章先确认再进入正文 -->
+  <div class="jump-overlay" id="jumpConfirmOverlay" role="dialog" aria-modal="true" aria-labelledby="jumpConfirmHeading">
+    <div class="jump-dialog">
+      <div class="jump-head">
+        <span id="jumpConfirmHeading">跳转确认</span>
+        <button type="button" class="jump-close" id="jumpConfirmClose" title="关闭" aria-label="关闭">✕</button>
+      </div>
+      <div class="jump-body">
+        <p class="jump-q">确定要跳转到这篇博文吗？</p>
+        <div class="jump-target">
+          <div class="jump-target-title" id="jumpConfirmTitle"></div>
+          <div class="jump-target-meta" id="jumpConfirmMeta"></div>
+        </div>
+      </div>
+      <div class="jump-foot">
+        <button type="button" class="jump-btn cancel" id="jumpConfirmCancel">取消</button>
+        <button type="button" class="jump-btn ok" id="jumpConfirmOk">确定跳转</button>
+      </div>
+    </div>
   </div>
 
   <!-- 内嵌全量结构化文章数据 -->
@@ -943,8 +1119,10 @@
     const bigArticleList = document.getElementById('bigArticleList');
     const articleViewContainer = document.getElementById('articleViewContainer');
     const listViewContainer = document.getElementById('listViewContainer');
+    const aboutViewContainer = document.getElementById('aboutViewContainer');
     const navArticleBtn = document.getElementById('navArticleBtn');
     const navListBtn = document.getElementById('navListBtn');
+    const navAboutBtn = document.getElementById('navAboutBtn');
 
     // 规整所有文章分类（优先从标签首项提取真实分类，确保 100% 数据完备）
     function normalizeCategories() {
@@ -1027,21 +1205,17 @@
       switchView('list');
     }
 
-    // 视图切换（正文视图 vs 目录大清单视图）
+    // 视图切换（正文 / 目录大清单 / 关于我·我的档案）
     function switchView(viewName) {
       currentView = viewName;
-      if (viewName === 'article') {
-        articleViewContainer.style.display = 'block';
-        listViewContainer.style.display = 'none';
-        navArticleBtn.classList.add('on');
-        navListBtn.classList.remove('on');
-      } else {
-        articleViewContainer.style.display = 'none';
-        listViewContainer.style.display = 'block';
-        navArticleBtn.classList.remove('on');
-        navListBtn.classList.add('on');
-        renderBigList();
-      }
+      articleViewContainer.style.display = viewName === 'article' ? 'block' : 'none';
+      listViewContainer.style.display = viewName === 'list' ? 'block' : 'none';
+      aboutViewContainer.style.display = viewName === 'about' ? 'block' : 'none';
+      navArticleBtn.classList.toggle('on', viewName === 'article');
+      navListBtn.classList.toggle('on', viewName === 'list');
+      navAboutBtn.classList.toggle('on', viewName === 'about');
+      if (viewName === 'list') renderBigList();
+      if (viewName === 'about') renderAbout();
       window.scrollTo({ top: 200, behavior: 'smooth' });
     }
 
@@ -1085,12 +1259,7 @@
           <div class="item-time">${art.publish_time ? art.publish_time.slice(0, 10) : ''}</div>
         `;
 
-        li.addEventListener('click', () => {
-          if (currentView !== 'article') {
-            switchView('article');
-          }
-          loadArticle(artIdx);
-        });
+        li.addEventListener('click', () => openArticle(artIdx));
 
         fragment.appendChild(li);
       });
@@ -1098,30 +1267,33 @@
       sidebarArticleList.appendChild(fragment);
     }
 
-    // 渲染右侧完整目录清单 (1:1 还原 articlelist_xxx.html)
+    // 渲染右侧完整目录清单 (与左栏共用同一份「标题关键词 + 栏目」过滤结果)
     function renderBigList() {
       bigArticleList.innerHTML = '';
 
       const titleEl = document.querySelector('#module_928 .title');
       const summaryEl = document.querySelector('#listViewContainer .list-filter-bar span:first-child');
       const catTitle = currentCategory ? `【${currentCategory}】` : '【全部博文】';
+      const kw = (searchInput.value || '').trim().toLowerCase();
 
       const listIndices = [];
       articles.forEach((art, idx) => {
-        if (!currentCategory || art.category === currentCategory) {
-          listIndices.push(idx);
-        }
+        const matchKw = !kw || (art.title || '').toLowerCase().includes(kw);
+        const matchCat = !currentCategory || art.category === currentCategory;
+        if (matchKw && matchCat) listIndices.push(idx);
       });
 
       if (titleEl) {
         titleEl.innerHTML = `${escapeHtml(catTitle)}目录列表 <em>(${listIndices.length})</em>`;
       }
       if (summaryEl) {
-        summaryEl.innerHTML = `共收录 <b>${listIndices.length}</b> 篇博文 · 点击任意一篇直接进入正文阅读`;
+        const kwTxt = kw ? ` · 检索「<b>${escapeHtml(searchInput.value.trim())}</b>」` : '';
+        const clickHint = kw ? '点击任意一篇，确认后进入正文' : '点击任意一篇直接进入正文阅读';
+        summaryEl.innerHTML = `共收录 <b>${listIndices.length}</b> 篇博文${kwTxt} · ${clickHint}`;
       }
 
       if (listIndices.length === 0) {
-        bigArticleList.innerHTML = '<div style="padding:30px;text-align:center;color:#999;">该分类下暂无博文</div>';
+        bigArticleList.innerHTML = '<div style="padding:30px;text-align:center;color:#999;">该分类与检索条件下暂无博文</div>';
         return;
       }
 
@@ -1131,15 +1303,25 @@
         const art = articles[idx];
         const div = document.createElement('div');
         div.className = 'articleCell SG_j_linedot1';
+        div.setAttribute('role', 'button');
+        div.setAttribute('tabindex', '0');
+        div.title = '点击跳转到这篇博文';
+        let titleHtml = escapeHtml(art.title || '无标题');
+        if (kw) {
+          const reg = new RegExp(`(${escapeRegExp(kw)})`, 'gi');
+          titleHtml = titleHtml.replace(reg, '<span class="hl-keyword">$1</span>');
+        }
+        div.addEventListener('click', () => maybeConfirmOpen(idx));
+        div.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); maybeConfirmOpen(idx); }
+        });
         div.innerHTML = `
-          <p class="atc_main SG_dot">
+          <div class="atc_main SG_dot">
             <span class="atc_title">
-              <a href="javascript:void(0)" onclick="openArticle(${idx})">${seq + 1}. ${escapeHtml(art.title)}</a>
+              <a href="javascript:void(0)" tabindex="-1">${seq + 1}. ${titleHtml}</a>
             </span>
-          </p>
-          <p class="atc_info">
             <span class="atc_tm SG_txtc">${art.publish_time || ''}</span>
-          </p>
+          </div>
         `;
 
         fragment.appendChild(div);
@@ -1152,6 +1334,47 @@
     function openArticle(idx) {
       switchView('article');
       loadArticle(idx);
+    }
+
+    // 仅「检索结果」需要跳转确认：有关键词时命中可能不是目标篇，先确认再跳；
+    // 正常浏览（无关键词）直接进正文，不打断。
+    function maybeConfirmOpen(idx) {
+      if ((searchInput.value || '').trim()) {
+        confirmOpenArticle(idx);
+      } else {
+        openArticle(idx);
+      }
+    }
+
+    // 检索结果跳转确认弹窗
+    let pendingJumpIdx = null;
+    let lastFocusedBeforeJump = null;
+    function confirmOpenArticle(idx) {
+      const art = articles[idx];
+      if (!art) return;
+      pendingJumpIdx = idx;
+      lastFocusedBeforeJump = document.activeElement;
+      document.getElementById('jumpConfirmTitle').textContent = art.title || '无标题';
+      const meta = [];
+      if (art.category) meta.push(art.category);
+      if (art.publish_time) meta.push(art.publish_time);
+      const kw = (searchInput.value || '').trim();
+      if (kw) meta.push('检索「' + kw + '」');
+      document.getElementById('jumpConfirmMeta').textContent = meta.join(' · ');
+      document.getElementById('jumpConfirmOverlay').classList.add('show');
+      document.body.style.overflow = 'hidden';
+      setTimeout(() => document.getElementById('jumpConfirmOk').focus(), 30);
+    }
+    function closeJumpConfirm() {
+      document.getElementById('jumpConfirmOverlay').classList.remove('show');
+      document.body.style.overflow = '';
+      pendingJumpIdx = null;
+      if (lastFocusedBeforeJump && lastFocusedBeforeJump.focus) lastFocusedBeforeJump.focus();
+    }
+    function acceptJumpConfirm() {
+      const idx = pendingJumpIdx;
+      closeJumpConfirm();
+      if (idx !== null) openArticle(idx);
     }
 
     // 加载指定文章正文
@@ -1410,6 +1633,17 @@
       }, 150);
     });
 
+    // 「查询」按钮 / 回车：提交检索并切到目录视图集中展示结果
+    function commitSearch() {
+      clearTimeout(debounceTimer);
+      renderSidebarList(searchInput.value);
+      switchView('list');
+    }
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commitSearch(); }
+    });
+    document.getElementById('searchGoBtn').addEventListener('click', commitSearch);
+
     searchClearBtn.addEventListener('click', () => {
       searchInput.value = '';
       searchClearBtn.style.display = 'none';
@@ -1417,8 +1651,19 @@
       searchInput.focus();
     });
 
+    // 跳转确认弹窗交互：遮罩/取消/关闭/Esc 关闭，确定才跳转
+    const jumpOverlay = document.getElementById('jumpConfirmOverlay');
+    jumpOverlay.addEventListener('click', (e) => { if (e.target === jumpOverlay) closeJumpConfirm(); });
+    document.getElementById('jumpConfirmCancel').addEventListener('click', closeJumpConfirm);
+    document.getElementById('jumpConfirmClose').addEventListener('click', closeJumpConfirm);
+    document.getElementById('jumpConfirmOk').addEventListener('click', acceptJumpConfirm);
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && jumpOverlay.classList.contains('show')) closeJumpConfirm();
+    });
+
     // 快捷键支持：键盘左右键直接切篇
     window.addEventListener('keydown', (e) => {
+      if (jumpOverlay.classList.contains('show')) return;
       if (document.activeElement === searchInput) return;
       if (currentView !== 'article') return;
       if (e.key === 'ArrowLeft') {
@@ -1428,8 +1673,31 @@
       }
     });
 
-    function showAboutModal() {
-      alert('【欧洋 的新浪博客离线知识合集】\n\n本文件为新浪博客电脑端 1:1 原版排版离线版，断网亦可顺畅浏览与检索。');
+    // 渲染「关于我 · 我的档案」：用真实归档数据填充（篇数/栏目数/时间跨度），不编造个人资料
+    function renderAbout() {
+      const catSet = new Set();
+      let minT = '';
+      let maxT = '';
+      articles.forEach(a => {
+        catSet.add(a.category || '其它博文');
+        const t = a.publish_time || '';
+        if (t) {
+          if (!minT || t < minT) minT = t;
+          if (!maxT || t > maxT) maxT = t;
+        }
+      });
+      const tot = document.getElementById('profileTotal');
+      if (tot) tot.textContent = articles.length;
+      const cc = document.getElementById('profileCatCount');
+      if (cc) cc.textContent = catSet.size;
+      const span = document.getElementById('profileSpan');
+      if (span) {
+        if (minT && maxT) {
+          span.textContent = minT.slice(0, 10) + ' 至 ' + maxT.slice(0, 10);
+        } else {
+          span.innerHTML = '<span class="profile-empty">暂未添加</span>';
+        }
+      }
     }
 
     function escapeHtml(str) {

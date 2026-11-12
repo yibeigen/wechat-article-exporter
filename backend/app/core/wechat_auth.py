@@ -306,7 +306,7 @@ async def check_wechat_auth_status() -> Dict[str, Any]:
     home_url = f"https://mp.weixin.qq.com/cgi-bin/home?t=home/index&lang=zh_CN&token={token}"
 
     try:
-        async with httpx.AsyncClient(timeout=8.0, verify=False, follow_redirects=False) as client:
+        async with httpx.AsyncClient(timeout=8.0, verify=False, follow_redirects=False, trust_env=False) as client:
             resp = await client.get(home_url, headers=headers)
             
             # 如果返回 200 且正文中包含正常后台标识或未被重定向回登录页
@@ -371,7 +371,7 @@ async def check_wechat_auth_status() -> Dict[str, Any]:
     # 2. 备用验证：请求 searchbiz 接口
     test_url = f"https://mp.weixin.qq.com/cgi-bin/searchbiz?action=search_biz&begin=0&count=1&query=微信&token={token}&lang=zh_CN&f=json&ajax=1"
     try:
-        async with httpx.AsyncClient(timeout=8.0, verify=False) as client:
+        async with httpx.AsyncClient(timeout=8.0, verify=False, trust_env=False) as client:
             resp = await client.get(test_url, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()

@@ -3,6 +3,17 @@ import sys
 import os
 import asyncio
 
+# Windows 默认 cp936：日志里的 ⚠️ 会让 print 抛 UnicodeEncodeError。cache.py 的
+# 「缓存不可用则降级」分支正是靠 print 通报，编码一炸就把整个后端启动带崩。
+# 管道输出（Electron 按 utf8 解码）统一成 utf-8，真控制台保留原编码只放开 errors，
+# 免得 cmd.exe 里的中文全变乱码。
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding=None if _stream.isatty() else "utf-8", errors="replace")
+        except Exception:
+            pass
+
 # 在 Windows 平台下，必须在创建任何 EventLoop 或启动 uvicorn 前设置 ProactorEventLoopPolicy，
 # 以保证 Playwright 子进程、多线程调用与信号通信完全正常
 if sys.platform == "win32":
